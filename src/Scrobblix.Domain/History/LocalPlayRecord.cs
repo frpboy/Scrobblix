@@ -16,4 +16,10 @@ public sealed record LocalPlayRecord(
     ProviderActionState? QueueState,
     string? QueueReasonCode,
     string? LocalReasonCode,
-    string? ArtworkPath = null);
+    string? ArtworkPath = null,
+    string? AlbumArtist = null,
+    int? TrackNumber = null,
+    int? ReleaseYear = null,
+    string? RecordingMusicBrainzId = null,
+    string? ReleaseMusicBrainzId = null,
+    string? ArtworkSource = null);
