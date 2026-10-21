@@ -16,4 +16,7 @@
   <ItemGroup>
     <Content Include="Assets\*.svg" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
+  <ItemGroup>
+    <None Update="Assets\*.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>
