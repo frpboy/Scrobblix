@@ -323,6 +323,7 @@ public sealed partial class MainWindow : Window
         var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
+        StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
         QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
@@ -439,6 +440,61 @@ public sealed partial class MainWindow : Window
             : $"{summary.ListeningSessionCount:N0} listening session{(summary.ListeningSessionCount == 1 ? string.Empty : "s")} today";
         TodayDetailText.Text =
             $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligiblePlayCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
+    }
+
+    public void SetListeningStatistics(ListeningStatistics statistics)
+    {
+        StatisticsTotalSessionsText.Text = statistics.TotalSessions.ToString("N0", CultureInfo.CurrentCulture);
+        StatisticsEligibleText.Text = statistics.EligiblePlays.ToString("N0", CultureInfo.CurrentCulture);
+        StatisticsListeningText.Text = FormatListeningTime(statistics.ConfirmedListeningMilliseconds);
+        StatisticsArtistsText.Text = statistics.UniqueArtists.ToString("N0", CultureInfo.CurrentCulture);
+        StatisticsRecentText.Text = $"{statistics.SessionsLast30Days:N0} listening session{(statistics.SessionsLast30Days == 1 ? string.Empty : "s")} in the last 30 days";
+
+        TopArtistsList.Children.Clear();
+        if (statistics.TopArtists.Count == 0)
+        {
+            TopArtistsList.Children.Add(new TextBlock
+            {
+                Text = "Not enough listening history yet. Play some music and Scrobblix will build these local statistics.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        var maximumCount = statistics.TopArtists.Max(artist => artist.SessionCount);
+        for (var index = 0; index < statistics.TopArtists.Count; index++)
+        {
+            var artist = statistics.TopArtists[index];
+            var row = new StackPanel { Spacing = 5, Padding = new Thickness(8, 5, 8, 8) };
+            var header = new Grid();
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            header.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            var label = new TextBlock
+            {
+                Text = $"{index + 1}. {artist.Artist}",
+                FontSize = 14,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            };
+            var count = new TextBlock
+            {
+                Text = $"{artist.SessionCount:N0} session{(artist.SessionCount == 1 ? string.Empty : "s")}",
+                FontSize = 12,
+                VerticalAlignment = VerticalAlignment.Center,
+            };
+            Grid.SetColumn(count, 1);
+            header.Children.Add(label);
+            header.Children.Add(count);
+            row.Children.Add(header);
+            row.Children.Add(new ProgressBar
+            {
+                Minimum = 0,
+                Maximum = maximumCount,
+                Value = artist.SessionCount,
+                Height = 4,
+            });
+            TopArtistsList.Children.Add(row);
+        }
     }
 
     public void SetLastFmUnavailable()
