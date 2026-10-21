@@ -41,6 +41,11 @@ public sealed partial class MainWindow : Window
         {
             AppBrandImage.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
         }
+        var placeholderPath = Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg");
+        if (File.Exists(placeholderPath))
+        {
+            CurrentTrackArtworkFallback.Source = new SvgImageSource { UriSource = new Uri(placeholderPath, UriKind.Absolute) };
+        }
         CurrentTrackArtwork.Tag = CurrentTrackArtworkFallback;
         CurrentTrackArtwork.ImageFailed += ArtworkImageFailed;
     }
@@ -177,7 +182,6 @@ public sealed partial class MainWindow : Window
         image.Visibility = Visibility.Collapsed;
         if (image.Tag is Image fallback)
         {
-            fallback.Text = "♪";
             fallback.Visibility = Visibility.Visible;
         }
     }
@@ -190,7 +194,7 @@ public sealed partial class MainWindow : Window
         }
 
         image.Visibility = Visibility.Visible;
-        if (image.Tag is TextBlock fallback)
+        if (image.Tag is Image fallback)
         {
             fallback.Visibility = Visibility.Collapsed;
         }
