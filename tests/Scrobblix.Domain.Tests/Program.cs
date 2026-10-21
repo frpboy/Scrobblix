@@ -166,6 +166,9 @@ var recordingStore = new RecordingProviderActionStore(queuedLease);
 var processor = new ProviderActionProcessor(recordingStore, new AcceptingScrobbleProvider());
 Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
 Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
+var pollingStore = new RecordingObservationStore();
+var poller = new PlaybackObservationPollingService(new SingleObservationSource(observation), new PlaybackObservationIngestionService(pollingStore));
+Assert(await poller.PollOnceAsync(CancellationToken.None) == ObservationIngestionResult.Accepted && pollingStore.AppendCount == 1, "A playback poll persists the current observation through the ingestion boundary.");
 File.Delete(databasePath);
 
 return;
@@ -206,4 +209,20 @@ sealed class AcceptingScrobbleProvider : IScrobbleProvider
 
     public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
         Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+}
+
+sealed class SingleObservationSource(PlayObservation observation) : IPlaybackObservationSource
+{
+    public Task<PlayObservation?> GetCurrentAsync(CancellationToken cancellationToken) => Task.FromResult<PlayObservation?>(observation);
+}
+
+sealed class RecordingObservationStore : IPlaybackObservationStore
+{
+    public int AppendCount { get; private set; }
+
+    public Task<bool> TryAppendAsync(PlayObservation observation, CancellationToken cancellationToken)
+    {
+        AppendCount++;
+        return Task.FromResult(true);
+    }
 }

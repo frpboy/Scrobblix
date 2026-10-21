@@ -19,6 +19,8 @@ public partial class App : Microsoft.UI.Xaml.Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
+        var trackingCancellation = new CancellationTokenSource();
+        _window.Closed += (_, _) => trackingCancellation.Cancel();
         _window.Activate();
 
         try
@@ -47,10 +49,32 @@ public partial class App : Microsoft.UI.Xaml.Application
                     ? $"Tracking {observation.Artist} — {observation.Title}."
                     : "Current playback was already recorded.",
                 InfoBarSeverity.Success);
+            _ = TrackUntilClosedAsync(source, connectionString, trackingCancellation.Token);
         }
         catch (Exception exception)
         {
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    private static async Task TrackUntilClosedAsync(
+        GsmTcPlaybackObservationSource source,
+        string connectionString,
+        CancellationToken cancellationToken)
+    {
+        var polling = new PlaybackObservationPollingService(
+            source,
+            new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString)));
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await polling.PollOnceAsync(cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
         }
     }
 }
