@@ -58,11 +58,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             }
             else
             {
-                _window.SetCurrentPlayback(observation);
-
                 var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
                 await ingestion.IngestAsync(observation, CancellationToken.None);
-                await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
+                var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
+                _window.SetCurrentPlayback(observation, trackingStatus);
             }
             _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
             _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
@@ -91,8 +90,12 @@ public partial class App : Microsoft.UI.Xaml.Application
                 if (observation is not null)
                 {
                     await ingestion.IngestAsync(observation, cancellationToken);
-                    await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
-                    PublishCurrentPlayback(window, observation);
+                    var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
+                    PublishCurrentPlayback(window, observation, trackingStatus);
+                    if (trackingStatus.DidPersistEligiblePlay)
+                    {
+                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                    }
                 }
             }
         }
@@ -142,8 +145,12 @@ public partial class App : Microsoft.UI.Xaml.Application
                 if (observation is not null)
                 {
                     await ingestion.IngestAsync(observation, cancellationToken);
-                    await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
-                    PublishCurrentPlayback(window, observation);
+                    var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
+                    PublishCurrentPlayback(window, observation, trackingStatus);
+                    if (trackingStatus.DidPersistEligiblePlay)
+                    {
+                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                    }
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -156,8 +163,19 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
-    private static void PublishCurrentPlayback(MainWindow window, PlayObservation observation) =>
-        window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation));
+    private static void PublishCurrentPlayback(MainWindow window, PlayObservation observation, PlaybackTrackingStatus trackingStatus) =>
+        window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation, trackingStatus));
+
+    private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
+    {
+        var recentHistory = await new SqliteHistoryReader(connectionString).GetRecentAsync(10, cancellationToken);
+        var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(cancellationToken);
+        window.DispatcherQueue.TryEnqueue(() =>
+        {
+            window.SetRecentHistory(recentHistory);
+            window.SetQueueSummary(queueSummary);
+        });
+    }
 
     private static PlayObservation? TryCreateBrowserObservation(byte[] message)
     {

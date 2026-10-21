@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using System.Globalization;
+using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Playback;
@@ -19,7 +21,7 @@ public sealed partial class MainWindow : Window
         StartupInfo.Severity = severity;
     }
 
-    public void SetCurrentPlayback(PlayObservation observation)
+    public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = string.IsNullOrWhiteSpace(observation.Artist)
@@ -27,6 +29,13 @@ public sealed partial class MainWindow : Window
             : observation.Artist;
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
+        var threshold = trackingStatus.Decision.ThresholdMilliseconds;
+        EligibilityProgressBar.Value = threshold is > 0
+            ? Math.Min(100, trackingStatus.ConfirmedPlayedMilliseconds * 100d / threshold.Value)
+            : 0;
+        EligibilityDetailText.Text = threshold is > 0
+            ? $"Confirmed listening time: {FormatDuration(trackingStatus.ConfirmedPlayedMilliseconds)} / {FormatDuration(threshold.Value)}."
+            : "Confirmed listening time is unavailable until a supported track has a known duration.";
         SetStartupStatus(
             observation.PlaybackState == PlayState.Playing
                 ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
@@ -74,4 +83,7 @@ public sealed partial class MainWindow : Window
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
+
+    private static string FormatDuration(long milliseconds) =>
+        TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss", CultureInfo.InvariantCulture);
 }

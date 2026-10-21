@@ -205,8 +205,9 @@ Assert(await poller.PollOnceAsync(CancellationToken.None) == ObservationIngestio
 var localPlayStore = new RecordingLocalPlayStore();
 var tracking = new PlaybackTrackingService(localPlayStore);
 await tracking.ObserveAsync(observation, 0, CancellationToken.None);
-await tracking.ObserveAsync(observation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
+var trackedStatus = await tracking.ObserveAsync(observation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
+Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Count == 3, "Eligible local sessions are persisted to the same local history read model.");
 File.Delete(databasePath);
