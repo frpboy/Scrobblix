@@ -42,4 +42,14 @@ public sealed partial class MainWindow : Window
             RecentActivityList.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}" });
         }
     }
+
+    public void SetQueueSummary(QueueSummary summary)
+    {
+        QueueStateText.Text = summary.PendingCount + summary.RetryScheduledCount + summary.InFlightCount == 0
+            ? "No queued actions"
+            : $"{summary.PendingCount + summary.RetryScheduledCount + summary.InFlightCount} action(s) awaiting delivery";
+        QueueDetailText.Text = summary.AuthBlockedCount + summary.PermanentFailureCount == 0
+            ? $"Accepted: {summary.AcceptedCount}"
+            : $"Blocked: {summary.AuthBlockedCount}; failed: {summary.PermanentFailureCount}";
+    }
 }

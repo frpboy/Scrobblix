@@ -37,6 +37,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             var recentHistory = await new SqliteHistoryReader(connectionString)
                 .GetRecentAsync(10, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
+            var queueSummary = await new SqliteQueueReader(connectionString)
+                .GetSummaryAsync(CancellationToken.None);
+            _window.SetQueueSummary(queueSummary);
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)

@@ -163,6 +163,8 @@ Assert(await actionStore.ClaimNextDueAsync("worker-3", observation.ObservedAtUtc
 var historyReader = new SqliteHistoryReader(connectionString);
 var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
+var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
+Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);
