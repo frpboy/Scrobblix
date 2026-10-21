@@ -6,6 +6,7 @@ namespace Scrobblix.NativeHost;
 public static class NativeHostCallerValidator
 {
     private const string TrustRegistryPath = @"HKEY_CURRENT_USER\Software\Scrobblix\NativeMessaging";
+    private static readonly char[] ExtensionIdSeparators = [',', ';', '\r', '\n'];
 
     /// <summary>
     /// Reads the per-user extension IDs explicitly registered by the Scrobblix installer.
@@ -23,7 +24,7 @@ public static class NativeHostCallerValidator
         {
             var configured = Registry.GetValue(TrustRegistryPath, "AllowedChromeExtensionIds", null) as string;
             return (configured ?? string.Empty)
-                .Split(new[] { ',', ';', '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Split(ExtensionIdSeparators, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
                 .Where(IsValidExtensionId)
                 .ToHashSet(StringComparer.Ordinal);
         }
