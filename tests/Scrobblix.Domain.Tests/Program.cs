@@ -280,6 +280,27 @@ Assert(earlyHistory.Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId
 var trackedStatus = await tracking.ObserveAsync(localObservation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
+
+var lateMetadataStore = new RecordingLocalPlayStore();
+using (var lateMetadataTracker = new PlaybackTrackingService(lateMetadataStore))
+{
+    var titleOnly = observation with
+    {
+        Artist = null,
+        NormalizedArtist = null,
+        DurationMilliseconds = null,
+        SourceEventKey = new SourceEventKey("late-metadata-source", "session", 1, "title-only"),
+    };
+    var firstLateStatus = await lateMetadataTracker.ObserveAsync(titleOnly, 0, CancellationToken.None);
+    var metadataArrived = observation with
+    {
+        ObservedAtUtc = observation.ObservedAtUtc.AddSeconds(2),
+        SourceEventKey = new SourceEventKey("late-metadata-source", "session", 2, "metadata-arrived"),
+    };
+    var secondLateStatus = await lateMetadataTracker.ObserveAsync(metadataArrived, 2_000, CancellationToken.None);
+    Assert(firstLateStatus.PlayId == secondLateStatus.PlayId && !secondLateStatus.DidStartPlay,
+        "Late artist/duration metadata enriches the existing play instead of generating another local history row.");
+}
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
 await new SqliteLocalPlayStore(connectionString).UpdateMetadataAsync(
