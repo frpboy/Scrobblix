@@ -1,6 +1,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
 using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
@@ -52,6 +54,13 @@ public partial class App : Microsoft.UI.Xaml.Application
             var lastFmHttpClient = new HttpClient();
             var lastFmApiKey = await credentialStore.GetAsync(lastFmApiKeyResource, lastFmApplicationAccount, CancellationToken.None);
             var lastFmApiSecret = await credentialStore.GetAsync(lastFmApiSecretResource, lastFmApplicationAccount, CancellationToken.None);
+            var metadataHttpClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+            {
+                Timeout = TimeSpan.FromSeconds(12),
+            };
+            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, lastFmApiKey, Path.Combine(dataDirectory, "artwork"));
+            var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+            var localPlayStore = new SqliteLocalPlayStore(connectionString);
             LastFmDesktopAuthenticator? lastFmAuthenticator =
                 !string.IsNullOrWhiteSpace(lastFmApiKey) && !string.IsNullOrWhiteSpace(lastFmApiSecret)
                     ? new LastFmDesktopAuthenticator(lastFmHttpClient, lastFmApiKey, lastFmApiSecret, credentialStore)
@@ -168,7 +177,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock(), Path.Combine(dataDirectory, "artwork"));
-            var tracking = new PlaybackTrackingService(new SqliteLocalPlayStore(connectionString));
+            var tracking = new PlaybackTrackingService(localPlayStore);
             var trackingClock = Stopwatch.StartNew();
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
@@ -181,13 +190,14 @@ public partial class App : Microsoft.UI.Xaml.Application
                 await ingestion.IngestAsync(observation, CancellationToken.None);
                 var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
                 _window.SetCurrentPlayback(observation, trackingStatus);
+                ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, _window);
             }
             void StartTracking()
             {
                 trackingCancellation?.Cancel();
                 trackingCancellation = new CancellationTokenSource();
-                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
-                _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token, metadataEnricher, localPlayStore, metadataStarted);
+                _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token, metadataEnricher, localPlayStore, metadataStarted);
             }
 
             _window.TrackingModeChanged += isEnabled =>
@@ -215,7 +225,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         try
@@ -229,6 +242,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
+                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window);
                     if (trackingStatus.DidStartPlay || trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
@@ -246,7 +260,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         while (!cancellationToken.IsCancellationRequested)
@@ -284,6 +301,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
+                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window);
                     if (trackingStatus.DidStartPlay || trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
@@ -302,6 +320,58 @@ public partial class App : Microsoft.UI.Xaml.Application
 
     private static void PublishCurrentPlayback(MainWindow window, PlayObservation observation, PlaybackTrackingStatus trackingStatus) =>
         window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation, trackingStatus));
+
+    private static void ScheduleMetadataEnrichment(
+        PlayObservation observation,
+        PlaybackTrackingStatus trackingStatus,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted,
+        string connectionString,
+        MainWindow window)
+    {
+        if (string.IsNullOrWhiteSpace(trackingStatus.PlayId)
+            || (!trackingStatus.DidStartPlay && string.IsNullOrWhiteSpace(observation.ArtworkUrl)))
+        {
+            return;
+        }
+
+        var variation = string.IsNullOrWhiteSpace(observation.ArtworkUrl)
+            ? "source"
+            : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(observation.ArtworkUrl)));
+        var jobKey = $"{trackingStatus.PlayId}:{variation}";
+        if (!metadataStarted.TryAdd(jobKey, 0))
+        {
+            return;
+        }
+
+        var playId = trackingStatus.PlayId;
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var metadata = await metadataEnricher.EnrichAsync(observation, CancellationToken.None);
+                await localPlayStore.UpdateMetadataAsync(playId, metadata, CancellationToken.None);
+                var enrichedObservation = observation with
+                {
+                    AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+                    TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
+                    ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
+                    RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
+                    ReleaseMusicBrainzId = metadata.ReleaseMusicBrainzId ?? observation.ReleaseMusicBrainzId,
+                    ArtworkPath = metadata.ArtworkPath ?? observation.ArtworkPath,
+                    ArtworkSource = metadata.ArtworkSource ?? observation.ArtworkSource,
+                };
+                window.DispatcherQueue.TryEnqueue(() => window.SetEnrichedMetadata(playId, enrichedObservation, metadata));
+                await RefreshDashboardAsync(window, connectionString, CancellationToken.None);
+            }
+            catch (Exception exception)
+            {
+                Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
+            }
+        });
+    }
+
 
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
     {
@@ -337,7 +407,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             var albumArtist = GetBoundedString(payload, "albumArtist");
             var recordingMbid = GetBoundedString(payload, "recordingMusicBrainzId");
             var releaseMbid = GetBoundedString(payload, "releaseMusicBrainzId");
-            var artworkUrl = GetBoundedString(payload, "artworkUrl");
+            var artworkUrl = GetBoundedString(payload, "artworkUrl", 4096);
             int? trackNumber = payload.TryGetProperty("trackNumber", out var trackNumberElement) && trackNumberElement.TryGetInt32(out var parsedTrackNumber) && parsedTrackNumber > 0 ? parsedTrackNumber : null;
             int? releaseYear = payload.TryGetProperty("releaseYear", out var releaseYearElement) && releaseYearElement.TryGetInt32(out var parsedReleaseYear) && parsedReleaseYear is >= 1000 and <= 9999 ? parsedReleaseYear : null;
             var siteOrigin = GetBoundedString(payload, "siteOrigin");
@@ -391,10 +461,11 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
-    private static string? GetBoundedString(JsonElement payload, string propertyName) =>
+    private static string? GetBoundedString(JsonElement payload, string propertyName, int maximumLength = 1024) =>
         payload.TryGetProperty(propertyName, out var property)
         && property.ValueKind == JsonValueKind.String
-        && property.GetString() is { Length: <= 1024 } value
+        && property.GetString() is { } value
+        && value.Length <= maximumLength
             ? value
             : null;
 
