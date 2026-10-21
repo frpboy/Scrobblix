@@ -141,6 +141,11 @@ var browserObservation = observation with
 var firstArbitration = arbitrator.Consider(observation);
 var browserArbitration = arbitrator.Consider(browserObservation);
 Assert(firstArbitration.IsAccepted && !browserArbitration.IsAccepted && browserArbitration.ReasonCode == ReasonCodes.Source.LowerPriorityObservation, "A lower-priority duplicate observation cannot replace the canonical source.");
+var pausedArbitrator = new PlaybackSourceArbitrator();
+var pausedObservation = observation with { PlaybackState = PlayState.Paused };
+var pausedSourceDecision = pausedArbitrator.Consider(pausedObservation);
+var browserResumeDecision = pausedArbitrator.Consider(browserObservation);
+Assert(pausedSourceDecision.IsAccepted && browserResumeDecision.IsAccepted, "A browser source can take over when the higher-priority Windows session is paused.");
 
 var signatureParameters = new Dictionary<string, string>
 {
@@ -216,12 +221,18 @@ var preEligibleRecord = historyRecord with
     ConfirmedPlayedMilliseconds = 0,
     Eligibility = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 0),
     ArtworkPath = artworkPath,
+    AlbumArtist = "Queued Album Artist",
+    TrackNumber = 4,
+    ReleaseYear = 2022,
+    RecordingMusicBrainzId = "55555555-5555-4555-8555-555555555555",
+    ReleaseMusicBrainzId = "66666666-6666-4666-8666-666666666666",
+    ArtworkSource = "unit-test-queue",
 };
 await new SqliteLocalPlayStore(connectionString).UpsertAsync(preEligibleRecord, CancellationToken.None);
 var eligibleRecord = preEligibleRecord with { ConfirmedPlayedMilliseconds = 150_000, Eligibility = standardTrack };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "An already-recorded local session becomes eligible and queues atomically without losing its history row.");
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "The existing local session still receives only one provider action after becoming eligible.");
-Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == "play-atomic" && play.EligibleUtc is not null && play.ArtworkPath == artworkPath), "Atomic queueing updates the existing local history row and retains its cached artwork reference.");
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == "play-atomic" && play.EligibleUtc is not null && play.ArtworkPath == artworkPath && play.AlbumArtist == "Queued Album Artist" && play.TrackNumber == 4 && play.ReleaseYear == 2022 && play.RecordingMusicBrainzId == "55555555-5555-4555-8555-555555555555" && play.ReleaseMusicBrainzId == "66666666-6666-4666-8666-666666666666" && play.ArtworkSource == "unit-test-queue"), "Atomic queueing updates the existing local history row, retains its artwork, and preserves enriched metadata.");
 var accountStore = new SqliteProviderAccountStore(connectionString);
 var account = new ProviderAccount("account-1", "lastfm", "listener", "Scrobblix.LastFm", true, observation.ObservedAtUtc);
 await accountStore.UpsertAsync(account, CancellationToken.None);
@@ -257,7 +268,11 @@ var localObservation = observation with
     ReleaseMusicBrainzId = "22222222-2222-4222-8222-222222222222",
     ArtworkSource = "unit-test",
 };
-await tracking.ObserveAsync(localObservation, 0, CancellationToken.None);
+var unknownDurationStatus = await tracking.ObserveAsync(localObservation with { DurationMilliseconds = null }, 0, CancellationToken.None);
+var correctedDurationStatus = await tracking.ObserveAsync(localObservation, 2_000, CancellationToken.None);
+Assert(unknownDurationStatus.DidStartPlay && !correctedDurationStatus.DidStartPlay
+    && unknownDurationStatus.PlayId == correctedDurationStatus.PlayId,
+    "A duration arriving after playback starts updates the same canonical session instead of creating a duplicate play.");
 Assert(localPlayStore.StoredPlay is { } initialPlay && !initialPlay.Eligibility.IsEligible, "A listening session is tracked locally before it qualifies for a Last.fm scrobble.");
 await new SqliteLocalPlayStore(connectionString).UpsertAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 var earlyHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
