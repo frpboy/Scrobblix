@@ -65,9 +65,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
-            var queueSummary = await new SqliteQueueReader(connectionString)
-                .GetSummaryAsync(CancellationToken.None);
+            var queueReader = new SqliteQueueReader(connectionString);
+            var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
+            _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
             var accountStore = new SqliteProviderAccountStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
             const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
@@ -682,12 +683,15 @@ public partial class App : Microsoft.UI.Xaml.Application
         var historyReader = new SqliteHistoryReader(connectionString);
         var recentHistory = await historyReader.GetRecentAsync(10, cancellationToken);
         var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
-        var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(cancellationToken);
+        var queueReader = new SqliteQueueReader(connectionString);
+        var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
+        var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
             window.SetRecentHistory(recentHistory);
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
+            window.SetQueueActions(queueActions);
         });
     }
 
