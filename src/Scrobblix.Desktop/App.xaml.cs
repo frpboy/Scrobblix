@@ -65,6 +65,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
+            _window.SetListeningStatistics(await historyReader.GetStatisticsAsync(CancellationToken.None));
             var queueReader = new SqliteQueueReader(connectionString);
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
@@ -683,6 +684,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         var historyReader = new SqliteHistoryReader(connectionString);
         var recentHistory = await historyReader.GetRecentAsync(10, cancellationToken);
         var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
+        var statistics = await historyReader.GetStatisticsAsync(cancellationToken);
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
@@ -690,6 +692,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             window.SetRecentHistory(recentHistory);
             window.SetTodaySummary(todaySummary);
+            window.SetListeningStatistics(statistics);
             window.SetQueueSummary(queueSummary);
             window.SetQueueActions(queueActions);
         });
