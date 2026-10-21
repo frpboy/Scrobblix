@@ -30,6 +30,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
+            await new SqliteProviderActionStore(connectionString)
+                .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
