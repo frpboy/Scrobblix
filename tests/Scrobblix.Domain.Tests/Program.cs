@@ -26,9 +26,11 @@ var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
 using var mismatchedNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"different-extension"}""");
 using var incompleteNativeHostEnvelope = JsonDocument.Parse("{}");
-Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement), "Native host forwarding accepts only an envelope matching the browser-provided extension origin.");
-Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement), "Native host forwarding rejects an envelope from a different extension identity.");
-Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
+var allowedNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal) { "abcdefghijklmnopabcdefghijklmnop" };
+Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding accepts a message from an explicitly allow-listed extension ID.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)), "Native host forwarding fails closed when no extension ID is registered.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope from a different extension identity.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
 Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
 
 var longTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 900_000, 240_000);
