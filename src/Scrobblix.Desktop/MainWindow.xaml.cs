@@ -55,13 +55,17 @@ public sealed partial class MainWindow : Window
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
         var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new Windows.Graphics.SizeInt32(1120, 800));
         if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
+            // Don't inherit a maximized or minimized first-run state: the original client area
+            // was too wide for the amount of content in the listening dashboard.
+            presenter.State = Microsoft.UI.Windowing.OverlappedPresenterState.Restored;
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
+
+        appWindow.Resize(new Windows.Graphics.SizeInt32(1080, 780));
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity)
