@@ -335,6 +335,15 @@ public sealed partial class MainWindow : Window
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
 
+    public void SetTodaySummary(TodaySummary summary)
+    {
+        TodayStateText.Text = summary.ListeningSessionCount == 0
+            ? "No listening activity yet today"
+            : $"{summary.ListeningSessionCount:N0} listening session{(summary.ListeningSessionCount == 1 ? string.Empty : "s")} today";
+        TodayDetailText.Text =
+            $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligiblePlayCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
+    }
+
     public void SetLastFmUnavailable()
     {
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
@@ -438,5 +447,14 @@ public sealed partial class MainWindow : Window
     }
 
     private static string FormatDuration(long milliseconds) =>
-        TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+        TimeSpan.FromMilliseconds(Math.Max(0, milliseconds)).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+
+    private static string FormatListeningTime(long milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        var totalHours = (long)duration.TotalHours;
+        return totalHours > 0
+            ? $"{totalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{(long)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
 }
