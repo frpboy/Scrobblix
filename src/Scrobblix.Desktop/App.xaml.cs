@@ -324,6 +324,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             credentialStore,
             _window,
             connectionString,
+            logger,
             cancellationToken);
         _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
     }
@@ -363,33 +364,58 @@ public partial class App : Microsoft.UI.Xaml.Application
         WindowsCredentialStore credentialStore,
         MainWindow window,
         string connectionString,
+        ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
+        var actionStore = new SqliteProviderActionStore(connectionString);
+        var consecutiveFailures = 0;
+
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
-                var processor = getProcessor();
-                if (account is not null && processor is not null)
+                try
                 {
-                    var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(sessionKey)
-                        && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                    var recovered = await actionStore.RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, cancellationToken);
+                    if (recovered > 0)
                     {
-                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                        logger.Warning("SCROBBLE_QUEUE", $"Recovered expired provider action leases; count={recovered}.");
                     }
+
+                    var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
+                    var processor = getProcessor();
+                    if (account is not null && processor is not null)
+                    {
+                        var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
+                        if (!string.IsNullOrWhiteSpace(sessionKey)
+                            && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                        {
+                            await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                        }
+                    }
+
+                    consecutiveFailures = 0;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    consecutiveFailures = Math.Min(consecutiveFailures + 1, 6);
+                    var retryDelaySeconds = Math.Min(60, 5 * (1 << Math.Min(consecutiveFailures - 1, 4)));
+                    logger.Error("SCROBBLE_QUEUE_WORKER",
+                        $"Queue worker pass failed; failure_streak={consecutiveFailures}; retry_delay_seconds={retryDelaySeconds}; exception={exception.GetType().Name}; hresult={exception.HResult}. The worker will retry.");
+                    await Task.Delay(TimeSpan.FromSeconds(retryDelaySeconds), cancellationToken);
+                    continue;
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-        }
-        catch (Exception)
-        {
-            window.DispatcherQueue.TryEnqueue(window.SetLastFmConnectionError);
+            logger.Info("SCROBBLE_QUEUE_WORKER", "Queue worker stopped.");
         }
     }
 
