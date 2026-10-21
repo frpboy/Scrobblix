@@ -124,7 +124,8 @@ public sealed class TrackMetadataEnricher
         observation.RecordingMusicBrainzId,
         observation.ReleaseMusicBrainzId,
         observation.ArtworkPath,
-        observation.ArtworkSource);
+        observation.ArtworkSource,
+        observation.Album);
 
     private static bool HasWeakArtwork(PlayMetadataEnrichment metadata) =>
         string.IsNullOrWhiteSpace(metadata.ArtworkPath)
@@ -155,7 +156,8 @@ public sealed class TrackMetadataEnricher
         preferred.RecordingMusicBrainzId ?? fallback.RecordingMusicBrainzId,
         preferred.ReleaseMusicBrainzId ?? fallback.ReleaseMusicBrainzId,
         preferred.ArtworkPath ?? fallback.ArtworkPath,
-        preferred.ArtworkSource ?? fallback.ArtworkSource);
+        preferred.ArtworkSource ?? fallback.ArtworkSource,
+        preferred.Album ?? fallback.Album);
 
     private static string MakeCacheKey(PlayObservation observation) =>
         string.Join("\u001f",
@@ -326,7 +328,8 @@ public sealed class TrackMetadataEnricher
             null,
             ReadText(release, "id"),
             null,
-            null);
+            null,
+            ReadText(release, "title"));
 
         if (!release.TryGetProperty("media", out var mediaList) || mediaList.ValueKind != JsonValueKind.Array)
         {
@@ -438,11 +441,13 @@ public sealed class TrackMetadataEnricher
                 return null;
             }
 
+            string? albumTitle = null;
             string? albumMbid = null;
             string? imageUrl = null;
             string? albumArtist = null;
             if (track.TryGetProperty("album", out var album))
             {
+                albumTitle = ReadText(album, "title");
                 albumMbid = ReadText(album, "mbid");
                 albumArtist = ReadText(album, "artist");
                 if (album.TryGetProperty("image", out var images) && images.ValueKind == JsonValueKind.Array)
@@ -467,7 +472,8 @@ public sealed class TrackMetadataEnricher
                     recordingId,
                     albumMbid,
                     null,
-                    null),
+                    null,
+                    albumTitle),
                 imageUrl);
         }
         catch (HttpRequestException)
