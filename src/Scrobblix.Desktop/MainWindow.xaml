@@ -174,8 +174,13 @@
                     <TextBlock Text="History" Style="{StaticResource TitleTextBlockStyle}" />
                     <TextBlock Text="Listening sessions kept locally on this device, including tracks that do not qualify for Last.fm." Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
+                <TextBox x:Name="HistorySearchTextBox"
+                         PlaceholderText="Search artist, track, or album..."
+                         TextChanged="HistorySearch_TextChanged"
+                         AutomationProperties.Name="Search local listening history" />
+                <TextBlock x:Name="HistoryCountText" Text="Loading local history..." Style="{StaticResource CaptionTextBlockStyle}" />
                 <StackPanel x:Name="HistoryList" Spacing="8">
-                    <TextBlock Text="No listening sessions recorded yet." />
+                    <TextBlock Text="Choose History to load local listening sessions." />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>
