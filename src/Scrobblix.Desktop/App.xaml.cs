@@ -334,6 +334,12 @@ public partial class App : Microsoft.UI.Xaml.Application
             var artist = GetBoundedString(payload, "artist");
             var title = GetBoundedString(payload, "title");
             var album = GetBoundedString(payload, "album");
+            var albumArtist = GetBoundedString(payload, "albumArtist");
+            var recordingMbid = GetBoundedString(payload, "recordingMusicBrainzId");
+            var releaseMbid = GetBoundedString(payload, "releaseMusicBrainzId");
+            var artworkUrl = GetBoundedString(payload, "artworkUrl");
+            int? trackNumber = payload.TryGetProperty("trackNumber", out var trackNumberElement) && trackNumberElement.TryGetInt32(out var parsedTrackNumber) && parsedTrackNumber > 0 ? parsedTrackNumber : null;
+            int? releaseYear = payload.TryGetProperty("releaseYear", out var releaseYearElement) && releaseYearElement.TryGetInt32(out var parsedReleaseYear) && parsedReleaseYear is >= 1000 and <= 9999 ? parsedReleaseYear : null;
             var siteOrigin = GetBoundedString(payload, "siteOrigin");
             int? durationMilliseconds = payload.TryGetProperty("durationMilliseconds", out var duration) && duration.TryGetInt32(out var parsedDuration) && parsedDuration > 0 ? parsedDuration : null;
             long? positionMilliseconds = payload.TryGetProperty("positionMilliseconds", out var position) && position.TryGetInt64(out var parsedPosition) && parsedPosition >= 0 ? parsedPosition : null;
@@ -361,7 +367,15 @@ public partial class App : Microsoft.UI.Xaml.Application
                 positionMilliseconds,
                 playbackState,
                 MetadataNormalizer.Normalize(artist),
-                MetadataNormalizer.Normalize(title));
+                MetadataNormalizer.Normalize(title),
+                null,
+                albumArtist,
+                trackNumber,
+                releaseYear,
+                recordingMbid,
+                releaseMbid,
+                artworkUrl,
+                null);
         }
         catch (JsonException)
         {
