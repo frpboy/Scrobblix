@@ -260,6 +260,12 @@ Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, Loca
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
+using var concurrentTracking = new PlaybackTrackingService(new RecordingLocalPlayStore());
+await concurrentTracking.ObserveAsync(observation, 0, CancellationToken.None);
+var concurrentTrackingResults = await Task.WhenAll(
+    concurrentTracking.ObserveAsync(observation, 150_000, CancellationToken.None),
+    concurrentTracking.ObserveAsync(observation, 150_000, CancellationToken.None));
+Assert(concurrentTrackingResults.Count(result => result.DidPersistEligiblePlay) == 1, "Overlapping sources persist and queue an eligible play only once.");
 var queuedEligibleStore = new RecordingEligiblePlayStore();
 var connectedAccountStore = new RecordingProviderAccountStore(account);
 var providerAwareLocalPlayStore = new ProviderAwareLocalPlayStore(new RecordingLocalPlayStore(), queuedEligibleStore, connectedAccountStore);
