@@ -104,6 +104,7 @@ public sealed partial class MainWindow : Window
         var enrichedObservation = observation with
         {
             AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+            Album = metadata.Album ?? observation.Album,
             TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
             ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
             RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
