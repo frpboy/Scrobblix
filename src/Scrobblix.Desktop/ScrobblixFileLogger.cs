@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using System.Text.RegularExpressions;
 
 namespace Scrobblix.Desktop;
 
@@ -11,6 +12,8 @@ namespace Scrobblix.Desktop;
 /// </summary>
 public sealed class ScrobblixFileLogger
 {
+    private const long MaximumFileBytes = 8 * 1024 * 1024;
+    private const int MaximumRetainedLogFiles = 20;
     private readonly object _gate = new();
     private long _entryNumber;
     private readonly string _logPath;
@@ -26,7 +29,7 @@ public sealed class ScrobblixFileLogger
         _logPath = Path.Combine(
             logDirectory,
             $"scrobblix-{started:yyyyMMdd-HHmmss}-{Environment.ProcessId}.log");
-        Write("INFO", "LOGGER", $"Started log session; file={_logPath}");
+        Write("INFO", "LOGGER", "Started log session; entries use sequential numbers and UTC timestamps.");
     }
 
     public void Info(string category, string message) => Write("INFO", category, message);
@@ -44,7 +47,9 @@ public sealed class ScrobblixFileLogger
             var line = $"{entry:D6} | {timestamp} | {level} | {safeCategory} | {safeMessage}{Environment.NewLine}";
             try
             {
+                RotateIfNeeded(Encoding.UTF8.GetByteCount(line));
                 File.AppendAllText(_logPath, line, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                TrimOldLogs();
             }
             catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
             {
@@ -59,6 +64,45 @@ public sealed class ScrobblixFileLogger
             .Replace('\r', ' ')
             .Replace('\n', ' ')
             .Replace('\t', ' ');
+        normalized = Regex.Replace(normalized,
+            @"(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)\\s*[=:]\\s*[^&\\s,;]+",
+            "$1=[REDACTED]");
+        normalized = Regex.Replace(normalized, @"(?i)https://www\\.last\\.fm/api/auth/\\?[^\\s]+", "[AUTHORIZATION_URL_REDACTED]");
         return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
+    }
+
+    private void RotateIfNeeded(int incomingBytes)
+    {
+        if (!File.Exists(_logPath) || new FileInfo(_logPath).Length + incomingBytes <= MaximumFileBytes)
+        {
+            return;
+        }
+
+        var directory = Path.GetDirectoryName(_logPath)!;
+        var stem = Path.GetFileNameWithoutExtension(_logPath);
+        var index = 1;
+        string rotatedPath;
+        do
+        {
+            rotatedPath = Path.Combine(directory, $"{stem}.{index}.log");
+            index++;
+        } while (File.Exists(rotatedPath));
+
+        File.Move(_logPath, rotatedPath);
+    }
+
+    private void TrimOldLogs()
+    {
+        var directory = Path.GetDirectoryName(_logPath)!;
+        var files = new DirectoryInfo(directory)
+            .GetFiles("scrobblix-*.log", SearchOption.TopDirectoryOnly)
+            .OrderByDescending(file => file.LastWriteTimeUtc)
+            .ToArray();
+        foreach (var file in files.Skip(MaximumRetainedLogFiles))
+        {
+            try { file.Delete(); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
     }
 }
