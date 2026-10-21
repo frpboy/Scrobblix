@@ -20,7 +20,7 @@ public sealed class TrackMetadataEnricher
     private static readonly SemaphoreSlim MusicBrainzGate = new(1, 1);
     private static DateTimeOffset _lastMusicBrainzRequestUtc = DateTimeOffset.MinValue;
     private readonly HttpClient _client;
-    private readonly string? _lastFmApiKey;
+    private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
     private readonly ConcurrentDictionary<string, PlayMetadataEnrichment> _cache = new(StringComparer.Ordinal);
 
@@ -35,6 +35,12 @@ public sealed class TrackMetadataEnricher
         {
             _client.DefaultRequestHeaders.UserAgent.ParseAdd("Scrobblix/0.1.0 (+https://github.com/frpboy/Scrobblix)");
         }
+    }
+
+    public void UpdateLastFmApiKey(string? apiKey)
+    {
+        _lastFmApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
+        _cache.Clear();
     }
 
     public async Task<PlayMetadataEnrichment> EnrichAsync(PlayObservation observation, CancellationToken cancellationToken)
