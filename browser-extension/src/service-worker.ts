@@ -9,6 +9,15 @@ let sequence = 0;
 chrome.runtime.onMessage.addListener((observation: PlaybackObservation, sender) => {
   if (!sender.tab?.id || (observation.title?.length ?? 0) > 1024 || (observation.artist?.length ?? 0) > 1024) return;
   const port = chrome.runtime.connectNative(hostName);
+  let finished = false;
+  const finish = () => {
+    if (!finished) {
+      finished = true;
+      port.disconnect();
+    }
+  };
+  port.onMessage.addListener(finish);
+  port.onDisconnect.addListener(() => { finished = true; });
   port.postMessage({
     protocolVersion: 1,
     messageId: crypto.randomUUID(),
@@ -18,7 +27,6 @@ chrome.runtime.onMessage.addListener((observation: PlaybackObservation, sender) 
     sequence: ++sequence,
     payload: { ...observation, tabId: sender.tab.id, siteOrigin: getOrigin(sender.url) },
   });
-  port.disconnect();
 });
 
 function getOrigin(url: string | undefined): string | undefined {
