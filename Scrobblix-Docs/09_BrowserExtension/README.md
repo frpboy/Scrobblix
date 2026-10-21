@@ -1,0 +1,11 @@
+# 09 — Browser Companion
+
+- `OVERVIEW.md`
+- `ARCHITECTURE.md`
+- `PERMISSIONS.md`
+- `DETECTION_ADAPTERS.md`
+- `CHROMIUM.md`
+- `FIREFOX.md`
+- `NATIVE_HOST.md`
+- `EXTENSION_PRIVACY.md`
+- `STORE_RELEASE.md`

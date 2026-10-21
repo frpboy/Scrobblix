@@ -1,0 +1,4 @@
+# Internationalization and Localization
+
+- [`INTERNATIONALIZATION.md`](INTERNATIONALIZATION.md)
+- [`LOCALIZATION_WORKFLOW.md`](LOCALIZATION_WORKFLOW.md)

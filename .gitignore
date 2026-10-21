@@ -1,0 +1,41 @@
+# .NET
+bin/
+obj/
+.vs/
+*.user
+*.suo
+
+# Node
+node_modules/
+dist/
+coverage/
+
+# Secrets/local config
+.env
+.env.*
+!.env.example
+secrets.json
+appsettings.Development.local.json
+
+# Scrobblix user/test data
+*.db
+*.db-wal
+*.db-shm
+*.scrobblix-backup
+logs/
+artwork-cache/
+support-bundles/
+
+# Packaging/signing
+*.pfx
+*.snk
+*.cer
+*.msix
+*.msixbundle
+*.appinstaller
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*.local.json

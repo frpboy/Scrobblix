@@ -1,0 +1,14 @@
+{
+  "manifest_version": 3,
+  "name": "Scrobblix Browser Companion",
+  "version": "0.1.0",
+  "description": "Sends supported playback metadata to your local Scrobblix app.",
+  "permissions": ["nativeMessaging", "storage"],
+  "background": { "service_worker": "dist/service-worker.js", "type": "module" },
+  "content_scripts": [{
+    "matches": ["https://music.youtube.com/*", "https://open.spotify.com/*"],
+    "js": ["dist/media-observer.js"],
+    "run_at": "document_idle"
+  }],
+  "optional_host_permissions": ["https://music.youtube.com/*", "https://open.spotify.com/*"]
+}

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <UseWinUI>true</UseWinUI>
+    <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
+    <ProjectReference Include="../Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
+    <ProjectReference Include="../Scrobblix.Windows/Scrobblix.Windows.csproj" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
+  </ItemGroup>
+</Project>

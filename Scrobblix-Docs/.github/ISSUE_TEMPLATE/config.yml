@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Questions and troubleshooting
+    url: https://github.com/frpboy/scrobblix/discussions
+    about: Use Discussions for setup and general support when available.
+  - name: Security vulnerability
+    url: https://github.com/frpboy/scrobblix/security/advisories/new
+    about: Report vulnerabilities privately.

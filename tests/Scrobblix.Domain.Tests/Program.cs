@@ -1,0 +1,140 @@
+using Scrobblix.Domain.Eligibility;
+using Scrobblix.Domain.Diagnostics;
+using Scrobblix.Domain.History;
+using Scrobblix.Domain.Metadata;
+using Scrobblix.Domain.Playback;
+using Scrobblix.Domain.Queue;
+using Scrobblix.Infrastructure.Storage;
+using Scrobblix.Application.Ingestion;
+
+var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
+Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
+
+var longTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 900_000, 240_000);
+Assert(longTrack.IsEligible && longTrack.ThresholdMilliseconds == 240_000, "Long track caps at four minutes.");
+
+var shortTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 30_000, 30_000);
+Assert(!shortTrack.IsEligible && shortTrack.ReasonCode == ReasonCodes.Playback.TrackTooShort, "30-second track remains ineligible.");
+
+var missingDuration = ScrobbleEligibility.Evaluate("Artist", "Track", null, 240_000);
+Assert(!missingDuration.IsEligible && missingDuration.ReasonCode == ReasonCodes.Playback.DurationUnknown, "Unknown duration remains ineligible.");
+
+var invalidDuration = ScrobbleEligibility.Evaluate("Artist", "Track", 0, 0);
+Assert(!invalidDuration.IsEligible && invalidDuration.ReasonCode == ReasonCodes.Metadata.InvalidDuration, "Invalid duration is rejected distinctly.");
+
+var playedTime = new ConfirmedPlayedTime();
+playedTime.SetPlaying(true, 0);
+playedTime.SetPlaying(false, 30_000);
+playedTime.SetPlaying(true, 150_000);
+playedTime.SetPlaying(false, 180_000);
+Assert(playedTime.TotalMilliseconds == 60_000, "Paused time does not increase confirmed played time.");
+
+playedTime.SetPlaying(true, 180_000);
+playedTime.SetPlaying(false, 210_000);
+playedTime.SetPlaying(true, 330_000);
+playedTime.SetPlaying(false, 360_000);
+Assert(playedTime.TotalMilliseconds == 120_000, "Sleep or unknown intervals excluded by a non-playing observation are not counted.");
+
+var playState = new CanonicalPlayState();
+playState.TransitionTo(PlayState.Playing);
+playState.MarkEligible();
+playState.TransitionTo(PlayState.Paused);
+playState.TransitionTo(PlayState.Playing);
+Assert(playState.IsEligible && playState.Current == PlayState.Playing, "Eligibility remains a milestone while playback state changes.");
+
+var ignoredPlay = new CanonicalPlayState();
+ignoredPlay.TransitionTo(PlayState.Ignored, "source.excluded_by_user");
+Assert(ignoredPlay.Current == PlayState.Ignored && ignoredPlay.TerminalReasonCode == ReasonCodes.Source.ExcludedByUser, "Terminal playback outcomes retain a stable reason code.");
+
+var endedPlay = new CanonicalPlayState();
+endedPlay.TransitionTo(PlayState.Playing);
+endedPlay.MarkEligible();
+endedPlay.TransitionTo(PlayState.Ended);
+Assert(endedPlay.Current == PlayState.Ended && endedPlay.TerminalReasonCode is null, "Ended playback does not need a fabricated failure reason.");
+
+var metadata = MetadataNormalizer.Normalize("  Bjo\u0308rk\t—  J\u00f3ga\0 ");
+Assert(metadata is not null && metadata.Raw == "  Bjo\u0308rk\t—  J\u00f3ga\0 " && metadata.Payload == "Bj\u00f6rk — J\u00f3ga" && metadata.ComparisonKey == "BJ\u00d6RK — J\u00d3GA", "Metadata retains raw evidence while producing safe payload and comparison values.");
+
+var firstScrobble = ProviderActionIdempotencyKey.Create("lastfm", "account-1", ProviderActionType.Scrobble, "play-1");
+var repeatedScrobble = ProviderActionIdempotencyKey.Create("lastfm", "account-1", ProviderActionType.Scrobble, "play-1");
+var nextPlayScrobble = ProviderActionIdempotencyKey.Create("lastfm", "account-1", ProviderActionType.Scrobble, "play-2");
+Assert(firstScrobble == repeatedScrobble && firstScrobble != nextPlayScrobble, "Repeated eligibility is idempotent while a genuine repeated play is distinct.");
+
+var queueAction = new ProviderActionLifecycle();
+var firstLeaseUtc = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero);
+queueAction.AcquireLease("worker-1", firstLeaseUtc, firstLeaseUtc.AddMinutes(1));
+queueAction.Complete(ProviderActionState.RetryScheduled, "provider.temporary_unavailable");
+queueAction.AcquireLease("worker-1", firstLeaseUtc.AddMinutes(2), firstLeaseUtc.AddMinutes(3));
+queueAction.Complete(ProviderActionState.Accepted, ReasonCodes.Provider.Accepted);
+Assert(queueAction.Current == ProviderActionState.Accepted && queueAction.AttemptCount == 2 && queueAction.LeaseOwner is null, "Queue retries are classified, leased, and completed without retaining a stale lease.");
+
+var sourceEventKey = new SourceEventKey("gsmtc", "session-1", 42, "event-42");
+var observation = new PlayObservation(
+    sourceEventKey,
+    new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
+    new DateTimeOffset(2026, 8, 1, 0, 0, 5, TimeSpan.Zero),
+    "gsmtc",
+    "app-1",
+    "Artist",
+    "Track",
+    "Album",
+    300_000,
+    5_000,
+    PlayState.Playing,
+    MetadataNormalizer.Normalize("Artist"),
+    MetadataNormalizer.Normalize("Track"));
+var historyRecord = new LocalPlayRecord(
+    "play-1",
+    observation.CapturedAtUtc,
+    observation.ObservedAtUtc,
+    observation.Artist,
+    observation.Title,
+    observation.Album,
+    observation.DurationMilliseconds,
+    150_000,
+    standardTrack,
+    ProviderActionState.Pending,
+    null,
+    ReasonCodes.Playback.WaitingForEligibility);
+Assert(historyRecord.PlayId == "play-1" && historyRecord.Eligibility.IsEligible, "History records carry enough state to explain the play later.");
+
+var tracker = new CanonicalPlayTracker();
+tracker.Observe(observation, 0);
+var trackedDecision = tracker.Observe(observation with { PlaybackState = PlayState.Paused }, 150_000);
+Assert(trackedDecision.IsEligible && tracker.State.IsEligible, "The canonical tracker marks an active 300-second play eligible after 150 seconds of confirmed time.");
+
+var arbitrator = new PlaybackSourceArbitrator();
+var browserObservation = observation with
+{
+    SourceEventKey = new SourceEventKey("browser-instance", "browser-session", 1, "browser-event-1"),
+    SourceName = "browser",
+    ApplicationId = "youtube.com",
+    CapturedAtUtc = observation.CapturedAtUtc.AddSeconds(1),
+    ObservedAtUtc = observation.ObservedAtUtc.AddSeconds(1),
+};
+var firstArbitration = arbitrator.Consider(observation);
+var browserArbitration = arbitrator.Consider(browserObservation);
+Assert(firstArbitration.IsAccepted && !browserArbitration.IsAccepted && browserArbitration.ReasonCode == ReasonCodes.Source.LowerPriorityObservation, "A lower-priority duplicate observation cannot replace the canonical source.");
+
+var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
+var connectionString = $"Data Source={databasePath};Pooling=False";
+var database = new SqliteDatabase(connectionString);
+await database.InitializeAsync(CancellationToken.None);
+var observationStore = new SqlitePlaybackObservationStore(connectionString);
+var ingestion = new PlaybackObservationIngestionService(observationStore);
+Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Accepted, "A validated source observation is stored durably.");
+Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Duplicate, "Duplicate source observations are ignored by the database constraint.");
+var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
+Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "The provider action idempotency key prevents repeated queueing.");
+File.Delete(databasePath);
+
+return;
+
+static void Assert(bool condition, string message)
+{
+    if (!condition)
+    {
+        throw new InvalidOperationException(message);
+    }
+}

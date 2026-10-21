@@ -1,0 +1,9 @@
+# 07 — Interfaces and Contracts
+
+- `LASTFM_API.md`
+- `AUTHENTICATION.md`
+- `INTERNAL_CONTRACTS.md`
+- `NATIVE_MESSAGING_PROTOCOL.md`
+- `MESSAGE_SCHEMAS.md`
+- `ERROR_TAXONOMY.md`
+- `DEEP_LINKS.md`

@@ -1,0 +1,9 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Scrobblix.Domain/Scrobblix.Domain.csproj" />
+    <ProjectReference Include="../../src/Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
+  </ItemGroup>
+</Project>

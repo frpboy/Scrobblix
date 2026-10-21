@@ -1,0 +1,5 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Pure domain rules for Scrobblix playback.</Description>
+  </PropertyGroup>
+</Project>

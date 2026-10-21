@@ -1,0 +1,8 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <Description>Use cases and boundary contracts for Scrobblix.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Scrobblix.Domain/Scrobblix.Domain.csproj" />
+  </ItemGroup>
+</Project>

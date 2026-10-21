@@ -1,0 +1,9 @@
+<Solution>
+  <Project Path="src/Scrobblix.Domain/Scrobblix.Domain.csproj" />
+  <Project Path="src/Scrobblix.Application/Scrobblix.Application.csproj" />
+  <Project Path="src/Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
+  <Project Path="src/Scrobblix.Desktop/Scrobblix.Desktop.csproj" />
+  <Project Path="src/Scrobblix.Windows/Scrobblix.Windows.csproj" />
+  <Project Path="src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj" />
+  <Project Path="tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj" />
+</Solution>
