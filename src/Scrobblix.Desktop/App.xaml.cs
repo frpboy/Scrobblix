@@ -61,6 +61,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
+            var accountStore = new SqliteProviderAccountStore(connectionString);
+            var lovedTrackStore = new SqliteLovedTrackStore(connectionString);
             var historyReader = new SqliteHistoryReader(connectionString);
             var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
@@ -119,8 +121,6 @@ public partial class App : Microsoft.UI.Xaml.Application
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
-            var accountStore = new SqliteProviderAccountStore(connectionString);
-            var lovedTrackStore = new SqliteLovedTrackStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
             const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
             const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
