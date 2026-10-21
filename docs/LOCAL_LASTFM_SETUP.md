@@ -1,4 +1,8 @@
-# Local Last.fm Setup
+# Local Last.fm Setup (historical reference)
+
+> The current desktop build uses the environment-variable setup in
+> [OWNER_SETUP_GUIDE.md](OWNER_SETUP_GUIDE.md), not the older in-app credential
+> form described below. Never put the shared secret in Git or chat.
 
 This guide configures Last.fm locally for Scrobblix. Never paste the shared secret or a Last.fm session key into chat, an issue, a screenshot, a log, or a Git-tracked file.
 
