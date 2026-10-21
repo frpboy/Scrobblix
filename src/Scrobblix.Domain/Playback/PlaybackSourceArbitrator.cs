@@ -25,10 +25,38 @@ public sealed class PlaybackSourceArbitrator
         return new SourceArbitrationDecision(true, null, observation);
     }
 
-    private static bool IsSameTrack(PlayObservation left, PlayObservation right) =>
-        string.Equals(left.NormalizedArtist?.ComparisonKey, right.NormalizedArtist?.ComparisonKey, StringComparison.Ordinal)
-        && string.Equals(left.NormalizedTitle?.ComparisonKey, right.NormalizedTitle?.ComparisonKey, StringComparison.Ordinal)
-        && left.DurationMilliseconds == right.DurationMilliseconds;
+    private static bool IsSameTrack(PlayObservation left, PlayObservation right)
+    {
+        var leftTitle = Normalize(left.NormalizedTitle?.ComparisonKey ?? left.Title);
+        var rightTitle = Normalize(right.NormalizedTitle?.ComparisonKey ?? right.Title);
+        if (leftTitle.Length == 0 || !string.Equals(leftTitle, rightTitle, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var leftArtist = Normalize(left.NormalizedArtist?.ComparisonKey ?? left.Artist);
+        var rightArtist = Normalize(right.NormalizedArtist?.ComparisonKey ?? right.Artist);
+        if (leftArtist.Length > 0 && rightArtist.Length > 0
+            && !string.Equals(leftArtist, rightArtist, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        if (left.DurationMilliseconds is > 0 && right.DurationMilliseconds is > 0)
+        {
+            var difference = Math.Abs((long)left.DurationMilliseconds.Value - right.DurationMilliseconds.Value);
+            var tolerance = Math.Max(8000L, Math.Max(left.DurationMilliseconds.Value, right.DurationMilliseconds.Value) * 0.04);
+            if (difference > tolerance)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static string Normalize(string? value) =>
+        string.Concat((value ?? string.Empty).Where(char.IsLetterOrDigit)).ToUpperInvariant();
 
     private static int Priority(string sourceName) => sourceName.ToUpperInvariant() switch
     {
