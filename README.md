@@ -2,8 +2,8 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Active development; v1 release gates remain open  
+> **Last updated:** 2026-10-21
 
 
 Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
@@ -33,6 +33,76 @@ Scrobblix must answer three questions immediately:
 | License | MIT for Scrobblix source code; third-party data remains governed by its own terms |
 
 The earlier Python/PySide6 concept remains viable for a prototype. It is not the selected production baseline because Scrobblix depends heavily on Windows-native media, notifications, packaging, credential storage, app lifecycle, and Fluent UI integration.
+
+## Run locally on Windows
+
+Scrobblix is an **unpackaged WinUI 3 desktop app**. For local development, use
+Windows 11, the .NET 10 SDK, Node.js 22 or newer, Git for Windows, and the
+Windows App Runtime version required by the project. Last.fm credentials are
+optional for local playback/history; the app provides a Settings form to save
+the API key and shared secret to Windows Credential Locker.
+
+### Fresh clone
+
+Open PowerShell:
+
+```powershell
+git clone https://github.com/frpboy/Scrobblix.git
+Set-Location Scrobblix
+git fetch origin
+git switch --track origin/feat/metadata-artwork-enrichment-v2
+.\scripts\update-and-run.ps1
+```
+
+### Existing clone
+
+Make sure any local changes are committed or stashed first. The script refuses
+to update a dirty working tree.
+
+```powershell
+git fetch origin
+git switch feat/metadata-artwork-enrichment-v2
+git pull --ff-only origin feat/metadata-artwork-enrichment-v2
+.\scripts\update-and-run.ps1
+```
+
+The script restores and builds the solution, runs the assertion suite, checks
+and builds the browser companion, and then launches the WinUI desktop app.
+When the app exits, PowerShell returns to the terminal. To build/run the desktop
+app manually after fetching the branch:
+
+```powershell
+dotnet restore Scrobblix.slnx
+dotnet build Scrobblix.slnx --configuration Release
+dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release
+npm --prefix browser-extension ci
+npm --prefix browser-extension run check
+npm --prefix browser-extension run build
+dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
+```
+
+If WinUI reports `0x80040154 Class not registered`, install/register the
+matching Windows App Runtime for this build and try again. The current local
+browser-native-host installer requires the built extension ID; browser
+registration is optional and is not required for desktop GSMTC detection.
+
+### Current implementation status
+
+The current feature branch contains SQLite-backed local history, canonical
+playback tracking and source arbitration, an idempotent durable scrobble queue,
+Last.fm API signing/authentication flows, MusicBrainz/Cover Art Archive/Last.fm
+metadata and artwork fallback, an in-app Last.fm credential form, local numbered
+diagnostic logs, and initial Chromium Native Messaging registration.
+
+This is still a development build, **not a claim that every normative v1
+requirement is finished**. Current release gaps include live Last.fm end-to-end
+verification, retry/backoff and provider batch hardening, same-user IPC peer
+authentication, Firefox support, full queue action controls, Statistics/Loved
+flows, export/backup, tray and notifications, a signed installer/updater,
+accessibility qualification, and a passing CI run for the latest source commit.
+See `Scrobblix-Docs/00_Project/SCOPE.md` and
+`Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` before treating a build as
+release-ready.
 
 ## Documentation map
 
