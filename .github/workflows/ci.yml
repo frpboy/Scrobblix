@@ -5,6 +5,7 @@ on:
     branches: [main]
   pull_request:
     branches: [main]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -14,20 +15,72 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+
       - uses: actions/setup-node@v4
         with:
           node-version: 22.x
           cache: npm
           cache-dependency-path: browser-extension/package-lock.json
-      - run: dotnet restore Scrobblix.slnx
-      - run: dotnet build Scrobblix.slnx --no-restore --configuration Release
-      - run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
-      - run: npm ci
+
+      - name: Restore .NET solution
+        run: dotnet restore Scrobblix.slnx
+
+      - name: Build .NET solution
+        run: dotnet build Scrobblix.slnx --no-restore --configuration Release
+
+      - name: Run domain and infrastructure assertions
+        run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
+
+      - name: Install browser companion dependencies
+        run: npm ci
         working-directory: browser-extension
-      - run: npm run check
+
+      - name: Type-check browser companion
+        run: npm run check
         working-directory: browser-extension
-      - run: npm run build
+
+      - name: Build browser companion
+        run: npm run build
         working-directory: browser-extension
+
+      - name: Publish unpackaged Windows application
+        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
+
+      - name: Publish native messaging host
+        run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --no-restore --output artifacts/Scrobblix/native-host
+
+      - name: Assemble local test bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = 'artifacts/Scrobblix'
+          New-Item -ItemType Directory -Force -Path "$bundle/browser-extension" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$bundle/scripts" | Out-Null
+          Copy-Item -Path 'browser-extension/manifest.json' -Destination "$bundle/browser-extension/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/package.json' -Destination "$bundle/browser-extension/package.json" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension/" -Recurse -Force
+          Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$bundle/scripts/" -Force
+          Copy-Item -Path 'scripts/uninstall-native-host.ps1' -Destination "$bundle/scripts/" -Force
+          Copy-Item -Path 'docs/OWNER_SETUP_GUIDE.md' -Destination "$bundle/OWNER_SETUP_GUIDE.md" -Force
+          @(
+            'Scrobblix Windows development test bundle'
+            ''
+            '1. Install the Microsoft Windows App Runtime version required by this build.'
+            '2. Launch Scrobblix.exe from the desktop folder. The app is unpackaged and may require runtime prerequistes on a clean PC.'
+            '3. The browser companion is optional. Load the browser-extension folder unpacked, publish native-host for the host exe if needed, and register the exact extension ID using scripts/install-native-host.ps1.'
+            '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
+            '5. This is a CI verification bundle, not a signed installer or production release.'
+          ) | Set-Content -Path "$bundle/README-TESTING.txt" -Encoding utf8
+          Compress-Archive -Path "$bundle/*" -DestinationPath 'artifacts/Scrobblix-Windows-TestBundle.zip' -Force
+
+      - name: Upload Windows test bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Scrobblix-Windows-TestBundle
+          path: artifacts/Scrobblix-Windows-TestBundle.zip
+          if-no-files-found: error
+          retention-days: 14
