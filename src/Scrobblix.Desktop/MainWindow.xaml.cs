@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System.Globalization;
 using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
@@ -74,15 +76,86 @@ public sealed partial class MainWindow : Window
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
-            HistoryList.Children.Add(new TextBlock { Text = "No eligible plays recorded yet." });
+            HistoryList.Children.Add(new TextBlock { Text = "No listening sessions recorded yet." });
             return;
         }
 
         foreach (var play in plays)
         {
-            var label = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}";
-            RecentActivityList.Children.Add(new TextBlock { Text = label });
-            HistoryList.Children.Add(new TextBlock { Text = label });
+            AddPlayRow(RecentActivityList, play);
+            AddPlayRow(HistoryList, play);
+        }
+    }
+
+    private void AddPlayRow(Panel target, RecentPlay play)
+    {
+        var row = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            Spacing = 12,
+            Padding = new Thickness(4),
+        };
+        var artworkFrame = new Grid { Width = 56, Height = 56 };
+        var artwork = new Image { Width = 56, Height = 56, Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
+        var fallback = new TextBlock
+        {
+            Text = "♪",
+            FontSize = 22,
+            HorizontalAlignment = HorizontalAlignment.Center,
+            VerticalAlignment = VerticalAlignment.Center,
+        };
+        artworkFrame.Children.Add(artwork);
+        artworkFrame.Children.Add(fallback);
+        SetArtwork(artwork, fallback, play.ArtworkPath);
+        row.Children.Add(artworkFrame);
+
+        var details = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        details.Children.Add(new TextBlock
+        {
+            Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}",
+            FontSize = 15,
+            TextWrapping = TextWrapping.Wrap,
+        });
+        if (!string.IsNullOrWhiteSpace(play.Album))
+        {
+            details.Children.Add(new TextBlock
+            {
+                Text = play.Album,
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+
+        details.Children.Add(new TextBlock
+        {
+            Text = play.EligibleUtc is not null ? "Eligible for scrobbling" : "Saved locally · not scrobble-eligible yet",
+            FontSize = 12,
+        });
+        row.Children.Add(details);
+        target.Children.Add(row);
+    }
+
+    private static void SetArtwork(Image image, TextBlock fallback, string? artworkPath)
+    {
+        if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
+        {
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
+            return;
+        }
+
+        try
+        {
+            image.Source = new BitmapImage(new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute));
+            image.Visibility = Visibility.Visible;
+            fallback.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is UriFormatException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
         }
     }
 
