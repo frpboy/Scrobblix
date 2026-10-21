@@ -10,6 +10,7 @@ using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
+using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Desktop;
 
@@ -419,9 +420,7 @@ public sealed partial class MainWindow : Window
             });
             content.Children.Add(new TextBlock
             {
-                Text = action.State is ProviderActionState.Accepted or ProviderActionState.Cancelled
-                    ? $"Finished: {action.DueUtc.ToLocalTime():g}"
-                    : $"Next attempt / due: {action.DueUtc.ToLocalTime():g}",
+                Text = $"Original due time: {action.DueUtc.ToLocalTime():g}",
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
             });
