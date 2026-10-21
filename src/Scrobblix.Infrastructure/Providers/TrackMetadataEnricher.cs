@@ -73,6 +73,11 @@ public sealed class TrackMetadataEnricher
         }
 
         var release = await TryFindReleaseAsync(observation, result.ReleaseMusicBrainzId, cancellationToken);
+        if (release is null)
+        {
+            release = await TryFindRecordingReleaseAsync(observation, cancellationToken);
+        }
+
         if (release is not null)
         {
             _log?.Invoke($"MusicBrainz release matched; artist={observation.Artist}; title={observation.Title}; release_mbid={release.ReleaseId}.");
@@ -317,6 +322,151 @@ public sealed class TrackMetadataEnricher
         {
             return new ReleaseLookup(releaseId!, ExtractReleaseMetadata(releaseDetails.RootElement, observation));
         }
+    }
+
+    private async Task<ReleaseLookup?> TryFindRecordingReleaseAsync(
+        PlayObservation observation,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(observation.Artist) || string.IsNullOrWhiteSpace(observation.Title))
+        {
+            return null;
+        }
+
+        var artistQuery = !string.IsNullOrWhiteSpace(observation.AlbumArtist)
+            ? observation.AlbumArtist
+            : observation.Artist;
+        var query = $"recording:\"{EscapeQuery(observation.Title)}\" AND artist:\"{EscapeQuery(artistQuery)}\"";
+        var url = $"https://musicbrainz.org/ws/2/recording/?query={Uri.EscapeDataString(query)}&inc=releases+artist-credits&fmt=json&limit=5";
+        using var document = await TryGetMusicBrainzJsonAsync(url, cancellationToken);
+        if (document is null
+            || !document.RootElement.TryGetProperty("recordings", out var recordings)
+            || recordings.ValueKind != JsonValueKind.Array)
+        {
+            _log?.Invoke($"MusicBrainz recording lookup found no usable results; artist={observation.Artist}; title={observation.Title}.");
+            return null;
+        }
+
+        var expectedTitle = Normalize(observation.Title);
+        var expectedArtist = Normalize(artistQuery);
+        JsonElement? selectedRelease = null;
+        string? recordingId = null;
+        var bestReleaseScore = 0;
+
+        foreach (var recording in recordings.EnumerateArray())
+        {
+            if (!string.Equals(Normalize(ReadText(recording, "title")), expectedTitle, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var recordingArtist = Normalize(ReadArtistCredit(recording));
+            var artistMatches = recordingArtist.Length > 0
+                && (recordingArtist.Contains(expectedArtist, StringComparison.Ordinal)
+                    || expectedArtist.Contains(recordingArtist, StringComparison.Ordinal));
+            if (!artistMatches)
+            {
+                continue;
+            }
+
+            if (!recording.TryGetProperty("releases", out var releases) || releases.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var candidate in releases.EnumerateArray())
+            {
+                var candidateId = ReadText(candidate, "id");
+                if (!Guid.TryParse(candidateId, out _))
+                {
+                    continue;
+                }
+
+                var releaseTitle = Normalize(ReadText(candidate, "title"));
+                var releaseArtist = Normalize(ReadArtistCredit(candidate));
+                var albumMatches = !string.IsNullOrWhiteSpace(observation.Album)
+                    && string.Equals(releaseTitle, Normalize(observation.Album), StringComparison.Ordinal);
+                if (!string.IsNullOrWhiteSpace(observation.Album) && !albumMatches)
+                {
+                    continue;
+                }
+
+                var releaseArtistMatches = releaseArtist.Length > 0
+                    && (releaseArtist.Contains(expectedArtist, StringComparison.Ordinal)
+                        || expectedArtist.Contains(releaseArtist, StringComparison.Ordinal));
+                // If album metadata is missing, only use releases whose artist credit is also a plausible match.
+                if (string.IsNullOrWhiteSpace(observation.Album) && !releaseArtistMatches)
+                {
+                    continue;
+                }
+
+                var score = (albumMatches ? 4 : 0)
+                    + (releaseArtistMatches ? 2 : 0)
+                    + (string.IsNullOrWhiteSpace(ReadText(candidate, "date")) ? 0 : 1);
+                if (score > bestReleaseScore)
+                {
+                    selectedRelease = candidate.Clone();
+                    recordingId = ReadText(recording, "id");
+                    bestReleaseScore = score;
+                }
+            }
+        }
+
+        if (selectedRelease is null)
+        {
+            _log?.Invoke($"MusicBrainz recording matched the track but no safe release was available; artist={observation.Artist}; title={observation.Title}; album={observation.Album ?? "(missing)"}.");
+            return null;
+        }
+
+        var releaseId = ReadText(selectedRelease.Value, "id");
+        if (!Guid.TryParse(releaseId, out _))
+        {
+            return null;
+        }
+
+        var basicMetadata = new PlayMetadataEnrichment(
+            ReadArtistCredit(selectedRelease.Value) ?? ReadArtistCreditFromRecording(document, recordingId),
+            null,
+            ParseYear(ReadText(selectedRelease.Value, "date")),
+            recordingId,
+            releaseId,
+            null,
+            null,
+            ReadText(selectedRelease.Value, "title"));
+
+        _log?.Invoke($"MusicBrainz recording fallback matched a release; artist={observation.Artist}; title={observation.Title}; release_mbid={releaseId}; album={ReadText(selectedRelease.Value, "title") ?? "(missing)"}.");
+        var details = await TryGetMusicBrainzJsonAsync(
+            $"https://musicbrainz.org/ws/2/release/{Uri.EscapeDataString(releaseId!)}?inc=recordings+artist-credits&fmt=json",
+            cancellationToken);
+        if (details is null)
+        {
+            return new ReleaseLookup(releaseId!, basicMetadata);
+        }
+
+        using (details)
+        {
+            return new ReleaseLookup(releaseId!, Merge(basicMetadata, ExtractReleaseMetadata(details.RootElement, observation)));
+        }
+    }
+
+    private static string? ReadArtistCreditFromRecording(JsonDocument document, string? recordingId)
+    {
+        if (string.IsNullOrWhiteSpace(recordingId)
+            || !document.RootElement.TryGetProperty("recordings", out var recordings)
+            || recordings.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var recording in recordings.EnumerateArray())
+        {
+            if (string.Equals(ReadText(recording, "id"), recordingId, StringComparison.Ordinal))
+            {
+                return ReadArtistCredit(recording);
+            }
+        }
+
+        return null;
     }
 
     private static PlayMetadataEnrichment ExtractReleaseMetadata(JsonElement release, PlayObservation observation)
