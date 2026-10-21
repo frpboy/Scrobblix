@@ -56,7 +56,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
     }
 
     private async Task<string?> TryCacheArtworkAsync(
-        RandomAccessStreamReference? thumbnail,
+        IRandomAccessStreamReference? thumbnail,
         string? applicationId,
         string? artist,
         string? title,
