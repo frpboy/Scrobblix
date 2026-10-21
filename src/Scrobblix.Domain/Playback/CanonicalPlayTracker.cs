@@ -7,13 +7,15 @@ public sealed class CanonicalPlayTracker
 {
     private readonly ConfirmedPlayedTime _confirmedTime = new();
     private readonly CanonicalPlayState _state = new();
+    private long _lastMonotonicMilliseconds;
 
     public CanonicalPlayState State => _state;
 
-    public long ConfirmedPlayedMilliseconds => _confirmedTime.TotalMilliseconds;
+    public long ConfirmedPlayedMilliseconds => _confirmedTime.GetTotalMilliseconds(_lastMonotonicMilliseconds);
 
     public EligibilityDecision Observe(PlayObservation observation, long monotonicMilliseconds)
     {
+        _lastMonotonicMilliseconds = monotonicMilliseconds;
         if (_state.Current == PlayState.Candidate && observation.PlaybackState == PlayState.Playing)
         {
             _state.TransitionTo(PlayState.Playing);
@@ -28,7 +30,7 @@ public sealed class CanonicalPlayTracker
             observation.Artist,
             observation.Title,
             observation.DurationMilliseconds,
-            _confirmedTime.TotalMilliseconds);
+            _confirmedTime.GetTotalMilliseconds(monotonicMilliseconds));
         if (decision.IsEligible && !_state.IsEligible)
         {
             _state.MarkEligible();

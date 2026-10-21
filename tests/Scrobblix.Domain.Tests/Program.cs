@@ -112,6 +112,11 @@ tracker.Observe(observation, 0);
 var trackedDecision = tracker.Observe(observation with { PlaybackState = PlayState.Paused }, 150_000);
 Assert(trackedDecision.IsEligible && tracker.State.IsEligible, "The canonical tracker marks an active 300-second play eligible after 150 seconds of confirmed time.");
 
+var continuousTracker = new CanonicalPlayTracker();
+continuousTracker.Observe(observation, 0);
+var continuousDecision = continuousTracker.Observe(observation, 150_000);
+Assert(continuousDecision.IsEligible && continuousTracker.State.IsEligible, "Continuous active playback becomes eligible without requiring a pause event.");
+
 var arbitrator = new PlaybackSourceArbitrator();
 var browserObservation = observation with
 {

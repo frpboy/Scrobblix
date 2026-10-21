@@ -8,6 +8,10 @@ public sealed class ConfirmedPlayedTime
 
     public long TotalMilliseconds { get; private set; }
 
+    public long GetTotalMilliseconds(long monotonicMilliseconds) => _playingSinceMilliseconds is { } playingSinceMilliseconds
+        ? TotalMilliseconds + Math.Max(0, monotonicMilliseconds - playingSinceMilliseconds)
+        : TotalMilliseconds;
+
     public bool IsPlaying => _playingSinceMilliseconds is not null;
 
     public void SetPlaying(bool isPlaying, long monotonicMilliseconds)
