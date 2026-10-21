@@ -437,22 +437,24 @@ public sealed partial class MainWindow : Window
             var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
             if (action.State == ProviderActionState.RetryScheduled)
             {
-                actionsRow.Children.Add(new Button
+                var retryButton = new Button
                 {
                     Content = "Retry now",
                     Tag = action.ActionId,
-                    Click = QueueRetryNowButton_Click,
-                });
+                };
+                retryButton.Click += QueueRetryNowButton_Click;
+                actionsRow.Children.Add(retryButton);
             }
 
             if (action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled or ProviderActionState.AuthBlocked)
             {
-                actionsRow.Children.Add(new Button
+                var cancelButton = new Button
                 {
                     Content = "Cancel action",
                     Tag = action.ActionId,
-                    Click = QueueCancelButton_Click,
-                });
+                };
+                cancelButton.Click += QueueCancelButton_Click;
+                actionsRow.Children.Add(cancelButton);
             }
 
             if (actionsRow.Children.Count > 0) content.Children.Add(actionsRow);
