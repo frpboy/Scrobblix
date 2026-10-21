@@ -146,6 +146,12 @@ var pausedObservation = observation with { PlaybackState = PlayState.Paused };
 var pausedSourceDecision = pausedArbitrator.Consider(pausedObservation);
 var browserResumeDecision = pausedArbitrator.Consider(browserObservation);
 Assert(pausedSourceDecision.IsAccepted && browserResumeDecision.IsAccepted, "A browser source can take over when the higher-priority Windows session is paused.");
+var activeBrowserArbitrator = new PlaybackSourceArbitrator();
+var activeBrowserObservation = browserObservation with { CapturedAtUtc = observation.CapturedAtUtc.AddSeconds(2), PlaybackState = PlayState.Playing };
+var staleWindowsPause = observation with { CapturedAtUtc = observation.CapturedAtUtc.AddSeconds(3), PlaybackState = PlayState.Paused };
+Assert(activeBrowserArbitrator.Consider(activeBrowserObservation).IsAccepted
+    && !activeBrowserArbitrator.Consider(staleWindowsPause).IsAccepted,
+    "A stale paused Windows observation cannot interrupt active browser playback for the same track.");
 
 var signatureParameters = new Dictionary<string, string>
 {
