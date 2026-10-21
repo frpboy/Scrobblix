@@ -19,10 +19,10 @@
                 <TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" />
                 <TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
-            <NavigationView Grid.Row="1" PaneDisplayMode="LeftMinimal" IsBackButtonVisible="Collapsed" IsSettingsVisible="True" IsPaneToggleButtonVisible="False">
+            <NavigationView Grid.Row="1" PaneDisplayMode="LeftMinimal" IsBackButtonVisible="Collapsed" IsSettingsVisible="True" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
                 <NavigationView.MenuItems>
-                    <NavigationViewItem Content="Home" IsSelected="True" />
-                    <NavigationViewItem Content="History" IsEnabled="False" ToolTipService.ToolTip="History is not available in this build." />
+                    <NavigationViewItem Content="Home" Tag="home" IsSelected="True" />
+                    <NavigationViewItem Content="History" Tag="history" />
                     <NavigationViewItem Content="Statistics" IsEnabled="False" ToolTipService.ToolTip="Statistics are not available in this build." />
                     <NavigationViewItem Content="Loved" IsEnabled="False" ToolTipService.ToolTip="Loved tracks are not available in this build." />
                     <NavigationViewItem Content="Queue" IsEnabled="False" ToolTipService.ToolTip="Queue management is not available in this build." />
@@ -32,7 +32,7 @@
             <TextBlock Grid.Row="2" Text="Local listening data stays on this device." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
         </Grid>
 
-        <ScrollViewer Grid.Column="1">
+        <ScrollViewer x:Name="HomeView" Grid.Column="1">
             <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Home" Style="{StaticResource TitleTextBlockStyle}" />
@@ -94,6 +94,18 @@
                     <Border Padding="16" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
                         <StackPanel x:Name="RecentActivityList" Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
+                </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer x:Name="HistoryView" Grid.Column="1" Visibility="Collapsed">
+            <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="History" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="Eligible plays kept locally on this device." Style="{StaticResource BodyTextBlockStyle}" />
+                </StackPanel>
+                <StackPanel x:Name="HistoryList" Spacing="8">
+                    <TextBlock Text="No eligible plays recorded yet." />
                 </StackPanel>
             </StackPanel>
         </ScrollViewer>

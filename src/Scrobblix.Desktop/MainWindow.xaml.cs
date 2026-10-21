@@ -30,17 +30,28 @@ public sealed partial class MainWindow : Window
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
     {
         RecentActivityList.Children.Clear();
+        HistoryList.Children.Clear();
         if (plays.Count == 0)
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
+            HistoryList.Children.Add(new TextBlock { Text = "No eligible plays recorded yet." });
             return;
         }
 
         foreach (var play in plays)
         {
-            RecentActivityList.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}" });
+            var label = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}";
+            RecentActivityList.Children.Add(new TextBlock { Text = label });
+            HistoryList.Children.Add(new TextBlock { Text = label });
         }
+    }
+
+    private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
+    {
+        var isHistory = args.SelectedItem is NavigationViewItem { Tag: "history" };
+        HomeView.Visibility = isHistory ? Visibility.Collapsed : Visibility.Visible;
+        HistoryView.Visibility = isHistory ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetQueueSummary(QueueSummary summary)
