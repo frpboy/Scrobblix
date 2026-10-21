@@ -25,8 +25,16 @@ public sealed class SqliteEligiblePlayStore(string connectionString) : IEligible
         {
             playCommand.Transaction = transaction;
             playCommand.CommandText = """
-                INSERT INTO plays (play_id, started_utc, artist, title, album, duration_ms, confirmed_played_ms, eligibility_threshold_ms, eligible_utc, local_status, artwork_path, created_utc, updated_utc)
-                VALUES ($playId, $startedUtc, $artist, $title, $album, $durationMs, $confirmedMs, $thresholdMs, $queuedUtc, 0, $artworkPath, $queuedUtc, $queuedUtc)
+                INSERT INTO plays (
+                    play_id, started_utc, artist, title, album, duration_ms,
+                    confirmed_played_ms, eligibility_threshold_ms, eligible_utc, local_status,
+                    artwork_path, album_artist, track_number, release_year, recording_mbid,
+                    release_mbid, artwork_source, created_utc, updated_utc)
+                VALUES (
+                    $playId, $startedUtc, $artist, $title, $album, $durationMs,
+                    $confirmedMs, $thresholdMs, $queuedUtc, 0,
+                    $artworkPath, $albumArtist, $trackNumber, $releaseYear, $recordingMbid,
+                    $releaseMbid, $artworkSource, $queuedUtc, $queuedUtc)
                 ON CONFLICT(play_id) DO UPDATE SET
                     artist = COALESCE(excluded.artist, plays.artist),
                     title = COALESCE(excluded.title, plays.title),
@@ -37,8 +45,13 @@ public sealed class SqliteEligiblePlayStore(string connectionString) : IEligible
                     eligible_utc = COALESCE(plays.eligible_utc, excluded.eligible_utc),
                     terminal_reason_code = NULL,
                     artwork_path = COALESCE(excluded.artwork_path, plays.artwork_path),
+                    album_artist = COALESCE(excluded.album_artist, plays.album_artist),
+                    track_number = COALESCE(excluded.track_number, plays.track_number),
+                    release_year = COALESCE(excluded.release_year, plays.release_year),
+                    recording_mbid = COALESCE(excluded.recording_mbid, plays.recording_mbid),
+                    release_mbid = COALESCE(excluded.release_mbid, plays.release_mbid),
+                    artwork_source = COALESCE(excluded.artwork_source, plays.artwork_source),
                     updated_utc = excluded.updated_utc;
-                """;
             playCommand.Parameters.AddWithValue("$playId", play.PlayId);
             playCommand.Parameters.AddWithValue("$startedUtc", play.FirstObservedUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
             playCommand.Parameters.AddWithValue("$artist", (object?)play.Artist ?? DBNull.Value);
@@ -49,6 +62,12 @@ public sealed class SqliteEligiblePlayStore(string connectionString) : IEligible
             playCommand.Parameters.AddWithValue("$thresholdMs", play.Eligibility.ThresholdMilliseconds!.Value);
             playCommand.Parameters.AddWithValue("$queuedUtc", timestamp);
             playCommand.Parameters.AddWithValue("$artworkPath", (object?)play.ArtworkPath ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$albumArtist", (object?)play.AlbumArtist ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$trackNumber", (object?)play.TrackNumber ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$releaseYear", (object?)play.ReleaseYear ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$recordingMbid", (object?)play.RecordingMusicBrainzId ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$releaseMbid", (object?)play.ReleaseMusicBrainzId ?? DBNull.Value);
+            playCommand.Parameters.AddWithValue("$artworkSource", (object?)play.ArtworkSource ?? DBNull.Value);
             await playCommand.ExecuteNonQueryAsync(cancellationToken);
         }
 
