@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using Scrobblix.Application.Providers;
@@ -34,7 +35,13 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (!response.IsSuccessStatusCode)
-                return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+            {
+                // A response without a documented Last.fm API result is ambiguous: do not blindly resend it.
+                return new(false, response.StatusCode == HttpStatusCode.TooManyRequests
+                    ? ReasonCodes.Provider.RateLimited
+                    : ReasonCodes.Provider.SubmissionOutcomeUnknown,
+                    response.StatusCode == HttpStatusCode.TooManyRequests);
+            }
             using var json = JsonDocument.Parse(payload);
             if (json.RootElement.TryGetProperty("error", out var error))
                 return MapError(error.GetInt32());
@@ -42,15 +49,17 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         }
         catch (HttpRequestException)
         {
-            return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+            // Last.fm may have accepted the request before the connection failed.
+            return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
-            return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+            // A timeout after sending a POST is not proof that Last.fm rejected the scrobble.
+            return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
         }
         catch (JsonException)
         {
-            return new(false, ReasonCodes.Provider.ResponseInvalid, false);
+            return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
         }
     }
 
