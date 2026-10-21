@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Scrobblix.Application.ReadModels;
+using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Infrastructure.Storage;
 
@@ -45,5 +46,62 @@ public sealed class SqliteHistoryReader(string connectionString)
         }
 
         return results;
+    }
+
+    public async Task<TodaySummary> GetTodaySummaryAsync(DateTimeOffset localNow, CancellationToken cancellationToken)
+    {
+        var localDateTime = TimeZoneInfo.ConvertTime(localNow, TimeZoneInfo.Local).DateTime;
+        var localStartDate = DateTime.SpecifyKind(localDateTime.Date, DateTimeKind.Unspecified);
+        var localEndDate = localStartDate.AddDays(1);
+        var startUtc = new DateTimeOffset(localStartDate, TimeZoneInfo.Local.GetUtcOffset(localStartDate))
+            .UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var endUtc = new DateTimeOffset(localEndDate, TimeZoneInfo.Local.GetUtcOffset(localEndDate))
+            .UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        int sessionCount;
+        int eligibleCount;
+        long confirmedMilliseconds;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT COUNT(*),
+                       COALESCE(SUM(CASE WHEN eligible_utc IS NOT NULL THEN 1 ELSE 0 END), 0),
+                       COALESCE(SUM(confirmed_played_ms), 0)
+                FROM plays
+                WHERE started_utc >= $startUtc AND started_utc < $endUtc;
+                """;
+            command.Parameters.AddWithValue("$startUtc", startUtc);
+            command.Parameters.AddWithValue("$endUtc", endUtc);
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            await reader.ReadAsync(cancellationToken);
+            sessionCount = reader.GetInt32(0);
+            eligibleCount = reader.GetInt32(1);
+            confirmedMilliseconds = reader.GetInt64(2);
+        }
+
+        int acceptedCount;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT COUNT(*)
+                FROM provider_actions a
+                INNER JOIN plays p ON p.play_id = a.play_id
+                WHERE a.provider = 'lastfm'
+                  AND a.action_type = $scrobble
+                  AND a.state = $accepted
+                  AND p.started_utc >= $startUtc
+                  AND p.started_utc < $endUtc;
+                """;
+            command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+            command.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+            command.Parameters.AddWithValue("$startUtc", startUtc);
+            command.Parameters.AddWithValue("$endUtc", endUtc);
+            acceptedCount = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+        }
+
+        return new TodaySummary(sessionCount, eligibleCount, acceptedCount, confirmedMilliseconds);
     }
 }
