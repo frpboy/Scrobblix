@@ -70,7 +70,7 @@ jobs:
             'Scrobblix Windows development test bundle'
             ''
             '1. Install the Microsoft Windows App Runtime version required by this build.'
-            '2. Launch Scrobblix.exe from the desktop folder. The app is unpackaged and may require runtime prerequistes on a clean PC.'
+            '2. Launch Scrobblix.Desktop.exe from the desktop folder. The app is unpackaged and may require runtime prerequisites on a clean PC.'
             '3. The browser companion is optional. Load the browser-extension folder unpacked, publish native-host for the host exe if needed, and register the exact extension ID using scripts/install-native-host.ps1.'
             '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
             '5. This is a CI verification bundle, not a signed installer or production release.'
