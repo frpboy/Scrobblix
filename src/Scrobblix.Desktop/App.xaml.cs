@@ -60,9 +60,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
-            var recentHistory = await new SqliteHistoryReader(connectionString)
-                .GetRecentAsync(10, CancellationToken.None);
+            var historyReader = new SqliteHistoryReader(connectionString);
+            var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
+            _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
             var queueSummary = await new SqliteQueueReader(connectionString)
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
@@ -638,11 +639,14 @@ public partial class App : Microsoft.UI.Xaml.Application
 
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
     {
-        var recentHistory = await new SqliteHistoryReader(connectionString).GetRecentAsync(10, cancellationToken);
+        var historyReader = new SqliteHistoryReader(connectionString);
+        var recentHistory = await historyReader.GetRecentAsync(10, cancellationToken);
+        var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
         var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
             window.SetRecentHistory(recentHistory);
+            window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
         });
     }
