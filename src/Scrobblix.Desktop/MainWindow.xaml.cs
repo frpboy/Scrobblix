@@ -14,6 +14,9 @@ public sealed partial class MainWindow : Window
     private readonly TrackingMode _trackingMode = new();
 
     public event Action<bool>? TrackingModeChanged;
+    public event Func<string, string, Task>? LastFmApiCredentialsSaveRequested;
+    public event Func<Task>? LastFmConnectRequested;
+    public event Func<Task>? LastFmCompleteAuthorizationRequested;
 
     public MainWindow()
     {
@@ -24,6 +27,19 @@ public sealed partial class MainWindow : Window
     {
         StartupInfo.Message = message;
         StartupInfo.Severity = severity;
+    }
+
+    public void SetLastFmCredentialsStatus(string message)
+    {
+        LastFmCredentialsStatusText.Text = message;
+    }
+
+    public void SetLastFmStatus(string message, bool isConnected = false, bool awaitingApproval = false)
+    {
+        LastFmStatusText.Text = message;
+        LastFmHomeStatusText.Text = message;
+        ConnectLastFmButton.Content = isConnected ? "Reconnect Last.fm" : "Connect Last.fm";
+        CompleteLastFmAuthorizationButton.Visibility = awaitingApproval ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
@@ -87,6 +103,52 @@ public sealed partial class MainWindow : Window
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
+    }
+
+    private async void SaveLastFmCredentialsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var apiKey = LastFmApiKeyInput.Text?.Trim();
+        var apiSecret = LastFmApiSecretInput.Password;
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
+        {
+            SetLastFmCredentialsStatus("Enter both the API key and shared secret.");
+            return;
+        }
+
+        var handler = LastFmApiCredentialsSaveRequested;
+        if (handler is null)
+        {
+            SetLastFmCredentialsStatus("Scrobblix has not finished initializing yet. Try again.");
+            return;
+        }
+
+        await handler(apiKey, apiSecret);
+        LastFmApiKeyInput.Text = string.Empty;
+        LastFmApiSecretInput.Password = string.Empty;
+    }
+
+    private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
+    {
+        var handler = LastFmConnectRequested;
+        if (handler is null)
+        {
+            SetLastFmStatus("Scrobblix has not finished initializing yet. Try again.");
+            return;
+        }
+
+        await handler();
+    }
+
+    private async void CompleteLastFmAuthorizationButton_Click(object sender, RoutedEventArgs args)
+    {
+        var handler = LastFmCompleteAuthorizationRequested;
+        if (handler is null)
+        {
+            SetLastFmStatus("Scrobblix has not finished initializing yet. Try again.");
+            return;
+        }
+
+        await handler();
     }
 
     private void TrackingToggleButton_Click(object sender, RoutedEventArgs args)
