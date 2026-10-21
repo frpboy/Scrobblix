@@ -114,7 +114,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             };
             StartTracking();
 
-            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, metadataEnricher, applicationCancellation.Token);
+            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, applicationCancellation.Token);
         }
         catch (Exception exception)
         {
@@ -128,6 +128,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         WindowsCredentialStore credentialStore,
         string? initialApiKey,
         string? initialApiSecret,
+        bool credentialsFromCredentialLocker,
         TrackMetadataEnricher metadataEnricher,
         CancellationToken cancellationToken)
     {
@@ -159,7 +160,9 @@ public partial class App : Microsoft.UI.Xaml.Application
         var hasConfiguration = ConfigureCredentials(initialApiKey, initialApiSecret);
         if (hasConfiguration)
         {
-            _window!.SetLastFmCredentialsStatus("API key and shared secret are stored in Windows Credential Locker.");
+            _window!.SetLastFmCredentialsStatus(credentialsFromCredentialLocker
+                ? "API key and shared secret are stored in Windows Credential Locker."
+                : "API credentials were loaded from environment variables. You can save them securely here.");
         }
         else
         {
