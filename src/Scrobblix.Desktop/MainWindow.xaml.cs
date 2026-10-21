@@ -30,6 +30,26 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        ConfigureInitialWindowSize();
+        var logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "scrobblix-mark.svg");
+        if (File.Exists(logoPath))
+        {
+            AppBrandImage.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
+        }
+    }
+
+    private void ConfigureInitialWindowSize()
+    {
+        var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
+        var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
+        var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
+        appWindow.Resize(new Windows.Graphics.SizeInt32(1120, 800));
+        if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
+        {
+            presenter.IsResizable = true;
+            presenter.IsMaximizable = true;
+            presenter.IsMinimizable = true;
+        }
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity)
@@ -107,6 +127,7 @@ public sealed partial class MainWindow : Window
 
     private static void SetArtwork(Image image, TextBlock fallback, string? artworkPath)
     {
+        fallback.Text = "♪";
         if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
         {
             image.Source = null;
@@ -117,7 +138,17 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            image.Source = new BitmapImage(new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute));
+            image.Tag = fallback;
+            image.ImageFailed -= ArtworkImageFailed;
+            image.ImageOpened -= ArtworkImageOpened;
+            image.ImageFailed += ArtworkImageFailed;
+            image.ImageOpened += ArtworkImageOpened;
+            var bitmap = new BitmapImage
+            {
+                DecodePixelWidth = Math.Max(128, (int)Math.Ceiling(image.ActualWidth > 0 ? image.ActualWidth * 2 : image.Width * 2)),
+                UriSource = new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute),
+            };
+            image.Source = bitmap;
             image.Visibility = Visibility.Visible;
             fallback.Visibility = Visibility.Collapsed;
         }
@@ -126,6 +157,36 @@ public sealed partial class MainWindow : Window
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             fallback.Visibility = Visibility.Visible;
+        }
+    }
+
+    private static void ArtworkImageFailed(object sender, ExceptionRoutedEventArgs args)
+    {
+        if (sender is not Image image)
+        {
+            return;
+        }
+
+        image.Source = null;
+        image.Visibility = Visibility.Collapsed;
+        if (image.Tag is TextBlock fallback)
+        {
+            fallback.Text = "♪";
+            fallback.Visibility = Visibility.Visible;
+        }
+    }
+
+    private static void ArtworkImageOpened(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Image image)
+        {
+            return;
+        }
+
+        image.Visibility = Visibility.Visible;
+        if (image.Tag is TextBlock fallback)
+        {
+            fallback.Visibility = Visibility.Collapsed;
         }
     }
 
