@@ -15,4 +15,5 @@ public sealed record LocalPlayRecord(
     EligibilityDecision Eligibility,
     ProviderActionState? QueueState,
     string? QueueReasonCode,
-    string? LocalReasonCode);
+    string? LocalReasonCode,
+    string? ArtworkPath = null);
