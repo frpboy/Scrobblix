@@ -8,6 +8,9 @@ type ExtendedMediaMetadata = MediaMetadata & {
   releaseMusicBrainzId?: string;
 };
 
+const attachedMedia = new WeakSet<HTMLMediaElement>();
+const minimumProgressReportMs = 2_500;
+
 function send(media: HTMLMediaElement, state: PlaybackState): void {
   const metadata = navigator.mediaSession?.metadata as ExtendedMediaMetadata | undefined;
   const artworkUrl = metadata?.artwork
@@ -30,15 +33,38 @@ function send(media: HTMLMediaElement, state: PlaybackState): void {
 }
 
 function attach(media: HTMLMediaElement): void {
-  media.addEventListener("playing", () => send(media, "playing"));
+  if (attachedMedia.has(media)) return;
+  attachedMedia.add(media);
+
+  let lastProgressSentAt = 0;
+  const emitProgressIfDue = () => {
+    if (media.paused || media.ended) return;
+    const now = performance.now();
+    if (now - lastProgressSentAt < minimumProgressReportMs) return;
+    lastProgressSentAt = now;
+    send(media, "playing");
+  };
+
+  media.addEventListener("playing", () => {
+    lastProgressSentAt = performance.now();
+    send(media, "playing");
+  });
+  media.addEventListener("play", () => send(media, media.paused ? "paused" : "playing"));
   media.addEventListener("pause", () => send(media, "paused"));
   media.addEventListener("ended", () => send(media, "paused"));
   media.addEventListener("durationchange", () => send(media, media.paused ? "paused" : "playing"));
+  media.addEventListener("timeupdate", emitProgressIfDue);
   send(media, media.paused ? "paused" : "playing");
 }
 
-for (const media of document.querySelectorAll<HTMLMediaElement>("audio, video")) attach(media);
-new MutationObserver((records) => records.flatMap((record) => [...record.addedNodes])
-  .filter((node): node is Element => node instanceof Element)
-  .forEach((node) => node.querySelectorAll<HTMLMediaElement>("audio, video").forEach(attach)))
-  .observe(document.documentElement, { childList: true, subtree: true });
+function scan(node: ParentNode): void {
+  if (node instanceof HTMLMediaElement) attach(node);
+  node.querySelectorAll<HTMLMediaElement>("audio, video").forEach(attach);
+}
+
+scan(document);
+new MutationObserver((records) => records.forEach((record) => {
+  record.addedNodes.forEach((node) => {
+    if (node instanceof Element || node instanceof DocumentFragment) scan(node);
+  });
+})).observe(document.documentElement, { childList: true, subtree: true });

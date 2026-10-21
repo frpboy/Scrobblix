@@ -22,6 +22,7 @@ namespace Scrobblix.Desktop;
 
 public partial class App : Microsoft.UI.Xaml.Application
 {
+    private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
 
     public App()
@@ -81,7 +82,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 Timeout = TimeSpan.FromSeconds(12),
             };
-            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"));
+            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"), message => logger.Info("METADATA_PROVIDER", message));
             var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
             var localPlayStore = new SqliteLocalPlayStore(connectionString);
             var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
@@ -324,6 +325,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             credentialStore,
             _window,
             connectionString,
+            logger,
             cancellationToken);
         _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
     }
@@ -390,33 +392,58 @@ public partial class App : Microsoft.UI.Xaml.Application
         WindowsCredentialStore credentialStore,
         MainWindow window,
         string connectionString,
+        ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
+        var actionStore = new SqliteProviderActionStore(connectionString);
+        var consecutiveFailures = 0;
+
         try
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
-                var processor = getProcessor();
-                if (account is not null && processor is not null)
+                try
                 {
-                    var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
-                    if (!string.IsNullOrWhiteSpace(sessionKey)
-                        && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                    var recovered = await actionStore.RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, cancellationToken);
+                    if (recovered > 0)
                     {
-                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                        logger.Warning("SCROBBLE_QUEUE", $"Recovered expired provider action leases; count={recovered}.");
                     }
+
+                    var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
+                    var processor = getProcessor();
+                    if (account is not null && processor is not null)
+                    {
+                        var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
+                        if (!string.IsNullOrWhiteSpace(sessionKey)
+                            && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                        {
+                            await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                        }
+                    }
+
+                    consecutiveFailures = 0;
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    consecutiveFailures = Math.Min(consecutiveFailures + 1, 6);
+                    var retryDelaySeconds = Math.Min(60, 5 * (1 << Math.Min(consecutiveFailures - 1, 4)));
+                    logger.Error("SCROBBLE_QUEUE_WORKER",
+                        $"Queue worker pass failed; failure_streak={consecutiveFailures}; retry_delay_seconds={retryDelaySeconds}; exception={exception.GetType().Name}; hresult={exception.HResult}. The worker will retry.");
+                    await Task.Delay(TimeSpan.FromSeconds(retryDelaySeconds), cancellationToken);
+                    continue;
                 }
 
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(5), cancellationToken);
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
-        }
-        catch (Exception)
-        {
-            window.DispatcherQueue.TryEnqueue(window.SetLastFmConnectionError);
+            logger.Info("SCROBBLE_QUEUE_WORKER", "Queue worker stopped.");
         }
     }
 
@@ -558,10 +585,17 @@ public partial class App : Microsoft.UI.Xaml.Application
         try
         {
             var ingestionResult = await observationIngestion.IngestAsync(observation, cancellationToken);
-            var arbitration = sourceArbitrator.Consider(observation);
             logger.Info("OBSERVATION",
                 $"Received source={observation.SourceName}; source_instance={observation.SourceEventKey.SourceInstanceId}; session={observation.SourceEventKey.SessionId ?? "(none)"}; sequence={observation.SourceEventKey.SequenceNumber}; event_id={observation.SourceEventKey.EventId ?? "(none)"}; storage={ingestionResult}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}; album={observation.Album ?? "(missing)"}; state={observation.PlaybackState}; duration_ms={observation.DurationMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}; position_ms={observation.PositionMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}.");
 
+            if (ingestionResult == ObservationIngestionResult.Duplicate)
+            {
+                logger.Warning("OBSERVATION_DEDUP",
+                    $"Duplicate observation was discarded before playback tracking; source={observation.SourceName}; source_instance={observation.SourceEventKey.SourceInstanceId}; sequence={observation.SourceEventKey.SequenceNumber}; event_id={observation.SourceEventKey.EventId ?? "(none)"}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}.");
+                return;
+            }
+
+            var arbitration = sourceArbitrator.Consider(observation);
             if (!arbitration.IsAccepted)
             {
                 logger.Warning("SOURCE_ARBITRATION",
@@ -583,8 +617,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             ScheduleMetadataEnrichment(
                 observation, status, metadataEnricher, localPlayStore, metadataStarted,
                 connectionString, window, logger, cancellationToken);
-            if (status.DidStartPlay || status.DidPersistEligiblePlay)
+            if (status.DidStartPlay || status.DidPersistEligiblePlay || ShouldRefreshDashboard())
             {
+                Interlocked.Exchange(ref _lastDashboardRefreshUtcTicks, DateTime.UtcNow.Ticks);
                 await RefreshDashboardAsync(window, connectionString, cancellationToken);
             }
         }
@@ -635,6 +670,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 var enrichedObservation = observation with
                 {
                     AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+                    Album = metadata.Album ?? observation.Album,
                     TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
                     ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
                     RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
@@ -656,6 +692,18 @@ public partial class App : Microsoft.UI.Xaml.Application
                 Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
             }
         }, cancellationToken);
+    }
+
+    private static bool ShouldRefreshDashboard()
+    {
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var previousTicks = Interlocked.Read(ref _lastDashboardRefreshUtcTicks);
+        if (nowTicks - previousTicks < TimeSpan.FromSeconds(10).Ticks)
+        {
+            return false;
+        }
+
+        return Interlocked.CompareExchange(ref _lastDashboardRefreshUtcTicks, nowTicks, previousTicks) == previousTicks;
     }
 
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)

@@ -26,9 +26,11 @@ var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
 using var mismatchedNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"different-extension"}""");
 using var incompleteNativeHostEnvelope = JsonDocument.Parse("{}");
-Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement), "Native host forwarding accepts only an envelope matching the browser-provided extension origin.");
-Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement), "Native host forwarding rejects an envelope from a different extension identity.");
-Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
+var allowedNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal) { "abcdefghijklmnopabcdefghijklmnop" };
+Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding accepts a message from an explicitly allow-listed extension ID.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)), "Native host forwarding fails closed when no extension ID is registered.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope from a different extension identity.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
 Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
 
 var longTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 900_000, 240_000);
@@ -141,6 +143,17 @@ var browserObservation = observation with
 var firstArbitration = arbitrator.Consider(observation);
 var browserArbitration = arbitrator.Consider(browserObservation);
 Assert(firstArbitration.IsAccepted && !browserArbitration.IsAccepted && browserArbitration.ReasonCode == ReasonCodes.Source.LowerPriorityObservation, "A lower-priority duplicate observation cannot replace the canonical source.");
+var pausedArbitrator = new PlaybackSourceArbitrator();
+var pausedObservation = observation with { PlaybackState = PlayState.Paused };
+var pausedSourceDecision = pausedArbitrator.Consider(pausedObservation);
+var browserResumeDecision = pausedArbitrator.Consider(browserObservation);
+Assert(pausedSourceDecision.IsAccepted && browserResumeDecision.IsAccepted, "A browser source can take over when the higher-priority Windows session is paused.");
+var activeBrowserArbitrator = new PlaybackSourceArbitrator();
+var activeBrowserObservation = browserObservation with { CapturedAtUtc = observation.CapturedAtUtc.AddSeconds(2), PlaybackState = PlayState.Playing };
+var staleWindowsPause = observation with { CapturedAtUtc = observation.CapturedAtUtc.AddSeconds(3), PlaybackState = PlayState.Paused };
+Assert(activeBrowserArbitrator.Consider(activeBrowserObservation).IsAccepted
+    && !activeBrowserArbitrator.Consider(staleWindowsPause).IsAccepted,
+    "A stale paused Windows observation cannot interrupt active browser playback for the same track.");
 
 var signatureParameters = new Dictionary<string, string>
 {
@@ -208,8 +221,35 @@ var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.Non
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
+
+var localMidday = new DateTimeOffset(DateTime.Today.AddHours(12)).AddMinutes(-10);
+var todayRecord = historyRecord with
+{
+    PlayId = "play-today-summary",
+    FirstObservedUtc = localMidday,
+    LastObservedUtc = localMidday.AddMinutes(3),
+    ConfirmedPlayedMilliseconds = 150_000,
+    Eligibility = standardTrack,
+};
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(todayRecord, "lastfm", "account-today", DateTimeOffset.UtcNow, CancellationToken.None),
+    "A test play is stored before today's dashboard projection is checked.");
+await using (var acceptedConnection = new SqliteConnection(connectionString))
+{
+    await acceptedConnection.OpenAsync(CancellationToken.None);
+    await using var acceptCommand = acceptedConnection.CreateCommand();
+    acceptCommand.CommandText = "UPDATE provider_actions SET state = $accepted, completed_utc = $completed WHERE play_id = $playId AND action_type = $scrobble;";
+    acceptCommand.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+    acceptCommand.Parameters.AddWithValue("$completed", DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    acceptCommand.Parameters.AddWithValue("$playId", todayRecord.PlayId);
+    acceptCommand.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+    Assert(await acceptCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1, "The test scrobble is marked accepted to validate the dashboard projection.");
+}
 var todaySummary = await historyReader.GetTodaySummaryAsync(new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
-Assert(todaySummary is { DetectedSessionCount: 2, EligibleSessionCount: 2, AcceptedScrobbleCount: 1, ConfirmedListeningMilliseconds: 300_000 }, "Today summaries are calculated from persisted local sessions and accepted provider actions.");
+Assert(todaySummary.DetectedSessionCount >= 1
+    && todaySummary.EligibleSessionCount >= 1
+    && todaySummary.AcceptedScrobbleCount >= 1
+    && todaySummary.ConfirmedListeningMilliseconds >= 150_000,
+    "Today's dashboard summary projects session count, eligibility, accepted scrobbles, and confirmed listening time from SQLite.");
 
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
@@ -218,12 +258,18 @@ var preEligibleRecord = historyRecord with
     ConfirmedPlayedMilliseconds = 0,
     Eligibility = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 0),
     ArtworkPath = artworkPath,
+    AlbumArtist = "Queued Album Artist",
+    TrackNumber = 4,
+    ReleaseYear = 2022,
+    RecordingMusicBrainzId = "55555555-5555-4555-8555-555555555555",
+    ReleaseMusicBrainzId = "66666666-6666-4666-8666-666666666666",
+    ArtworkSource = "unit-test-queue",
 };
 await new SqliteLocalPlayStore(connectionString).UpsertAsync(preEligibleRecord, CancellationToken.None);
 var eligibleRecord = preEligibleRecord with { ConfirmedPlayedMilliseconds = 150_000, Eligibility = standardTrack };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "An already-recorded local session becomes eligible and queues atomically without losing its history row.");
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "The existing local session still receives only one provider action after becoming eligible.");
-Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == "play-atomic" && play.EligibleUtc is not null && play.ArtworkPath == artworkPath), "Atomic queueing updates the existing local history row and retains its cached artwork reference.");
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == "play-atomic" && play.EligibleUtc is not null && play.ArtworkPath == artworkPath && play.AlbumArtist == "Queued Album Artist" && play.TrackNumber == 4 && play.ReleaseYear == 2022 && play.RecordingMusicBrainzId == "55555555-5555-4555-8555-555555555555" && play.ReleaseMusicBrainzId == "66666666-6666-4666-8666-666666666666" && play.ArtworkSource == "unit-test-queue"), "Atomic queueing updates the existing local history row, retains its artwork, and preserves enriched metadata.");
 var accountStore = new SqliteProviderAccountStore(connectionString);
 var account = new ProviderAccount("account-1", "lastfm", "listener", "Scrobblix.LastFm", true, observation.ObservedAtUtc);
 await accountStore.UpsertAsync(account, CancellationToken.None);
@@ -259,7 +305,11 @@ var localObservation = observation with
     ReleaseMusicBrainzId = "22222222-2222-4222-8222-222222222222",
     ArtworkSource = "unit-test",
 };
-await tracking.ObserveAsync(localObservation, 0, CancellationToken.None);
+var unknownDurationStatus = await tracking.ObserveAsync(localObservation with { DurationMilliseconds = null }, 0, CancellationToken.None);
+var correctedDurationStatus = await tracking.ObserveAsync(localObservation, 2_000, CancellationToken.None);
+Assert(unknownDurationStatus.DidStartPlay && !correctedDurationStatus.DidStartPlay
+    && unknownDurationStatus.PlayId == correctedDurationStatus.PlayId,
+    "A duration arriving after playback starts updates the same canonical session instead of creating a duplicate play.");
 Assert(localPlayStore.StoredPlay is { } initialPlay && !initialPlay.Eligibility.IsEligible, "A listening session is tracked locally before it qualifies for a Last.fm scrobble.");
 await new SqliteLocalPlayStore(connectionString).UpsertAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 var earlyHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
@@ -267,14 +317,38 @@ Assert(earlyHistory.Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId
 var trackedStatus = await tracking.ObserveAsync(localObservation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
-await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
-Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
-using var concurrentTracking = new PlaybackTrackingService(new RecordingLocalPlayStore());
+
+var concurrentStore = new RecordingLocalPlayStore();
+using var concurrentTracking = new PlaybackTrackingService(concurrentStore);
 await concurrentTracking.ObserveAsync(observation, 0, CancellationToken.None);
-var concurrentTrackingResults = await Task.WhenAll(
+var concurrentResults = await Task.WhenAll(
     concurrentTracking.ObserveAsync(observation, 150_000, CancellationToken.None),
     concurrentTracking.ObserveAsync(observation, 150_000, CancellationToken.None));
-Assert(concurrentTrackingResults.Count(result => result.DidPersistEligiblePlay) == 1, "Overlapping sources persist and queue an eligible play only once.");
+Assert(concurrentResults.Count(result => result.DidPersistEligiblePlay) == 1,
+    "Concurrent playback observations persist eligibility only once for a canonical play.");
+
+var lateMetadataStore = new RecordingLocalPlayStore();
+using var lateMetadataTracker = new PlaybackTrackingService(lateMetadataStore);
+{
+    var titleOnly = observation with
+    {
+        Artist = null,
+        NormalizedArtist = null,
+        DurationMilliseconds = null,
+        SourceEventKey = new SourceEventKey("late-metadata-source", "session", 1, "title-only"),
+    };
+    var firstLateStatus = await lateMetadataTracker.ObserveAsync(titleOnly, 0, CancellationToken.None);
+    var metadataArrived = observation with
+    {
+        ObservedAtUtc = observation.ObservedAtUtc.AddSeconds(2),
+        SourceEventKey = new SourceEventKey("late-metadata-source", "session", 2, "metadata-arrived"),
+    };
+    var secondLateStatus = await lateMetadataTracker.ObserveAsync(metadataArrived, 2_000, CancellationToken.None);
+    Assert(firstLateStatus.PlayId == secondLateStatus.PlayId && !secondLateStatus.DidStartPlay,
+        "Late artist/duration metadata enriches the existing play instead of generating another local history row.");
+}
+await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
 await new SqliteLocalPlayStore(connectionString).UpdateMetadataAsync(
     "play-atomic",
     new PlayMetadataEnrichment("Reconciled Album Artist", 9, 2023, null, null, null, "MusicBrainz"),

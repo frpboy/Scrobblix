@@ -10,7 +10,6 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private CanonicalPlayTracker _tracker = new();
-    private string? _trackIdentity;
     private string? _playId;
     private DateTimeOffset _firstObservedUtc;
     private bool _persistedEligiblePlay;
@@ -32,13 +31,11 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
     private async Task<PlaybackTrackingStatus> ObserveCoreAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
     {
         var didStartPlay = false;
-        var trackIdentity = GetTrackIdentity(observation);
-        var replayStarted = string.Equals(trackIdentity, _trackIdentity, StringComparison.Ordinal)
-            && IsReplay(_previousObservation, observation);
-        if (!string.Equals(trackIdentity, _trackIdentity, StringComparison.Ordinal) || replayStarted)
+        var sameTrack = IsSameTrack(_previousObservation, observation);
+        var replayStarted = sameTrack && IsReplay(_previousObservation, observation);
+        if (!sameTrack || replayStarted)
         {
             _tracker = new CanonicalPlayTracker();
-            _trackIdentity = trackIdentity;
             _playId = Guid.NewGuid().ToString("N");
             _firstObservedUtc = observation.ObservedAtUtc;
             _persistedEligiblePlay = false;
@@ -97,10 +94,29 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
             && previous.PositionMilliseconds.Value - current.PositionMilliseconds.Value >= 60_000;
     }
 
-    private static string GetTrackIdentity(PlayObservation observation) => string.Join(
-        "\u001f",
-        observation.NormalizedArtist?.ComparisonKey ?? observation.Artist ?? string.Empty,
-        observation.NormalizedTitle?.ComparisonKey ?? observation.Title ?? string.Empty);
+    private static bool IsSameTrack(PlayObservation? previous, PlayObservation current)
+    {
+        if (previous is null)
+        {
+            return false;
+        }
+
+        var previousTitle = NormalizeForIdentity(previous.NormalizedTitle?.ComparisonKey ?? previous.Title);
+        var currentTitle = NormalizeForIdentity(current.NormalizedTitle?.ComparisonKey ?? current.Title);
+        if (previousTitle.Length == 0 || !string.Equals(previousTitle, currentTitle, StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var previousArtist = NormalizeForIdentity(previous.NormalizedArtist?.ComparisonKey ?? previous.Artist);
+        var currentArtist = NormalizeForIdentity(current.NormalizedArtist?.ComparisonKey ?? current.Artist);
+        return previousArtist.Length == 0
+            || currentArtist.Length == 0
+            || string.Equals(previousArtist, currentArtist, StringComparison.Ordinal);
+    }
+
+    private static string NormalizeForIdentity(string? value) =>
+        string.Concat((value ?? string.Empty).Where(char.IsLetterOrDigit)).ToUpperInvariant();
 
     public void Dispose() => _gate.Dispose();
 }

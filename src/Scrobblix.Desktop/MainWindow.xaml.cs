@@ -55,13 +55,17 @@ public sealed partial class MainWindow : Window
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
         var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new global::Windows.Graphics.SizeInt32(1120, 800));
         if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
+            // Don't inherit a maximized or minimized first-run state: the original client area
+            // was too wide for the amount of content in the listening dashboard.
+            presenter.State = Microsoft.UI.Windowing.OverlappedPresenterState.Restored;
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
+
+        appWindow.Resize(new Windows.Graphics.SizeInt32(1080, 780));
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity)
@@ -104,6 +108,7 @@ public sealed partial class MainWindow : Window
         var enrichedObservation = observation with
         {
             AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+            Album = metadata.Album ?? observation.Album,
             TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
             ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
             RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
@@ -332,8 +337,11 @@ public sealed partial class MainWindow : Window
 
     public void SetTodaySummary(TodaySummary summary)
     {
-        TodayStateText.Text = DashboardStatusText.TodayHeadline(summary);
-        TodayDetailText.Text = DashboardStatusText.TodayDetail(summary);
+        TodayStateText.Text = summary.ListeningSessionCount == 0
+            ? "No listening activity yet today"
+            : $"{summary.ListeningSessionCount:N0} listening session{(summary.ListeningSessionCount == 1 ? string.Empty : "s")} today";
+        TodayDetailText.Text =
+            $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligiblePlayCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
     }
 
     public void SetLastFmUnavailable()
@@ -439,5 +447,14 @@ public sealed partial class MainWindow : Window
     }
 
     private static string FormatDuration(long milliseconds) =>
-        TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+        TimeSpan.FromMilliseconds(Math.Max(0, milliseconds)).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+
+    private static string FormatListeningTime(long milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        var totalHours = (long)duration.TotalHours;
+        return totalHours > 0
+            ? $"{totalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{(long)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
 }
