@@ -233,8 +233,21 @@ var localObservation = observation with
 await tracking.ObserveAsync(localObservation, 0, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { } initialPlay && !initialPlay.Eligibility.IsEligible, "A listening session is tracked locally before it qualifies for a Last.fm scrobble.");
 await new SqliteLocalPlayStore(connectionString).UpsertAsync(localPlayStore.StoredPlay!, CancellationToken.None);
+var localSqliteStore = new SqliteLocalPlayStore(connectionString);
+await localSqliteStore.UpdateMetadataAsync(
+    localPlayStore.StoredPlay!.PlayId,
+    new PlayMetadataEnrichment(
+        "Reconciled Album Artist",
+        9,
+        2023,
+        "33333333-3333-4333-8333-333333333333",
+        "44444444-4444-4444-8444-444444444444",
+        null,
+        "MusicBrainz"),
+    CancellationToken.None);
 var earlyHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(earlyHistory.Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId && play.EligibleUtc is null && play.ArtworkPath == localObservation.ArtworkPath && play.AlbumArtist == "Album Artist" && play.TrackNumber == 2 && play.ReleaseYear == 2024 && play.RecordingMusicBrainzId == localObservation.RecordingMusicBrainzId && play.ReleaseMusicBrainzId == localObservation.ReleaseMusicBrainzId && play.ArtworkSource == "unit-test"), "Pre-eligible sessions, artwork and richer music identifiers are persisted in local history.");
+Assert(earlyHistory.Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId && play.AlbumArtist == "Reconciled Album Artist" && play.TrackNumber == 9 && play.ReleaseYear == 2023 && play.ArtworkSource == "MusicBrainz"), "Background metadata enrichment updates the existing local play record.");
 var trackedStatus = await tracking.ObserveAsync(localObservation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
