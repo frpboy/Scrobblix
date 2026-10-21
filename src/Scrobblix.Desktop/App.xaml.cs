@@ -34,13 +34,14 @@ public partial class App : Microsoft.UI.Xaml.Application
         _window = new MainWindow();
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
+        ScrobblixFileLogger? fileLogger = null;
         _window.Closed += (_, _) =>
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
+            fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
-        ScrobblixFileLogger? fileLogger = null;
 
         try
         {
@@ -52,7 +53,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             fileLogger = logger;
             _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
             _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
-            logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={logger.LogPath}");
+            logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
@@ -138,7 +139,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
         catch (Exception exception)
         {
-            fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; message={exception.Message}");
+            fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
         }
     }
@@ -214,8 +215,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_CREDENTIALS", $"Credential save failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmCredentialsStatus("Credentials could not be saved. Check Windows Credential Locker access and try again.");
             }
         };
@@ -230,21 +232,25 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             try
             {
+                logger.Info("LASTFM_AUTH", "Starting desktop authorization request.");
                 var pendingAuthorization = await authenticator.BeginAsync(cancellationToken);
                 authorization = pendingAuthorization;
                 if (!await global::Windows.System.Launcher.LaunchUriAsync(pendingAuthorization.AuthorizationUri))
                 {
+                    logger.Error("LASTFM_AUTH", "Windows could not open the Last.fm approval page.");
                     _window.SetLastFmConnectionError();
                     return;
                 }
 
+                logger.Info("LASTFM_AUTH", "Approval page opened; waiting for the user to approve Scrobblix in their browser.");
                 _window.SetLastFmAuthorizationWaiting();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_AUTH", $"Could not start authorization; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
@@ -259,6 +265,7 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             try
             {
+                logger.Info("LASTFM_AUTH", "Finishing the approved Last.fm authorization token exchange.");
                 var session = await authenticator.CompleteAsync(authorization.Token, cancellationToken);
                 await accountStore.UpsertAsync(
                     new Scrobblix.Application.Providers.ProviderAccount(
@@ -277,8 +284,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_AUTH", $"Authorization exchange failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
@@ -301,8 +309,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_DISCONNECT", $"Disconnect failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
