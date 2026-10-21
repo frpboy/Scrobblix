@@ -144,6 +144,10 @@ public sealed partial class MainWindow : Window
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             fallback.Visibility = Visibility.Visible;
+            if (!string.IsNullOrWhiteSpace(artworkPath))
+            {
+                DiagnosticLogRequested?.Invoke($"Artwork cache path was missing: {Path.GetFileName(artworkPath)}");
+            }
             return;
         }
 
@@ -168,6 +172,7 @@ public sealed partial class MainWindow : Window
             image.Source = null;
             image.Visibility = Visibility.Collapsed;
             fallback.Visibility = Visibility.Visible;
+            DiagnosticLogRequested?.Invoke($"Artwork path could not be opened: {exception.GetType().Name}");
         }
     }
 
@@ -184,6 +189,7 @@ public sealed partial class MainWindow : Window
         {
             fallback.Visibility = Visibility.Visible;
         }
+        DiagnosticLogRequested?.Invoke("Artwork image decoding failed; placeholder artwork is displayed.");
     }
 
     private void ArtworkImageOpened(object sender, RoutedEventArgs args)
@@ -229,7 +235,7 @@ public sealed partial class MainWindow : Window
             Width = 56,
             Height = 56,
             Stretch = Stretch.UniformToFill,
-            Source = new SvgImageSource { UriSource = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg"), UriKind.Absolute) },
+            Source = new SvgImageSource { UriSource = new Uri("ms-appx:///Assets/music-placeholder.svg") },
         };
         artFrame.Children.Add(image);
         artFrame.Children.Add(fallback);
