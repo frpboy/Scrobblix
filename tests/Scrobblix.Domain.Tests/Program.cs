@@ -191,6 +191,13 @@ Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accept
 var pollingStore = new RecordingObservationStore();
 var poller = new PlaybackObservationPollingService(new SingleObservationSource(observation), new PlaybackObservationIngestionService(pollingStore));
 Assert(await poller.PollOnceAsync(CancellationToken.None) == ObservationIngestionResult.Accepted && pollingStore.AppendCount == 1, "A playback poll persists the current observation through the ingestion boundary.");
+var localPlayStore = new RecordingLocalPlayStore();
+var tracking = new PlaybackTrackingService(localPlayStore);
+await tracking.ObserveAsync(observation, 0, CancellationToken.None);
+await tracking.ObserveAsync(observation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
+Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000 } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
+await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Count == 3, "Eligible local sessions are persisted to the same local history read model.");
 File.Delete(databasePath);
 
 return;
@@ -246,6 +253,17 @@ sealed class RecordingObservationStore : IPlaybackObservationStore
     {
         AppendCount++;
         return Task.FromResult(true);
+    }
+}
+
+sealed class RecordingLocalPlayStore : ILocalPlayStore
+{
+    public LocalPlayRecord? StoredPlay { get; private set; }
+
+    public Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken)
+    {
+        StoredPlay = play;
+        return Task.CompletedTask;
     }
 }
 

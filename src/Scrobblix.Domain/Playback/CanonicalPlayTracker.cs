@@ -10,6 +10,8 @@ public sealed class CanonicalPlayTracker
 
     public CanonicalPlayState State => _state;
 
+    public long ConfirmedPlayedMilliseconds => _confirmedTime.TotalMilliseconds;
+
     public EligibilityDecision Observe(PlayObservation observation, long monotonicMilliseconds)
     {
         if (_state.Current == PlayState.Candidate && observation.PlaybackState == PlayState.Playing)
