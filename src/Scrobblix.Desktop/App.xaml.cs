@@ -66,6 +66,23 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetRecentHistory(recentHistory);
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
             _window.SetListeningStatistics(await historyReader.GetStatisticsAsync(CancellationToken.None));
+            _window.HistoryRequested += async () =>
+            {
+                try
+                {
+                    var fullHistory = await historyReader.GetRecentAsync(500, applicationCancellation.Token);
+                    _window.DispatcherQueue.TryEnqueue(() => _window.SetHistory(fullHistory));
+                    logger.Info("HISTORY", $"Loaded local history view; session_count={fullHistory.Count}.");
+                }
+                catch (OperationCanceledException) when (applicationCancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("HISTORY", $"History view failed to load; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                    _window.DispatcherQueue.TryEnqueue(() => _window.SetStartupStatus("Local history could not be loaded. Open Diagnostics for details.", InfoBarSeverity.Warning));
+                }
+            };
             var queueReader = new SqliteQueueReader(connectionString);
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
