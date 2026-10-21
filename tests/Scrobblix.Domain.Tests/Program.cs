@@ -251,6 +251,14 @@ Assert(todaySummary.ListeningSessionCount >= 1
     && todaySummary.ConfirmedListeningMilliseconds >= 150_000,
     "Today's dashboard summary projects session count, eligibility, accepted scrobbles, and confirmed listening time from SQLite.");
 
+var queueActions = await new SqliteQueueReader(connectionString).GetRecentActionsAsync(20, CancellationToken.None);
+Assert(queueActions.Any(action => action.PlayId == "play-today-summary"
+    && action.ActionType == ProviderActionType.Scrobble
+    && action.State == ProviderActionState.Accepted
+    && action.Artist == "Artist"
+    && action.Title == "Track"),
+    "The Queue screen read model includes the track, action type, provider state, and recent delivery details.");
+
 var listeningStatistics = await historyReader.GetStatisticsAsync(CancellationToken.None);
 Assert(listeningStatistics.TotalSessions >= todaySummary.ListeningSessionCount
     && listeningStatistics.EligiblePlays >= todaySummary.EligiblePlayCount
