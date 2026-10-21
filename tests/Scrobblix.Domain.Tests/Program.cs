@@ -261,7 +261,7 @@ Assert(listeningStatistics.TotalSessionCount >= 3
 
 var csvTest = HistoryCsvExporter.Export(new[]
 {
-    new RecentPlay("csv-test", observation.ObservedAtUtc, "=SUM(1,1)", "Track ""Quoted""", "Album, One",
+    new RecentPlay("csv-test", observation.ObservedAtUtc, "=SUM(1,1)", "Track \\"Quoted\\"", "Album, One",
         180_000, 90_000, null, null),
 });
 Assert(csvTest.Contains("'=SUM(1,1)", StringComparison.Ordinal)
