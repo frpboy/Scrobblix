@@ -195,7 +195,7 @@ var localPlayStore = new RecordingLocalPlayStore();
 var tracking = new PlaybackTrackingService(localPlayStore);
 await tracking.ObserveAsync(observation, 0, CancellationToken.None);
 await tracking.ObserveAsync(observation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
-Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000 } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
+Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Count == 3, "Eligible local sessions are persisted to the same local history read model.");
 File.Delete(databasePath);

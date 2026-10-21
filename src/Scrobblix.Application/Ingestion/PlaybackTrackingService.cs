@@ -41,7 +41,7 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
                 decision,
                 null,
                 null,
-                ReasonCodes.Playback.WaitingForEligibility);
+                null);
             await localPlayStore.UpsertEligibleAsync(record, cancellationToken);
             _persistedEligiblePlay = true;
         }
