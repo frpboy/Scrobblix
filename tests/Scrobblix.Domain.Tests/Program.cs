@@ -288,7 +288,7 @@ Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, Loca
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 
 var lateMetadataStore = new RecordingLocalPlayStore();
-using (var lateMetadataTracker = new PlaybackTrackingService(lateMetadataStore))
+var lateMetadataTracker = new PlaybackTrackingService(lateMetadataStore);
 {
     var titleOnly = observation with
     {
