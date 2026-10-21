@@ -57,15 +57,12 @@ public sealed partial class MainWindow : Window
         var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
         if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
-            // Don't inherit a maximized or minimized first-run state: the original client area
-            // was too wide for the amount of content in the listening dashboard.
-            presenter.State = Microsoft.UI.Windowing.OverlappedPresenterState.Restored;
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
 
-        appWindow.Resize(new Windows.Graphics.SizeInt32(1080, 780));
+        appWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 780));
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity)
@@ -337,11 +334,11 @@ public sealed partial class MainWindow : Window
 
     public void SetTodaySummary(TodaySummary summary)
     {
-        TodayStateText.Text = summary.ListeningSessionCount == 0
+        TodayStateText.Text = summary.DetectedSessionCount == 0
             ? "No listening activity yet today"
             : $"{summary.ListeningSessionCount:N0} listening session{(summary.ListeningSessionCount == 1 ? string.Empty : "s")} today";
         TodayDetailText.Text =
-            $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligiblePlayCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
+            $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligibleSessionCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
     }
 
     public void SetLastFmUnavailable()
