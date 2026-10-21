@@ -53,11 +53,7 @@
                         <TextBlock Text="NOW PLAYING" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <Grid Width="88" Height="88" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
-                                <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill">
-                                    <Image.Source>
-                                        <SvgImageSource UriSource="ms-appx:///Assets/music-placeholder.svg" />
-                                    </Image.Source>
-                                </Image>
+                                <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill" />
                                 <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
                             </Grid>
                             <StackPanel Spacing="6" VerticalAlignment="Center">
