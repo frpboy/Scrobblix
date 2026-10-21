@@ -4,5 +4,5 @@ namespace Scrobblix.Application.Abstractions;
 
 public interface ILocalPlayStore
 {
-    Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken);
+    Task UpsertAsync(LocalPlayRecord play, CancellationToken cancellationToken);
 }
