@@ -232,7 +232,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmUnavailable()
     {
-        SetLastFmStatus("Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.");
+        SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;
