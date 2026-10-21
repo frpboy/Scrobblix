@@ -471,16 +471,15 @@ public partial class App : Microsoft.UI.Xaml.Application
         MainWindow window,
         CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(trackingStatus.PlayId)
-            || (!trackingStatus.DidStartPlay && string.IsNullOrWhiteSpace(observation.ArtworkUrl)))
+        if (string.IsNullOrWhiteSpace(trackingStatus.PlayId))
         {
             return;
         }
 
-        var variation = string.IsNullOrWhiteSpace(observation.ArtworkUrl)
+        var artworkVariation = string.IsNullOrWhiteSpace(observation.ArtworkUrl)
             ? "source"
             : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(observation.ArtworkUrl)));
-        var jobKey = $"{trackingStatus.PlayId}:{variation}";
+        var jobKey = $"{trackingStatus.PlayId}:{metadataEnricher.ConfigurationVersion}:{artworkVariation}";
         if (!metadataStarted.TryAdd(jobKey, 0))
         {
             return;
