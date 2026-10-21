@@ -10,6 +10,8 @@ using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
+using Scrobblix.Domain.Queue;
+using Scrobblix.Domain.Diagnostics;
 
 namespace Scrobblix.Desktop;
 
@@ -334,6 +336,101 @@ public sealed partial class MainWindow : Window
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
+
+    public void SetQueueActions(IReadOnlyList<RecentQueueAction> actions)
+    {
+        QueueActionList.Children.Clear();
+        if (actions.Count == 0)
+        {
+            QueueActionList.Children.Add(new TextBlock
+            {
+                Text = "No delivery actions have been queued yet.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        foreach (var action in actions)
+        {
+            var row = new StackPanel { Spacing = 5, Padding = new Thickness(12) };
+            var title = $"{action.Artist ?? "Unknown artist"} — {action.Title ?? action.ActionType.ToString()}";
+            row.Children.Add(new TextBlock
+            {
+                Text = title,
+                FontSize = 15,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            var stateLabel = action.State switch
+            {
+                ProviderActionState.Pending => "Pending",
+                ProviderActionState.InFlight => "In progress",
+                ProviderActionState.Accepted => "Accepted by Last.fm",
+                ProviderActionState.RetryScheduled => "Retry scheduled",
+                ProviderActionState.AuthBlocked => "Authentication required",
+                ProviderActionState.PermanentFailure => "Failed",
+                _ => action.State.ToString(),
+            };
+            row.Children.Add(new TextBlock
+            {
+                Text = $"{action.Provider} · {action.ActionType} · {stateLabel}",
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            var timingLabel = action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled
+                ? $"Next due: {action.DueUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}"
+                : $"Updated: {action.UpdatedUtc.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)}";
+            row.Children.Add(new TextBlock
+            {
+                Text = $"Attempt {action.AttemptCount} · {timingLabel}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            if (!string.IsNullOrWhiteSpace(action.Album))
+            {
+                row.Children.Add(new TextBlock
+                {
+                    Text = action.Album,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            if (!string.IsNullOrWhiteSpace(action.LastReasonCode))
+            {
+                row.Children.Add(new TextBlock
+                {
+                    Text = ExplainQueueReason(action.LastReasonCode),
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            QueueActionList.Children.Add(row);
+            QueueActionList.Children.Add(new Border
+            {
+                Height = 1,
+                Opacity = 0.35,
+                Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(
+                    Microsoft.UI.Colors.Gray),
+            });
+        }
+    }
+
+    private static string ExplainQueueReason(string reasonCode) => reasonCode switch
+    {
+        ReasonCodes.Provider.Accepted => "Last.fm accepted this action.",
+        ReasonCodes.Provider.TemporaryUnavailable => "The provider or network was temporarily unavailable. The action remains saved for retry.",
+        ReasonCodes.Provider.RateLimited => "Last.fm asked the app to slow down. The action remains saved.",
+        ReasonCodes.Provider.AuthInvalidSession => "The saved Last.fm session is no longer valid. Reconnect the account.",
+        ReasonCodes.Provider.SubmissionOutcomeUnknown => "The remote result could not be confirmed. Automatic replay is paused to avoid duplicating a scrobble.",
+        ReasonCodes.Provider.LeaseExpired => "A worker stopped before completing this action. It was recovered after its lease expired.",
+        ReasonCodes.Provider.InvalidApiKey => "The API key was rejected. Check the key in Settings.",
+        ReasonCodes.Provider.InvalidSignature => "Last.fm rejected the request signature. Recheck the saved credentials.",
+        _ => $"Last reason: {reasonCode}",
+    };
 
     public void SetTodaySummary(TodaySummary summary)
     {
