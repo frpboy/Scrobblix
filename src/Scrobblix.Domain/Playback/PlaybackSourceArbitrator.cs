@@ -17,11 +17,20 @@ public sealed class PlaybackSourceArbitrator
 
         var canonicalIsActivelyPlaying = _canonicalObservation.PlaybackState == PlayState.Playing;
         var candidateIsActivelyPlaying = observation.PlaybackState == PlayState.Playing;
+        var differentSource = !string.Equals(_canonicalObservation.SourceName, observation.SourceName, StringComparison.OrdinalIgnoreCase);
         var capturedGap = Math.Abs((observation.CapturedAtUtc - _canonicalObservation.CapturedAtUtc).TotalSeconds);
-        if (canonicalIsActivelyPlaying
-            && candidateIsActivelyPlaying
-            && capturedGap <= 8
-            && IsSameTrack(_canonicalObservation, observation)
+        var sameRecentTrack = differentSource && capturedGap <= 8 && IsSameTrack(_canonicalObservation, observation);
+
+        // Do not let a stale paused/ended report from one source overwrite a live report
+        // from the other source while both still describe the same playback session.
+        if (sameRecentTrack && canonicalIsActivelyPlaying && !candidateIsActivelyPlaying)
+        {
+            return new SourceArbitrationDecision(false, ReasonCodes.Source.LowerPriorityObservation, _canonicalObservation);
+        }
+
+        // A currently-playing observation is allowed to take over from a paused source.
+        // If both are playing, prefer GSMTC over browser observations.
+        if (sameRecentTrack && canonicalIsActivelyPlaying && candidateIsActivelyPlaying
             && Priority(observation.SourceName) < Priority(_canonicalObservation.SourceName))
         {
             return new SourceArbitrationDecision(false, ReasonCodes.Source.LowerPriorityObservation, _canonicalObservation);
