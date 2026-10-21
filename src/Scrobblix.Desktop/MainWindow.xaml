@@ -85,7 +85,7 @@
                         <StackPanel Spacing="4"><TextBlock Text="Queue" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="QueueStateText" Text="Queue not configured" /><TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="Not connected" /><TextBlock Text="Local history can continue without a provider account." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel Spacing="4"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Not connected" TextWrapping="Wrap" /><TextBlock Text="Local history can continue without a provider account." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                         <StackPanel Spacing="4"><TextBlock Text="Sources" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="Checking Windows media controls" /><TextBlock Text="Browser Companion support is not configured in this build." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
@@ -170,9 +170,19 @@
                     <TextBlock Text="Configuration stays local to this Windows account." Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" />
-                        <TextBlock Text="Not connected. A user-approved Last.fm account is required before Scrobblix can submit anything remotely." TextWrapping="Wrap" />
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Last.fm API credentials" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="Create an API application at last.fm/api/account/create. Do not share the shared secret or commit it to Git. Scrobblix stores both values in Windows Credential Locker." TextWrapping="Wrap" />
+                        <TextBox x:Name="LastFmApiKeyInput" Header="API key" PlaceholderText="Paste your Last.fm API key" MaxLength="128" />
+                        <PasswordBox x:Name="LastFmApiSecretInput" Header="Shared secret" PlaceholderText="Paste your Last.fm shared secret" MaxLength="128" />
+                        <Button x:Name="SaveLastFmCredentialsButton" Content="Save API credentials securely" Click="SaveLastFmCredentialsButton_Click" HorizontalAlignment="Left" />
+                        <TextBlock x:Name="LastFmCredentialsStatusText" Text="API credentials are not configured." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Last.fm account" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock x:Name="LastFmStatusText" Text="Not connected." TextWrapping="Wrap" />
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <Button x:Name="ConnectLastFmButton" Content="Connect Last.fm" Click="ConnectLastFmButton_Click" HorizontalAlignment="Left" />
+                            <Button x:Name="CompleteLastFmAuthorizationButton" Content="Finish authorization" Click="CompleteLastFmAuthorizationButton_Click" Visibility="Collapsed" HorizontalAlignment="Left" />
+                        </StackPanel>
                         <TextBlock Text="Privacy" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <TextBlock Text="Local listening history stays on this device. Telemetry is off by default." TextWrapping="Wrap" />
                     </StackPanel>
