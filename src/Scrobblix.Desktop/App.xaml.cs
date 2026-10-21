@@ -103,6 +103,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await credentialStore.StoreAsync(lastFmApiKeyResource, lastFmApplicationAccount, apiKey, CancellationToken.None);
                     await credentialStore.StoreAsync(lastFmApiSecretResource, lastFmApplicationAccount, apiSecret, CancellationToken.None);
                     lastFmAuthenticator = new LastFmDesktopAuthenticator(lastFmHttpClient, apiKey, apiSecret, credentialStore);
+                    metadataEnricher.UpdateLastFmApiKey(apiKey);
                     _window.SetLastFmCredentialsStatus("API key and shared secret saved in Windows Credential Locker.");
                     _window.SetLastFmStatus("API credentials saved. Connect your Last.fm account next.");
                 }
