@@ -22,6 +22,7 @@ namespace Scrobblix.Desktop;
 
 public partial class App : Microsoft.UI.Xaml.Application
 {
+    private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
 
     public App()
@@ -562,8 +563,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             ScheduleMetadataEnrichment(
                 observation, status, metadataEnricher, localPlayStore, metadataStarted,
                 connectionString, window, logger, cancellationToken);
-            if (status.DidStartPlay || status.DidPersistEligiblePlay)
+            if (status.DidStartPlay || status.DidPersistEligiblePlay || ShouldRefreshDashboard())
             {
+                Interlocked.Exchange(ref _lastDashboardRefreshUtcTicks, DateTime.UtcNow.Ticks);
                 await RefreshDashboardAsync(window, connectionString, cancellationToken);
             }
         }
@@ -635,6 +637,18 @@ public partial class App : Microsoft.UI.Xaml.Application
                 Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
             }
         }, cancellationToken);
+    }
+
+    private static bool ShouldRefreshDashboard()
+    {
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var previousTicks = Interlocked.Read(ref _lastDashboardRefreshUtcTicks);
+        if (nowTicks - previousTicks < TimeSpan.FromSeconds(10).Ticks)
+        {
+            return false;
+        }
+
+        return Interlocked.CompareExchange(ref _lastDashboardRefreshUtcTicks, nowTicks, previousTicks) == previousTicks;
     }
 
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
