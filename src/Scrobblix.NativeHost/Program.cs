@@ -38,6 +38,10 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
         {
             await WriteAsync(output, new { type = "pong.v1", messageId });
         }
+        else if (type != "playback.observation.v1")
+        {
+            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.invalid_envelope" });
+        }
         else if (await TryForwardToDesktopAsync(payload, CancellationToken.None))
         {
             await WriteAsync(output, new { type = "accepted.v1", messageId });
