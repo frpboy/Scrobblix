@@ -17,6 +17,17 @@ jobs:
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
       - run: dotnet restore Scrobblix.slnx
       - run: dotnet build Scrobblix.slnx --no-restore --configuration Release
       - run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
+      - run: npm ci
+        working-directory: browser-extension
+      - run: npm run check
+        working-directory: browser-extension
+      - run: npm run build
+        working-directory: browser-extension
