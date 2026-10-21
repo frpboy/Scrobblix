@@ -167,7 +167,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             var queueSummary = await new SqliteQueueReader(connectionString)
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
-            var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
+            var source = new GsmTcPlaybackObservationSource(new SystemWallClock(), Path.Combine(dataDirectory, "artwork"));
             var tracking = new PlaybackTrackingService(new SqliteLocalPlayStore(connectionString));
             var trackingClock = Stopwatch.StartNew();
             var observation = await source.GetCurrentAsync(CancellationToken.None);
@@ -229,7 +229,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
-                    if (trackingStatus.DidPersistEligiblePlay)
+                    if (trackingStatus.DidStartPlay || trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
                     }
@@ -284,7 +284,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
-                    if (trackingStatus.DidPersistEligiblePlay)
+                    if (trackingStatus.DidStartPlay || trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
                     }
