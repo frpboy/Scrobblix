@@ -15,7 +15,13 @@ public sealed class PlaybackSourceArbitrator
             return new SourceArbitrationDecision(true, null, observation);
         }
 
-        if (IsSameTrack(_canonicalObservation, observation)
+        var canonicalIsActivelyPlaying = _canonicalObservation.PlaybackState == PlayState.Playing;
+        var candidateIsActivelyPlaying = observation.PlaybackState == PlayState.Playing;
+        var capturedGap = Math.Abs((observation.CapturedAtUtc - _canonicalObservation.CapturedAtUtc).TotalSeconds);
+        if (canonicalIsActivelyPlaying
+            && candidateIsActivelyPlaying
+            && capturedGap <= 8
+            && IsSameTrack(_canonicalObservation, observation)
             && Priority(observation.SourceName) < Priority(_canonicalObservation.SourceName))
         {
             return new SourceArbitrationDecision(false, ReasonCodes.Source.LowerPriorityObservation, _canonicalObservation);
