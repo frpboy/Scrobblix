@@ -122,6 +122,12 @@ public sealed partial class MainWindow : Window
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
 
+    public void SetTodaySummary(TodaySummary summary)
+    {
+        TodayStateText.Text = DashboardStatusText.TodayHeadline(summary);
+        TodayDetailText.Text = DashboardStatusText.TodayDetail(summary);
+    }
+
     public void SetLastFmUnavailable()
     {
         SetLastFmStatus("Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.");

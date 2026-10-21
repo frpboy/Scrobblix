@@ -80,7 +80,7 @@
                         <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
                     <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Today" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="No summary available yet" /><TextBlock Text="Detected plays, accepted scrobbles, and listening time will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel Spacing="4"><TextBlock Text="Today" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="TodayStateText" Text="Loading local summary" /><TextBlock x:Name="TodayDetailText" Text="Reading detected sessions and delivery outcomes." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                     <Border Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                         <StackPanel Spacing="4"><TextBlock Text="Queue" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="QueueStateText" Text="Queue not configured" /><TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>

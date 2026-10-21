@@ -208,6 +208,8 @@ var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.Non
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
+var todaySummary = await historyReader.GetTodaySummaryAsync(new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+Assert(todaySummary is { DetectedSessionCount: 2, EligibleSessionCount: 2, AcceptedScrobbleCount: 1, ConfirmedListeningMilliseconds: 300_000 }, "Today summaries are calculated from persisted local sessions and accepted provider actions.");
 
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
