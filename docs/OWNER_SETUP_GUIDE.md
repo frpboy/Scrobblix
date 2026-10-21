@@ -96,6 +96,22 @@ artifact exists. At that time:
 4. Approve only the documented browser permissions and verify that no unauthenticated
    localhost listener is created.
 
+For an explicit development installation after the extension and host have been
+built, publish the host to a stable local folder and register it for the current
+Windows user. Replace the placeholders locally:
+
+```powershell
+$hostFolder = Join-Path $env:LOCALAPPDATA "Scrobblix\NativeHost"
+dotnet publish src\Scrobblix.NativeHost\Scrobblix.NativeHost.csproj -c Release -o $hostFolder
+.\scripts\Register-ScrobblixNativeHost.ps1 -ExtensionId "your-32-character-extension-id" -Browser Both -HostPath "$hostFolder\Scrobblix.NativeHost.exe"
+```
+
+The registration script writes a manifest with one exact `allowed_origins`
+entry and registers it under the current user's Chrome and/or Edge native
+messaging registry locations. It does not install an extension, send data to a
+server, or use administrator permissions. Use `-WhatIf` first to preview the
+local registry and manifest changes.
+
 Send the extension ID (it is not a secret) only after the packaged artifact is
 available. Do not install an unreviewed native host or share the Last.fm secret
 with an extension.
