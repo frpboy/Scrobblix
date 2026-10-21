@@ -7,4 +7,5 @@ public sealed record PlayMetadataEnrichment(
     string? RecordingMusicBrainzId = null,
     string? ReleaseMusicBrainzId = null,
     string? ArtworkPath = null,
-    string? ArtworkSource = null);
+    string? ArtworkSource = null,
+    string? Album = null);
