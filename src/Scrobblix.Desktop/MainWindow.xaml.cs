@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
+using System.Diagnostics;
 using System.Globalization;
 using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
@@ -27,6 +28,10 @@ public sealed partial class MainWindow : Window
 
     public event Func<string, string, Task>? LastFmApiCredentialsSaveRequested;
 
+    public event Action<string>? DiagnosticLogRequested;
+
+    private string? _logDirectory;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -36,6 +41,8 @@ public sealed partial class MainWindow : Window
         {
             AppBrandImage.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
         }
+        CurrentTrackArtwork.Tag = CurrentTrackArtworkFallback;
+        CurrentTrackArtwork.ImageFailed += ArtworkImageFailed;
     }
 
     private void ConfigureInitialWindowSize()
@@ -125,9 +132,8 @@ public sealed partial class MainWindow : Window
         return string.Join(Environment.NewLine, lines);
     }
 
-    private static void SetArtwork(Image image, TextBlock fallback, string? artworkPath)
+    private void SetArtwork(Image image, Image fallback, string? artworkPath)
     {
-        fallback.Text = "♪";
         if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
         {
             image.Source = null;
@@ -160,7 +166,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static void ArtworkImageFailed(object sender, ExceptionRoutedEventArgs args)
+    private void ArtworkImageFailed(object sender, ExceptionRoutedEventArgs args)
     {
         if (sender is not Image image)
         {
@@ -169,14 +175,14 @@ public sealed partial class MainWindow : Window
 
         image.Source = null;
         image.Visibility = Visibility.Collapsed;
-        if (image.Tag is TextBlock fallback)
+        if (image.Tag is Image fallback)
         {
             fallback.Text = "♪";
             fallback.Visibility = Visibility.Visible;
         }
     }
 
-    private static void ArtworkImageOpened(object sender, RoutedEventArgs args)
+    private void ArtworkImageOpened(object sender, RoutedEventArgs args)
     {
         if (sender is not Image image)
         {
@@ -209,12 +215,18 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private static void AddPlayRow(Panel target, RecentPlay play)
+    private void AddPlayRow(Panel target, RecentPlay play)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Padding = new Thickness(4) };
         var artFrame = new Grid { Width = 56, Height = 56 };
         var image = new Image { Width = 56, Height = 56, Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
-        var fallback = new TextBlock { Text = "♪", FontSize = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        var fallback = new Image
+        {
+            Width = 56,
+            Height = 56,
+            Stretch = Stretch.UniformToFill,
+            Source = new SvgImageSource { UriSource = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg"), UriKind.Absolute) },
+        };
         artFrame.Children.Add(image);
         artFrame.Children.Add(fallback);
         SetArtwork(image, fallback, play.ArtworkPath);
@@ -233,6 +245,23 @@ public sealed partial class MainWindow : Window
         details.Children.Add(new TextBlock { Text = play.EligibleUtc is not null ? "Eligible for scrobbling" : "Saved locally · not scrobble-eligible yet", FontSize = 12 });
         row.Children.Add(details);
         target.Children.Add(row);
+    }
+
+    public void SetLogDirectory(string directory)
+    {
+        _logDirectory = directory;
+        LogDirectoryText.Text = directory;
+    }
+
+    private void OpenLogFolderButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_logDirectory) || !Directory.Exists(_logDirectory))
+        {
+            DiagnosticLogRequested?.Invoke("Open log folder requested while the log directory was unavailable.");
+            return;
+        }
+
+        Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
     }
 
     private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
