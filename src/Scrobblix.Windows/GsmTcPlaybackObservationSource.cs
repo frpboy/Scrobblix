@@ -54,7 +54,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             MetadataNormalizer.Normalize(media.Title),
             artworkPath,
             media.AlbumArtist,
-            media.TrackNumber > 0 ? media.TrackNumber : null,
+            media.TrackNumber > 0 ? checked((int)media.TrackNumber) : null,
             null,
             null,
             null,
