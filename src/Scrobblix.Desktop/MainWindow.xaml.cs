@@ -3,6 +3,7 @@ using Microsoft.UI.Xaml.Controls;
 using System.Globalization;
 using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
+using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Playback;
 
@@ -10,6 +11,10 @@ namespace Scrobblix.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    private readonly TrackingMode _trackingMode = new();
+
+    public event Action<bool>? TrackingModeChanged;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -82,6 +87,22 @@ public sealed partial class MainWindow : Window
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
+    }
+
+    private void TrackingToggleButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (!_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
+        {
+            return;
+        }
+
+        TrackingToggleButton.Content = _trackingMode.IsEnabled ? "Pause tracking" : "Resume tracking";
+        SetStartupStatus(
+            _trackingMode.IsEnabled
+                ? "Tracking resumed. Checking Windows media controls."
+                : "Tracking paused. Local history and queued actions are unchanged.",
+            InfoBarSeverity.Informational);
+        TrackingModeChanged?.Invoke(_trackingMode.IsEnabled);
     }
 
     private static string FormatDuration(long milliseconds) =>

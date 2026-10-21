@@ -27,8 +27,8 @@ public partial class App : Microsoft.UI.Xaml.Application
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
         _window = new MainWindow();
-        var trackingCancellation = new CancellationTokenSource();
-        _window.Closed += (_, _) => trackingCancellation.Cancel();
+        CancellationTokenSource? trackingCancellation = null;
+        _window.Closed += (_, _) => trackingCancellation?.Cancel();
         _window.Activate();
 
         try
@@ -63,8 +63,26 @@ public partial class App : Microsoft.UI.Xaml.Application
                 var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
                 _window.SetCurrentPlayback(observation, trackingStatus);
             }
-            _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
-            _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+            void StartTracking()
+            {
+                trackingCancellation?.Cancel();
+                trackingCancellation = new CancellationTokenSource();
+                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+                _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+            }
+
+            _window.TrackingModeChanged += isEnabled =>
+            {
+                if (isEnabled)
+                {
+                    StartTracking();
+                }
+                else
+                {
+                    trackingCancellation?.Cancel();
+                }
+            };
+            StartTracking();
         }
         catch (Exception exception)
         {

@@ -10,6 +10,7 @@ using Scrobblix.Application.Abstractions;
 using Scrobblix.Application.Providers;
 using Scrobblix.Application.Queue;
 using Scrobblix.Application.ReadModels;
+using Scrobblix.Application.Tracking;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -193,6 +194,9 @@ var emptyQueue = new QueueSummary(0, 0, 0, 0, 0, 0);
 Assert(DashboardStatusText.QueueHeadline(emptyQueue) == "No queued actions", "An empty durable queue is described without implying a provider configuration.");
 var attentionQueue = new QueueSummary(2, 1, 4, 3, 1, 2);
 Assert(DashboardStatusText.QueueHeadline(attentionQueue) == "6 action(s) awaiting delivery" && DashboardStatusText.QueueDetail(attentionQueue) == "Blocked: 1; failed: 2", "Queue summaries prioritize persisted blocked and failed actions over completed actions.");
+
+var trackingMode = new TrackingMode();
+Assert(trackingMode.IsEnabled && trackingMode.SetEnabled(false) && !trackingMode.IsEnabled && !trackingMode.SetEnabled(false), "Tracking mode changes only when the requested state differs, so pause and resume commands remain idempotent.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);
