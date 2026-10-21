@@ -6,7 +6,8 @@ namespace Scrobblix.Application.Ingestion;
 public sealed class ProviderAwareLocalPlayStore(
     ILocalPlayStore localPlayStore,
     IEligiblePlayStore eligiblePlayStore,
-    IProviderAccountStore accountStore) : ILocalPlayStore
+    IProviderAccountStore accountStore,
+    Action<string>? log = null) : ILocalPlayStore
 {
     public async Task UpsertAsync(LocalPlayRecord play, CancellationToken cancellationToken)
     {
@@ -23,12 +24,15 @@ public sealed class ProviderAwareLocalPlayStore(
             return;
         }
 
-        await eligiblePlayStore.TryPersistAndQueueAsync(
+        var inserted = await eligiblePlayStore.TryPersistAndQueueAsync(
             play,
             account.Provider,
             account.AccountId,
             play.LastObservedUtc,
             cancellationToken);
+        log?.Invoke(inserted
+            ? $"Queued eligible play; play_id={play.PlayId}; provider={account.Provider}; account={account.AccountId}; artist={play.Artist ?? "(missing)"}; title={play.Title ?? "(missing)"}; confirmed_ms={play.ConfirmedPlayedMilliseconds}."
+            : $"Suppressed duplicate queue insertion by idempotency key; play_id={play.PlayId}; provider={account.Provider}; account={account.AccountId}; artist={play.Artist ?? "(missing)"}; title={play.Title ?? "(missing)"}.");
     }
 
     public Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken) =>
