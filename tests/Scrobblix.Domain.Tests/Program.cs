@@ -16,6 +16,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Net;
 using System.Net.Http;
+using Microsoft.Data.Sqlite;
 using Scrobblix.Infrastructure.Providers;
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
@@ -164,6 +165,13 @@ var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
 await database.InitializeAsync(CancellationToken.None);
+await using (var migrationConnection = new SqliteConnection(connectionString))
+{
+    await migrationConnection.OpenAsync(CancellationToken.None);
+    await using var migrationCommand = migrationConnection.CreateCommand();
+    migrationCommand.CommandText = "SELECT COUNT(*) FROM schema_migrations;";
+    Assert(Convert.ToInt32(await migrationCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 2, "Every embedded migration is recorded after initialization.");
+}
 var observationStore = new SqlitePlaybackObservationStore(connectionString);
 var ingestion = new PlaybackObservationIngestionService(observationStore);
 Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Accepted, "A validated source observation is stored durably.");
@@ -189,6 +197,10 @@ var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.Non
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
+var accountStore = new SqliteProviderAccountStore(connectionString);
+var account = new ProviderAccount("account-1", "lastfm", "listener", "Scrobblix.LastFm", true, observation.ObservedAtUtc);
+await accountStore.UpsertAsync(account, CancellationToken.None);
+Assert(await accountStore.GetConnectedAsync("lastfm", CancellationToken.None) is { UserName: "listener", CredentialResource: "Scrobblix.LastFm" }, "Connected provider account metadata is stored without a session secret.");
 
 var emptyQueue = new QueueSummary(0, 0, 0, 0, 0, 0);
 Assert(DashboardStatusText.QueueHeadline(emptyQueue) == "No queued actions", "An empty durable queue is described without implying a provider configuration.");
