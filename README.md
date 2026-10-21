@@ -99,7 +99,7 @@ requirement is finished**. Current release gaps include live Last.fm end-to-end
 verification, retry/backoff and provider batch hardening, same-user IPC peer
 authentication, Firefox support, full queue action controls, Statistics/Loved
 flows, export/backup, tray and notifications, a signed installer/updater,
-accessibility qualification, and a passing CI run for the latest source commit.
+and accessibility qualification. The latest clean-branch CI run has passed, but those remaining release gates are still open.
 See `Scrobblix-Docs/00_Project/SCOPE.md` and
 `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` before treating a build as
 release-ready.
