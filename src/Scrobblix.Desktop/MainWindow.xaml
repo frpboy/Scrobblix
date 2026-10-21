@@ -5,7 +5,7 @@
     Title="Scrobblix">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="220" />
+            <ColumnDefinition Width="232" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -15,20 +15,23 @@
                 <RowDefinition Height="*" />
                 <RowDefinition Height="Auto" />
             </Grid.RowDefinitions>
-            <StackPanel Spacing="4">
-                <TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" />
-                <TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" />
+            <StackPanel Orientation="Horizontal" Spacing="10" VerticalAlignment="Center">
+                <Image x:Name="AppBrandImage" Width="38" Height="38" Stretch="Uniform" />
+                <StackPanel Spacing="2" VerticalAlignment="Center">
+                    <TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" />
+                </StackPanel>
             </StackPanel>
-            <NavigationView Grid.Row="1" PaneDisplayMode="LeftMinimal" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
+            <NavigationView x:Name="AppNavigationView" Grid.Row="1" PaneDisplayMode="Left" IsPaneOpen="True" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
                 <NavigationView.MenuItems>
-                    <NavigationViewItem Content="Home" Tag="home" IsSelected="True" />
-                    <NavigationViewItem Content="History" Tag="history" />
-                    <NavigationViewItem Content="Statistics" IsEnabled="False" ToolTipService.ToolTip="Statistics are not available in this build." />
-                    <NavigationViewItem Content="Loved" IsEnabled="False" ToolTipService.ToolTip="Loved tracks are not available in this build." />
-                    <NavigationViewItem Content="Queue" Tag="queue" />
-                    <NavigationViewItem Content="Sources" Tag="sources" />
-                    <NavigationViewItem Content="Diagnostics" Tag="diagnostics" />
-                    <NavigationViewItem Content="Settings" Tag="settings" />
+                    <NavigationViewItem Content="Home" Tag="home" IsSelected="True"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="History" Tag="history"><NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Statistics" IsEnabled="False" ToolTipService.ToolTip="Statistics are not available in this build."><NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Loved" IsEnabled="False" ToolTipService.ToolTip="Loved tracks are not available in this build."><NavigationViewItem.Icon><FontIcon Glyph="&#xEB51;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Queue" Tag="queue"><NavigationViewItem.Icon><FontIcon Glyph="&#xE896;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Sources" Tag="sources"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D7;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Diagnostics" Tag="diagnostics"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Settings" Tag="settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
                 </NavigationView.MenuItems>
             </NavigationView>
             <TextBlock Grid.Row="2" Text="Local listening data stays on this device." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
@@ -50,8 +53,8 @@
                         <TextBlock Text="NOW PLAYING" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <Grid Width="88" Height="88" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
+                                <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill" />
                                 <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
-                                <TextBlock x:Name="CurrentTrackArtworkFallback" Text="No artwork" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
                             </Grid>
                             <StackPanel Spacing="6" VerticalAlignment="Center">
                                 <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
@@ -86,7 +89,7 @@
                         <StackPanel Spacing="4"><TextBlock Text="Queue" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="QueueStateText" Text="Queue not configured" /><TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Checking local connection state" TextWrapping="Wrap" /><TextBlock Text="Local history can continue without a provider account." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel Spacing="6"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Checking local connection state" TextWrapping="Wrap" /><TextBlock Text="Add API credentials and approve your account in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /><Button Content="Configure API key / Login" Click="OpenLastFmSettingsButton_Click" HorizontalAlignment="Left" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                         <StackPanel Spacing="4"><TextBlock Text="Sources" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="Checking Windows media controls" /><TextBlock x:Name="BrowserCompanionHomeStatusText" Text="Browser companion awaits packaged registration." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
@@ -157,6 +160,10 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="Current observation" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="DiagnosticsPlaybackText" Text="No supported playback has been observed yet." TextWrapping="Wrap" />
+                        <TextBlock Text="Local event log" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock x:Name="LogDirectoryText" Text="Log directory is being prepared." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <Button Content="Open log folder" Click="OpenLogFolderButton_Click" HorizontalAlignment="Left" />
+                        <TextBlock Text="Each entry has a sequential number and UTC timestamp. Credentials, authorization tokens and session keys are excluded from diagnostics." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Recommendation" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <TextBlock Text="Start a track in a Windows media-control-enabled app. If metadata stays incomplete, install the optional Browser Companion for that supported site." TextWrapping="Wrap" />
                     </StackPanel>
@@ -171,8 +178,14 @@
                     <TextBlock Text="Configuration stays local to this Windows account." Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Last.fm API credentials" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="Create an API application at last.fm/api/account/create. Enter the key and shared secret here; Scrobblix stores them in Windows Credential Locker. Never add the secret to Git." TextWrapping="Wrap" />
+                        <TextBox x:Name="LastFmApiKeyInput" Header="API key" PlaceholderText="Paste your Last.fm API key" MaxLength="128" />
+                        <PasswordBox x:Name="LastFmApiSecretInput" Header="Shared secret" PlaceholderText="Paste your Last.fm shared secret" MaxLength="128" />
+                        <Button x:Name="SaveLastFmCredentialsButton" Content="Save API credentials securely" Click="SaveLastFmCredentialsButton_Click" HorizontalAlignment="Left" />
+                        <TextBlock x:Name="LastFmCredentialsStatusText" Text="API credentials are not configured." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Last.fm account" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
                         <TextBlock x:Name="LastFmStatusText" Text="Not connected. A user-approved Last.fm account is required before Scrobblix can submit anything remotely." TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="ConnectLastFmButton" Content="Connect Last.fm" Click="ConnectLastFmButton_Click" />

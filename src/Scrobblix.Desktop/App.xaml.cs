@@ -1,6 +1,9 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.Diagnostics;
+using System.Collections.Concurrent;
+using System.Security.Cryptography;
+using System.Globalization;
 using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
@@ -32,10 +35,12 @@ public partial class App : Microsoft.UI.Xaml.Application
         _window = new MainWindow();
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
+        ScrobblixFileLogger? fileLogger = null;
         _window.Closed += (_, _) =>
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
+            fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
 
@@ -45,9 +50,15 @@ public partial class App : Microsoft.UI.Xaml.Application
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Scrobblix");
             Directory.CreateDirectory(dataDirectory);
+            var logger = new ScrobblixFileLogger(dataDirectory);
+            fileLogger = logger;
+            _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
+            _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
+            logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
+            logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
             var historyReader = new SqliteHistoryReader(connectionString);
@@ -58,31 +69,59 @@ public partial class App : Microsoft.UI.Xaml.Application
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             var accountStore = new SqliteProviderAccountStore(connectionString);
+            var credentialStore = new WindowsCredentialStore();
+            const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
+            const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
+            const string applicationCredentialUser = "application";
+            var storedApiKey = await credentialStore.GetAsync(apiKeyResource, applicationCredentialUser, CancellationToken.None);
+            var storedApiSecret = await credentialStore.GetAsync(apiSecretResource, applicationCredentialUser, CancellationToken.None);
+            var initialApiKey = storedApiKey ?? Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_KEY");
+            var initialApiSecret = storedApiSecret ?? Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_SECRET");
+            var metadataHttpClient = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false })
+            {
+                Timeout = TimeSpan.FromSeconds(12),
+            };
+            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"));
+            var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+            var localPlayStore = new SqliteLocalPlayStore(connectionString);
+            var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
+            var observationGate = new SemaphoreSlim(1, 1);
+            var sourceArbitrator = new PlaybackSourceArbitrator();
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock(), Path.Combine(dataDirectory, "artwork"));
             var tracking = new PlaybackTrackingService(
                 new ProviderAwareLocalPlayStore(
-                    new SqliteLocalPlayStore(connectionString),
+                    localPlayStore,
                     new SqliteEligiblePlayStore(connectionString),
-                    accountStore));
+                    accountStore,
+                    message => logger.Info("SCROBBLE_QUEUE", message)));
             var trackingClock = Stopwatch.StartNew();
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
             {
                 _window.SetStartupStatus("Ready. No supported playback is active.", InfoBarSeverity.Informational);
+                logger.Info("PLAYBACK_SOURCE", "No active Windows media session was returned at startup.");
             }
             else
             {
-                var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
-                await ingestion.IngestAsync(observation, CancellationToken.None);
-                var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
-                _window.SetCurrentPlayback(observation, trackingStatus);
+                await ProcessObservationAsync(
+                    observation, observationIngestion, tracking, trackingClock, sourceArbitrator, observationGate,
+                    metadataEnricher, localPlayStore, metadataStarted, connectionString, logger, _window,
+                    applicationCancellation.Token);
             }
+
             void StartTracking()
             {
                 trackingCancellation?.Cancel();
-                trackingCancellation = new CancellationTokenSource();
-                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
-                _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+                trackingCancellation = CancellationTokenSource.CreateLinkedTokenSource(applicationCancellation.Token);
+                _ = TrackUntilClosedAsync(
+                    source, connectionString, tracking, trackingClock, _window, observationIngestion,
+                    sourceArbitrator, observationGate, metadataEnricher, localPlayStore, metadataStarted, logger,
+                    trackingCancellation.Token);
+                _ = ListenForBrowserIngressAsync(
+                    connectionString, tracking, trackingClock, _window, observationIngestion, sourceArbitrator,
+                    observationGate, metadataEnricher, localPlayStore, metadataStarted, logger,
+                    trackingCancellation.Token);
+                logger.Info("TRACKING", "Started playback polling and browser ingress listeners.");
             }
 
             _window.TrackingModeChanged += isEnabled =>
@@ -98,57 +137,129 @@ public partial class App : Microsoft.UI.Xaml.Application
             };
             StartTracking();
 
-            ConfigureLastFm(connectionString, accountStore, applicationCancellation.Token);
+            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, applicationCancellation.Token);
         }
         catch (Exception exception)
         {
+            fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
         }
     }
 
-    private void ConfigureLastFm(string connectionString, SqliteProviderAccountStore accountStore, CancellationToken cancellationToken)
+    private void ConfigureLastFm(
+        string connectionString,
+        SqliteProviderAccountStore accountStore,
+        WindowsCredentialStore credentialStore,
+        string? initialApiKey,
+        string? initialApiSecret,
+        bool credentialsFromCredentialLocker,
+        TrackMetadataEnricher metadataEnricher,
+        ScrobblixFileLogger logger,
+        CancellationToken cancellationToken)
     {
-        if (!LastFmRuntimeConfiguration.TryCreate(
-                Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_KEY"),
-                Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_SECRET"),
-                out var configuration))
-        {
-            _window!.SetLastFmUnavailable();
-            return;
-        }
-
-        var credentialStore = new WindowsCredentialStore();
-        var client = new HttpClient();
-        var authenticator = new LastFmDesktopAuthenticator(client, configuration.ApiKey, configuration.ApiSecret, credentialStore);
-        var provider = new LastFmScrobbleProvider(client, configuration.ApiKey, configuration.ApiSecret);
-        var processor = new ProviderActionProcessor(new SqliteProviderActionStore(connectionString), provider);
+        const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
+        const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
+        const string applicationCredentialUser = "application";
+        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
+        LastFmDesktopAuthenticator? authenticator = null;
+        ProviderActionProcessor? processor = null;
         LastFmAuthorization? authorization = null;
 
-        _window!.ConnectLastFmRequested += async () =>
+        bool ConfigureCredentials(string? apiKey, string? apiSecret)
+        {
+            if (!LastFmRuntimeConfiguration.TryCreate(apiKey, apiSecret, out var configuration))
+            {
+                authenticator = null;
+                processor = null;
+                metadataEnricher.UpdateLastFmApiKey(null);
+                return false;
+            }
+
+            authenticator = new LastFmDesktopAuthenticator(client, configuration.ApiKey, configuration.ApiSecret, credentialStore);
+            var provider = new LastFmScrobbleProvider(client, configuration.ApiKey, configuration.ApiSecret);
+            processor = new ProviderActionProcessor(new SqliteProviderActionStore(connectionString), provider, message => logger.Info("SCROBBLE_DELIVERY", message));
+            metadataEnricher.UpdateLastFmApiKey(configuration.ApiKey);
+            return true;
+        }
+
+        var hasConfiguration = ConfigureCredentials(initialApiKey, initialApiSecret);
+        logger.Info("LASTFM", hasConfiguration ? "Last.fm API configuration is available; awaiting account state." : "Last.fm API credentials are not configured; local history remains enabled.");
+        if (hasConfiguration)
+        {
+            _window!.SetLastFmCredentialsStatus(credentialsFromCredentialLocker
+                ? "API key and shared secret are stored in Windows Credential Locker."
+                : "API credentials were loaded from environment variables. You can save them securely here.");
+        }
+        else
+        {
+            _window!.SetLastFmCredentialsStatus("Enter your Last.fm API key and shared secret here, then save securely.");
+            _window.SetLastFmUnavailable();
+        }
+
+        _window.LastFmApiCredentialsSaveRequested += async (apiKey, apiSecret) =>
         {
             try
             {
+                await credentialStore.StoreAsync(apiKeyResource, applicationCredentialUser, apiKey.Trim(), cancellationToken);
+                await credentialStore.StoreAsync(apiSecretResource, applicationCredentialUser, apiSecret, cancellationToken);
+                logger.Info("LASTFM", "API key and shared secret were saved to Windows Credential Locker.");
+                if (!ConfigureCredentials(apiKey.Trim(), apiSecret))
+                {
+                    _window.SetLastFmCredentialsStatus("Both values are required. Check the API key and shared secret.");
+                    _window.SetLastFmUnavailable();
+                    return;
+                }
+
+                _window.SetLastFmCredentialsStatus("API key and shared secret saved in Windows Credential Locker.");
+                _window.SetLastFmReadyToConnect();
+                await SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception exception)
+            {
+                logger.Error("LASTFM_CREDENTIALS", $"Credential save failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                _window.SetLastFmCredentialsStatus("Credentials could not be saved. Check Windows Credential Locker access and try again.");
+            }
+        };
+
+        _window.ConnectLastFmRequested += async () =>
+        {
+            if (authenticator is null)
+            {
+                _window.SetLastFmUnavailable();
+                return;
+            }
+
+            try
+            {
+                logger.Info("LASTFM_AUTH", "Starting desktop authorization request.");
                 var pendingAuthorization = await authenticator.BeginAsync(cancellationToken);
                 authorization = pendingAuthorization;
                 if (!await global::Windows.System.Launcher.LaunchUriAsync(pendingAuthorization.AuthorizationUri))
                 {
+                    logger.Error("LASTFM_AUTH", "Windows could not open the Last.fm approval page.");
                     _window.SetLastFmConnectionError();
                     return;
                 }
 
+                logger.Info("LASTFM_AUTH", "Approval page opened; waiting for the user to approve Scrobblix in their browser.");
                 _window.SetLastFmAuthorizationWaiting();
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_AUTH", $"Could not start authorization; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
+
         _window.CompleteLastFmRequested += async () =>
         {
-            if (authorization is null)
+            if (authenticator is null || authorization is null)
             {
                 _window.SetLastFmConnectionError();
                 return;
@@ -156,10 +267,11 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             try
             {
+                logger.Info("LASTFM_AUTH", "Finishing the approved Last.fm authorization token exchange.");
                 var session = await authenticator.CompleteAsync(authorization.Token, cancellationToken);
                 await accountStore.UpsertAsync(
                     new Scrobblix.Application.Providers.ProviderAccount(
-                        $"lastfm:{session.UserName}",
+                        $"lastfm:{session.UserName.ToLowerInvariant()}",
                         "lastfm",
                         session.UserName,
                         LastFmDesktopAuthenticator.CredentialResource,
@@ -168,16 +280,19 @@ public partial class App : Microsoft.UI.Xaml.Application
                     cancellationToken);
                 authorization = null;
                 _window.SetLastFmConnected(session.UserName);
+                logger.Info("LASTFM", $"Account authorization completed; username={session.UserName}.");
                 await RefreshDashboardAsync(_window, connectionString, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_AUTH", $"Authorization exchange failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
+
         _window.DisconnectLastFmRequested += async () =>
         {
             try
@@ -190,25 +305,27 @@ public partial class App : Microsoft.UI.Xaml.Application
                 }
 
                 _window.SetLastFmReadyToConnect();
+                logger.Info("LASTFM", "Account disconnected; saved session credential removed and queue delivery disabled.");
                 await RefreshDashboardAsync(_window, connectionString, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
             }
-            catch (Exception)
+            catch (Exception exception)
             {
+                logger.Error("LASTFM_DISCONNECT", $"Disconnect failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
                 _window.SetLastFmConnectionError();
             }
         };
 
         _ = ProcessProviderQueueUntilClosedAsync(
-            processor,
+            () => processor,
             accountStore,
             credentialStore,
             _window,
             connectionString,
             cancellationToken);
-        _ = SetLastFmInitialStateAsync(accountStore, credentialStore, cancellationToken);
+        _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
     }
 
     private static void LoadLocalLastFmEnvironment()
@@ -241,8 +358,15 @@ public partial class App : Microsoft.UI.Xaml.Application
     private async Task SetLastFmInitialStateAsync(
         SqliteProviderAccountStore accountStore,
         WindowsCredentialStore credentialStore,
+        Func<bool> hasConfiguration,
         CancellationToken cancellationToken)
     {
+        if (!hasConfiguration())
+        {
+            _window!.SetLastFmUnavailable();
+            return;
+        }
+
         var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
         if (account is null)
         {
@@ -261,7 +385,7 @@ public partial class App : Microsoft.UI.Xaml.Application
     }
 
     private static async Task ProcessProviderQueueUntilClosedAsync(
-        ProviderActionProcessor processor,
+        Func<ProviderActionProcessor?> getProcessor,
         SqliteProviderAccountStore accountStore,
         WindowsCredentialStore credentialStore,
         MainWindow window,
@@ -273,7 +397,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             while (!cancellationToken.IsCancellationRequested)
             {
                 var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
-                if (account is not null)
+                var processor = getProcessor();
+                if (account is not null && processor is not null)
                 {
                     var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
                     if (!string.IsNullOrWhiteSpace(sessionKey)
@@ -301,9 +426,15 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
+        PlaybackObservationIngestionService observationIngestion,
+        PlaybackSourceArbitrator sourceArbitrator,
+        SemaphoreSlim observationGate,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted,
+        ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
-        var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -312,19 +443,24 @@ public partial class App : Microsoft.UI.Xaml.Application
                 var observation = await source.GetCurrentAsync(cancellationToken);
                 if (observation is not null)
                 {
-                    await ingestion.IngestAsync(observation, cancellationToken);
-                    var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
-                    PublishCurrentPlayback(window, observation, trackingStatus);
-                    window.DispatcherQueue.TryEnqueue(() => window.SetBrowserCompanionObservation(observation.SourceName));
-                    if (trackingStatus.DidPersistEligiblePlay)
-                    {
-                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
-                    }
+                    await ProcessObservationAsync(
+                        observation, observationIngestion, tracking, trackingClock, sourceArbitrator,
+                        observationGate, metadataEnricher, localPlayStore, metadataStarted,
+                        connectionString, logger, window, cancellationToken);
+                }
+                else
+                {
+                    logger.Info("PLAYBACK_SOURCE", "Windows media controls returned no current session.");
                 }
             }
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
+            logger.Info("TRACKING", "Windows media polling stopped.");
+        }
+        catch (Exception exception)
+        {
+            logger.Error("TRACKING", $"Windows media polling crashed; exception={exception.GetType().Name}; message={exception.Message}");
         }
     }
 
@@ -333,9 +469,15 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
+        PlaybackObservationIngestionService observationIngestion,
+        PlaybackSourceArbitrator sourceArbitrator,
+        SemaphoreSlim observationGate,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted,
+        ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
-        var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         while (!cancellationToken.IsCancellationRequested)
         {
             try
@@ -350,45 +492,171 @@ public partial class App : Microsoft.UI.Xaml.Application
                 var header = new byte[sizeof(int)];
                 if (!await ReadExactlyAsync(pipe, header, cancellationToken))
                 {
+                    logger.Warning("BROWSER_INGRESS", "Native host closed before sending a complete message header.");
                     continue;
                 }
 
                 var length = BinaryPrimitives.ReadInt32LittleEndian(header);
                 if (length <= 0 || length > 256 * 1024)
                 {
+                    logger.Warning("BROWSER_INGRESS", $"Rejected browser message with invalid length={length}.");
                     continue;
                 }
 
                 var buffer = new byte[length];
                 if (!await ReadExactlyAsync(pipe, buffer, cancellationToken))
                 {
+                    logger.Warning("BROWSER_INGRESS", $"Native host sent a partial message; expected_bytes={length}.");
                     continue;
                 }
 
                 var observation = TryCreateBrowserObservation(buffer);
                 if (observation is not null)
                 {
-                    await ingestion.IngestAsync(observation, cancellationToken);
-                    var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
-                    PublishCurrentPlayback(window, observation, trackingStatus);
-                    if (trackingStatus.DidPersistEligiblePlay)
-                    {
-                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
-                    }
+                    await ProcessObservationAsync(
+                        observation, observationIngestion, tracking, trackingClock, sourceArbitrator,
+                        observationGate, metadataEnricher, localPlayStore, metadataStarted,
+                        connectionString, logger, window, cancellationToken);
+                }
+                else
+                {
+                    logger.Warning("BROWSER_INGRESS", "Rejected malformed or unsupported browser observation payload.");
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                logger.Info("BROWSER_INGRESS", "Browser native-host listener stopped.");
                 return;
             }
-            catch (IOException)
+            catch (IOException exception)
             {
+                logger.Warning("BROWSER_INGRESS", $"Native-host pipe error; exception={exception.GetType().Name}; message={exception.Message}");
             }
+            catch (Exception exception)
+            {
+                logger.Error("BROWSER_INGRESS", $"Browser listener failed; exception={exception.GetType().Name}; message={exception.Message}");
+            }
+        }
+    }
+
+    private static async Task ProcessObservationAsync(
+        PlayObservation observation,
+        PlaybackObservationIngestionService observationIngestion,
+        PlaybackTrackingService tracking,
+        Stopwatch trackingClock,
+        PlaybackSourceArbitrator sourceArbitrator,
+        SemaphoreSlim observationGate,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted,
+        string connectionString,
+        ScrobblixFileLogger logger,
+        MainWindow window,
+        CancellationToken cancellationToken)
+    {
+        await observationGate.WaitAsync(cancellationToken);
+        try
+        {
+            var ingestionResult = await observationIngestion.IngestAsync(observation, cancellationToken);
+            var arbitration = sourceArbitrator.Consider(observation);
+            logger.Info("OBSERVATION",
+                $"Received source={observation.SourceName}; source_instance={observation.SourceEventKey.SourceInstanceId}; session={observation.SourceEventKey.SessionId ?? "(none)"}; sequence={observation.SourceEventKey.SequenceNumber}; event_id={observation.SourceEventKey.EventId ?? "(none)"}; storage={ingestionResult}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}; album={observation.Album ?? "(missing)"}; state={observation.PlaybackState}; duration_ms={observation.DurationMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}; position_ms={observation.PositionMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}.");
+
+            if (!arbitration.IsAccepted)
+            {
+                logger.Warning("SOURCE_ARBITRATION",
+                    $"Ignored lower-priority duplicate observation; source={observation.SourceName}; reason={arbitration.ReasonCode}; canonical_source={arbitration.CanonicalObservation.SourceName}; canonical_artist={arbitration.CanonicalObservation.Artist}; canonical_title={arbitration.CanonicalObservation.Title}.");
+                return;
+            }
+
+            var status = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
+            var decision = status.Decision;
+            logger.Info("PLAYBACK_TRACKING",
+                $"Processed {(status.DidStartPlay ? "new session" : "update")}; play_id={status.PlayId ?? "(none)"}; source={observation.SourceName}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}; confirmed_ms={status.ConfirmedPlayedMilliseconds}; threshold_ms={decision.ThresholdMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}; eligible={decision.IsEligible}; newly_eligible={status.DidPersistEligiblePlay}.");
+
+            window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation, status));
+            if (string.Equals(observation.SourceName, "browser", StringComparison.OrdinalIgnoreCase))
+            {
+                window.DispatcherQueue.TryEnqueue(() => window.SetBrowserCompanionObservation(observation.ApplicationId ?? "browser"));
+            }
+
+            ScheduleMetadataEnrichment(
+                observation, status, metadataEnricher, localPlayStore, metadataStarted,
+                connectionString, window, logger, cancellationToken);
+            if (status.DidStartPlay || status.DidPersistEligiblePlay)
+            {
+                await RefreshDashboardAsync(window, connectionString, cancellationToken);
+            }
+        }
+        finally
+        {
+            observationGate.Release();
         }
     }
 
     private static void PublishCurrentPlayback(MainWindow window, PlayObservation observation, PlaybackTrackingStatus trackingStatus) =>
         window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation, trackingStatus));
+
+    private static void ScheduleMetadataEnrichment(
+        PlayObservation observation,
+        PlaybackTrackingStatus trackingStatus,
+        TrackMetadataEnricher metadataEnricher,
+        SqliteLocalPlayStore localPlayStore,
+        ConcurrentDictionary<string, byte> metadataStarted,
+        string connectionString,
+        MainWindow window,
+        ScrobblixFileLogger logger,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(trackingStatus.PlayId))
+        {
+            return;
+        }
+
+        var artworkVariation = string.IsNullOrWhiteSpace(observation.ArtworkUrl)
+            ? "source"
+            : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(observation.ArtworkUrl)));
+        var jobKey = $"{trackingStatus.PlayId}:{metadataEnricher.ConfigurationVersion}:{artworkVariation}";
+        if (!metadataStarted.TryAdd(jobKey, 0))
+        {
+            return;
+        }
+
+        var playId = trackingStatus.PlayId;
+        logger.Info("METADATA", $"Started metadata enrichment; play_id={playId}; source={observation.SourceName}; artist={observation.Artist}; title={observation.Title}; source_artwork={(string.IsNullOrWhiteSpace(observation.ArtworkPath) ? "none" : "available")}." );
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                var metadata = await metadataEnricher.EnrichAsync(observation, cancellationToken);
+                cancellationToken.ThrowIfCancellationRequested();
+                await localPlayStore.UpdateMetadataAsync(playId, metadata, cancellationToken);
+                logger.Info("METADATA", $"Metadata enrichment completed; play_id={playId}; album_artist={metadata.AlbumArtist ?? "(missing)"}; track_number={metadata.TrackNumber?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; release_year={metadata.ReleaseYear?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; recording_mbid={(metadata.RecordingMusicBrainzId is null ? "(missing)" : "available")}; release_mbid={(metadata.ReleaseMusicBrainzId is null ? "(missing)" : "available")}; artwork_source={metadata.ArtworkSource ?? "(missing)"}; artwork_path={(metadata.ArtworkPath is null ? "(missing)" : metadata.ArtworkPath)}.");
+                var enrichedObservation = observation with
+                {
+                    AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+                    TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
+                    ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
+                    RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
+                    ReleaseMusicBrainzId = metadata.ReleaseMusicBrainzId ?? observation.ReleaseMusicBrainzId,
+                    ArtworkPath = metadata.ArtworkPath ?? observation.ArtworkPath,
+                    ArtworkSource = metadata.ArtworkSource ?? observation.ArtworkSource,
+                };
+                window.DispatcherQueue.TryEnqueue(() => window.SetEnrichedMetadata(playId, enrichedObservation, metadata));
+                await RefreshDashboardAsync(window, connectionString, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+                metadataStarted.TryRemove(jobKey, out _);
+            }
+            catch (Exception exception)
+            {
+                metadataStarted.TryRemove(jobKey, out _);
+                logger.Error("METADATA", $"Metadata enrichment failed; play_id={playId}; exception={exception.GetType().Name}; message={exception.Message}");
+                Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
+            }
+        }, cancellationToken);
+    }
 
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
     {
@@ -424,6 +692,12 @@ public partial class App : Microsoft.UI.Xaml.Application
             var artist = GetBoundedString(payload, "artist");
             var title = GetBoundedString(payload, "title");
             var album = GetBoundedString(payload, "album");
+            var albumArtist = GetBoundedString(payload, "albumArtist");
+            var recordingMbid = GetBoundedString(payload, "recordingMusicBrainzId");
+            var releaseMbid = GetBoundedString(payload, "releaseMusicBrainzId");
+            var artworkUrl = GetBoundedString(payload, "artworkUrl", 4096);
+            int? trackNumber = payload.TryGetProperty("trackNumber", out var trackNumberElement) && trackNumberElement.TryGetInt32(out var parsedTrackNumber) && parsedTrackNumber > 0 ? parsedTrackNumber : null;
+            int? releaseYear = payload.TryGetProperty("releaseYear", out var releaseYearElement) && releaseYearElement.TryGetInt32(out var parsedReleaseYear) && parsedReleaseYear is >= 1000 and <= 9999 ? parsedReleaseYear : null;
             var siteOrigin = GetBoundedString(payload, "siteOrigin");
             int? durationMilliseconds = payload.TryGetProperty("durationMilliseconds", out var duration) && duration.TryGetInt32(out var parsedDuration) && parsedDuration > 0 ? parsedDuration : null;
             long? positionMilliseconds = payload.TryGetProperty("positionMilliseconds", out var position) && position.TryGetInt64(out var parsedPosition) && parsedPosition >= 0 ? parsedPosition : null;
@@ -451,7 +725,15 @@ public partial class App : Microsoft.UI.Xaml.Application
                 positionMilliseconds,
                 playbackState,
                 MetadataNormalizer.Normalize(artist),
-                MetadataNormalizer.Normalize(title));
+                MetadataNormalizer.Normalize(title),
+                null,
+                albumArtist,
+                trackNumber,
+                releaseYear,
+                recordingMbid,
+                releaseMbid,
+                artworkUrl,
+                null);
         }
         catch (JsonException)
         {
@@ -467,10 +749,11 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
-    private static string? GetBoundedString(JsonElement payload, string propertyName) =>
+    private static string? GetBoundedString(JsonElement payload, string propertyName, int maximumLength = 1024) =>
         payload.TryGetProperty(propertyName, out var property)
         && property.ValueKind == JsonValueKind.String
-        && property.GetString() is { Length: <= 1024 } value
+        && property.GetString() is { } value
+        && value.Length <= maximumLength
             ? value
             : null;
 

@@ -15,10 +15,14 @@ public sealed class SqlitePlaybackObservationStore(string connectionString) : IP
             INSERT OR IGNORE INTO playback_observations (
                 observation_id, source_instance_id, session_id, sequence_number, event_id,
                 captured_utc, observed_utc, source_name, application_id, artist, title, album,
-                duration_ms, position_ms, playback_state, normalized_artist, normalized_title)
+                duration_ms, position_ms, playback_state, normalized_artist, normalized_title,
+                artwork_path, artwork_source, album_artist, track_number, release_year,
+                recording_mbid, release_mbid)
             VALUES ($id, $sourceInstanceId, $sessionId, $sequenceNumber, $eventId,
                 $capturedUtc, $observedUtc, $sourceName, $applicationId, $artist, $title, $album,
-                $durationMilliseconds, $positionMilliseconds, $playbackState, $normalizedArtist, $normalizedTitle);
+                $durationMilliseconds, $positionMilliseconds, $playbackState, $normalizedArtist, $normalizedTitle,
+                $artworkPath, $artworkSource, $albumArtist, $trackNumber, $releaseYear,
+                $recordingMbid, $releaseMbid);
             """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("$sourceInstanceId", observation.SourceEventKey.SourceInstanceId);
@@ -37,6 +41,13 @@ public sealed class SqlitePlaybackObservationStore(string connectionString) : IP
         command.Parameters.AddWithValue("$playbackState", (int)observation.PlaybackState);
         command.Parameters.AddWithValue("$normalizedArtist", (object?)observation.NormalizedArtist?.Payload ?? DBNull.Value);
         command.Parameters.AddWithValue("$normalizedTitle", (object?)observation.NormalizedTitle?.Payload ?? DBNull.Value);
+        command.Parameters.AddWithValue("$artworkPath", (object?)observation.ArtworkPath ?? DBNull.Value);
+        command.Parameters.AddWithValue("$artworkSource", (object?)observation.ArtworkSource ?? DBNull.Value);
+        command.Parameters.AddWithValue("$albumArtist", (object?)observation.AlbumArtist ?? DBNull.Value);
+        command.Parameters.AddWithValue("$trackNumber", (object?)observation.TrackNumber ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseYear", (object?)observation.ReleaseYear ?? DBNull.Value);
+        command.Parameters.AddWithValue("$recordingMbid", (object?)observation.RecordingMusicBrainzId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseMbid", (object?)observation.ReleaseMusicBrainzId ?? DBNull.Value);
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 }

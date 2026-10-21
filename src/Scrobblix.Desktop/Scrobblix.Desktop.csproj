@@ -13,4 +13,10 @@
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.251106002" />
   </ItemGroup>
+  <ItemGroup>
+    <Content Include="Assets\*.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Update="Assets\*.svg" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

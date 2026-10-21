@@ -46,7 +46,9 @@ public sealed class SqliteHistoryReader(string connectionString)
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
-            SELECT play_id, started_utc, artist, title, album, duration_ms, confirmed_played_ms, eligible_utc, terminal_reason_code, artwork_path
+            SELECT play_id, started_utc, artist, title, album, duration_ms, confirmed_played_ms,
+                   eligible_utc, terminal_reason_code, artwork_path, album_artist, track_number,
+                   release_year, recording_mbid, release_mbid, artwork_source
             FROM plays
             ORDER BY started_utc DESC, created_utc DESC, play_id DESC
             LIMIT $limit;
@@ -66,7 +68,13 @@ public sealed class SqliteHistoryReader(string connectionString)
                 reader.GetInt64(6),
                 reader.IsDBNull(7) ? null : DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
                 reader.IsDBNull(8) ? null : reader.GetString(8),
-                reader.IsDBNull(9) ? null : reader.GetString(9)));
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : reader.GetString(10),
+                reader.IsDBNull(11) ? null : reader.GetInt32(11),
+                reader.IsDBNull(12) ? null : reader.GetInt32(12),
+                reader.IsDBNull(13) ? null : reader.GetString(13),
+                reader.IsDBNull(14) ? null : reader.GetString(14),
+                reader.IsDBNull(15) ? null : reader.GetString(15)));
         }
 
         return results;
