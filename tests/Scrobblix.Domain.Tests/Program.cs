@@ -220,8 +220,13 @@ var poller = new PlaybackObservationPollingService(new SingleObservationSource(o
 Assert(await poller.PollOnceAsync(CancellationToken.None) == ObservationIngestionResult.Accepted && pollingStore.AppendCount == 1, "A playback poll persists the current observation through the ingestion boundary.");
 var localPlayStore = new RecordingLocalPlayStore();
 var tracking = new PlaybackTrackingService(localPlayStore);
-await tracking.ObserveAsync(observation, 0, CancellationToken.None);
-var trackedStatus = await tracking.ObserveAsync(observation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
+var localObservation = observation with { ArtworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-artwork-test.jpg") };
+await tracking.ObserveAsync(localObservation, 0, CancellationToken.None);
+Assert(localPlayStore.StoredPlay is { } initialPlay && !initialPlay.Eligibility.IsEligible, "A listening session is tracked locally before it qualifies for a Last.fm scrobble.");
+await new SqliteLocalPlayStore(connectionString).UpsertAsync(localPlayStore.StoredPlay!, CancellationToken.None);
+var earlyHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
+Assert(earlyHistory.Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId && play.EligibleUtc is null && play.ArtworkPath == localObservation.ArtworkPath), "Pre-eligible sessions and their artwork paths are persisted in local history.");
+var trackedStatus = await tracking.ObserveAsync(localObservation with { PlaybackState = PlayState.Paused }, 150_000, CancellationToken.None);
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
