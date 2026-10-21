@@ -137,6 +137,11 @@ var providerSignature = (string)signMethod.Invoke(null, [signatureParameters, "m
 var expectedLastFmSignature = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes("api_keyxxxxxxxxmethodauth.getSessiontokenxxxxxxxmysecret")));
 #pragma warning restore CA5351
 Assert(providerSignature == expectedLastFmSignature, "Last.fm request signatures use the documented MD5 algorithm over sorted parameters and the shared secret.");
+var mapErrorMethod = typeof(LastFmScrobbleProvider).GetMethod("MapError", BindingFlags.NonPublic | BindingFlags.Static)!;
+var invalidSignatureResult = (ProviderSubmissionResult)mapErrorMethod.Invoke(null, [13])!;
+var temporaryErrorResult = (ProviderSubmissionResult)mapErrorMethod.Invoke(null, [16])!;
+Assert(!invalidSignatureResult.Accepted && invalidSignatureResult.ReasonCode == ReasonCodes.Provider.InvalidSignature && !invalidSignatureResult.IsTransient, "Last.fm invalid signatures are permanent provider failures.");
+Assert(!temporaryErrorResult.Accepted && temporaryErrorResult.IsTransient, "Last.fm temporary service errors are retryable.");
 
 var credentials = new RecordingCredentialStore();
 var authHandler = new SequenceHttpHandler("{\"token\":\"request-token\"}", "{\"session\":{\"name\":\"listener\",\"key\":\"session-key\"}}");

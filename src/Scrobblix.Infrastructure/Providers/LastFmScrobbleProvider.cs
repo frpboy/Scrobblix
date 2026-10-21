@@ -90,6 +90,8 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
     {
         9 => new(false, ReasonCodes.Provider.AuthInvalidSession, false),
         10 => new(false, ReasonCodes.Provider.InvalidApiKey, false),
+        11 or 16 => new(false, ReasonCodes.Provider.TemporaryUnavailable, true),
+        13 => new(false, ReasonCodes.Provider.InvalidSignature, false),
         26 => new(false, ReasonCodes.Provider.SuspendedKey, false),
         29 => new(false, ReasonCodes.Provider.RateLimited, true),
         _ => new(false, ReasonCodes.Provider.ResponseInvalid, false),
