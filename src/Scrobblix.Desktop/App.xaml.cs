@@ -79,7 +79,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 Timeout = TimeSpan.FromSeconds(12),
             };
-            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"));
+            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"), message => logger.Info("METADATA_PROVIDER", message));
             var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
             var localPlayStore = new SqliteLocalPlayStore(connectionString);
             var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
