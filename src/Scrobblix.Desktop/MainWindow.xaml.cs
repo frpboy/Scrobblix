@@ -7,6 +7,7 @@ using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
+using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Desktop;
@@ -14,6 +15,7 @@ namespace Scrobblix.Desktop;
 public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
+    private string? _displayedPlayId;
 
     public event Action<bool>? TrackingModeChanged;
 
@@ -22,6 +24,8 @@ public sealed partial class MainWindow : Window
     public event Func<Task>? CompleteLastFmRequested;
 
     public event Func<Task>? DisconnectLastFmRequested;
+
+    public event Func<string, string, Task>? LastFmApiCredentialsSaveRequested;
 
     public MainWindow()
     {
@@ -36,10 +40,9 @@ public sealed partial class MainWindow : Window
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
+        _displayedPlayId = trackingStatus.PlayId;
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
-        CurrentTrackDetail.Text = string.IsNullOrWhiteSpace(observation.Artist)
-            ? "Artist unavailable"
-            : observation.Artist;
+        CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
@@ -57,6 +60,49 @@ public sealed partial class MainWindow : Window
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Informational);
+    }
+
+    public void SetEnrichedMetadata(string playId, PlayObservation observation, PlayMetadataEnrichment metadata)
+    {
+        if (!string.Equals(_displayedPlayId, playId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var enrichedObservation = observation with
+        {
+            AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+            TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
+            ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
+            RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
+            ReleaseMusicBrainzId = metadata.ReleaseMusicBrainzId ?? observation.ReleaseMusicBrainzId,
+            ArtworkPath = metadata.ArtworkPath ?? observation.ArtworkPath,
+            ArtworkSource = metadata.ArtworkSource ?? observation.ArtworkSource,
+        };
+        CurrentTrackDetail.Text = BuildTrackDetail(enrichedObservation);
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, enrichedObservation.ArtworkPath);
+    }
+
+    private static string BuildTrackDetail(PlayObservation observation)
+    {
+        var lines = new List<string>
+        {
+            string.IsNullOrWhiteSpace(observation.Artist) ? "Artist unavailable" : observation.Artist
+        };
+        if (!string.IsNullOrWhiteSpace(observation.AlbumArtist)
+            && !string.Equals(observation.AlbumArtist, observation.Artist, StringComparison.OrdinalIgnoreCase))
+        {
+            lines.Add($"Album artist: {observation.AlbumArtist}");
+        }
+        if (!string.IsNullOrWhiteSpace(observation.Album))
+        {
+            lines.Add(observation.Album);
+        }
+        var facts = new List<string>();
+        if (observation.TrackNumber is > 0) facts.Add($"Track {observation.TrackNumber.Value}");
+        if (observation.ReleaseYear is >= 1000 and <= 9999) facts.Add(observation.ReleaseYear.Value.ToString(CultureInfo.InvariantCulture));
+        if (facts.Count > 0) lines.Add(string.Join(" · ", facts));
+        return string.Join(Environment.NewLine, lines);
     }
 
     private static void SetArtwork(Image image, TextBlock fallback, string? artworkPath)
@@ -97,11 +143,73 @@ public sealed partial class MainWindow : Window
 
         foreach (var play in plays)
         {
-            var label = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}";
-            RecentActivityList.Children.Add(new TextBlock { Text = label });
-            HistoryList.Children.Add(new TextBlock { Text = label });
+            AddPlayRow(RecentActivityList, play);
+            AddPlayRow(HistoryList, play);
         }
     }
+
+    private static void AddPlayRow(Panel target, RecentPlay play)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 12, Padding = new Thickness(4) };
+        var artFrame = new Grid { Width = 56, Height = 56 };
+        var image = new Image { Width = 56, Height = 56, Stretch = Stretch.UniformToFill, Visibility = Visibility.Collapsed };
+        var fallback = new TextBlock { Text = "♪", FontSize = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+        artFrame.Children.Add(image);
+        artFrame.Children.Add(fallback);
+        SetArtwork(image, fallback, play.ArtworkPath);
+        row.Children.Add(artFrame);
+
+        var details = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
+        details.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}", FontSize = 15, TextWrapping = TextWrapping.Wrap });
+        if (!string.IsNullOrWhiteSpace(play.Album))
+            details.Children.Add(new TextBlock { Text = play.Album, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+        if (!string.IsNullOrWhiteSpace(play.AlbumArtist) && !string.Equals(play.AlbumArtist, play.Artist, StringComparison.OrdinalIgnoreCase))
+            details.Children.Add(new TextBlock { Text = $"Album artist: {play.AlbumArtist}", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+        var facts = new List<string>();
+        if (play.TrackNumber is > 0) facts.Add($"Track {play.TrackNumber.Value}");
+        if (play.ReleaseYear is >= 1000 and <= 9999) facts.Add(play.ReleaseYear.Value.ToString(CultureInfo.InvariantCulture));
+        if (facts.Count > 0) details.Children.Add(new TextBlock { Text = string.Join(" · ", facts), FontSize = 12 });
+        details.Children.Add(new TextBlock { Text = play.EligibleUtc is not null ? "Eligible for scrobbling" : "Saved locally · not scrobble-eligible yet", FontSize = 12 });
+        row.Children.Add(details);
+        target.Children.Add(row);
+    }
+
+    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var settingsItem = AppNavigationView.MenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, "settings", StringComparison.Ordinal));
+        if (settingsItem is not null)
+        {
+            AppNavigationView.SelectedItem = settingsItem;
+            return;
+        }
+        HomeView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Visible;
+    }
+
+    private async void SaveLastFmCredentialsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var apiKey = LastFmApiKeyInput.Text?.Trim();
+        var apiSecret = LastFmApiSecretInput.Password;
+        if (string.IsNullOrWhiteSpace(apiKey) || string.IsNullOrWhiteSpace(apiSecret))
+        {
+            SetLastFmCredentialsStatus("Enter both the API key and shared secret.");
+            return;
+        }
+
+        if (LastFmApiCredentialsSaveRequested is null)
+        {
+            SetLastFmCredentialsStatus("Scrobblix is not ready to save credentials. Restart the app and try again.");
+            return;
+        }
+
+        await LastFmApiCredentialsSaveRequested.Invoke(apiKey, apiSecret);
+        LastFmApiKeyInput.Text = string.Empty;
+        LastFmApiSecretInput.Password = string.Empty;
+    }
+
+    public void SetLastFmCredentialsStatus(string message) => LastFmCredentialsStatusText.Text = message;
 
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
