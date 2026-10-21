@@ -6,7 +6,7 @@
 > **Last updated:** 2026-08-01
 
 
-Every screen must define purpose, entry points, data dependencies, states, actions, accessibility, and diagnostics.
+Every screen must define purpose, entry points, data dependencies, states, actions, accessibility, and diagnostics. The current UI exposes local Statistics and searchable recent History; advanced timeline/detail actions remain tracked in the prioritized backlog.
 
 ## Screen inventory
 

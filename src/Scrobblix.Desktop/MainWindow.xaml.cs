@@ -17,6 +17,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
+    private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
 
     public event Action<bool>? TrackingModeChanged;
 
@@ -211,19 +212,77 @@ public sealed partial class MainWindow : Window
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
     {
         RecentActivityList.Children.Clear();
-        HistoryList.Children.Clear();
         if (plays.Count == 0)
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
-            HistoryList.Children.Add(new TextBlock { Text = "No listening sessions recorded yet." });
             return;
         }
+        foreach (var play in plays) AddPlayRow(RecentActivityList, play);
+    }
 
-        foreach (var play in plays)
+    public void SetHistoryPage(IReadOnlyList<RecentPlay> plays)
+    {
+        _historyRecords = plays;
+        RenderHistory();
+    }
+
+    private void HistorySearchInput_TextChanged(object sender, TextChangedEventArgs args) => RenderHistory();
+
+    private void RenderHistory()
+    {
+        if (HistoryList is null || HistorySearchInput is null || HistoryResultCountText is null) return;
+        HistoryList.Children.Clear();
+        var query = HistorySearchInput.Text?.Trim();
+        IEnumerable<RecentPlay> filtered = string.IsNullOrWhiteSpace(query)
+            ? _historyRecords
+            : _historyRecords.Where(play => ContainsIgnoreCase(play.Artist, query)
+                || ContainsIgnoreCase(play.Title, query)
+                || ContainsIgnoreCase(play.Album, query)
+                || ContainsIgnoreCase(play.AlbumArtist, query));
+        var filteredRows = filtered.ToArray();
+        HistoryResultCountText.Text = string.IsNullOrWhiteSpace(query)
+            ? $"Showing {_historyRecords.Count:N0} most recent session(s) (maximum 500 loaded)."
+            : $"Showing {filteredRows.Length:N0} of {_historyRecords.Count:N0} loaded session(s).";
+        foreach (var play in filteredRows) AddPlayRow(HistoryList, play);
+        if (filteredRows.Length == 0)
         {
-            AddPlayRow(RecentActivityList, play);
-            AddPlayRow(HistoryList, play);
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(query) ? "No listening sessions recorded yet." : "No local sessions match this search.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string query) =>
+        value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private async void ExportHistoryCsvButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (_historyRecords.Count == 0)
+        {
+            HistoryResultCountText.Text = "There are no local history sessions to export yet.";
+            return;
+        }
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"scrobblix-history-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("CSV file", new List<string> { ".csv" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await global::Windows.Storage.FileIO.WriteTextAsync(file, HistoryCsvExporter.Export(_historyRecords));
+            HistoryResultCountText.Text = $"Exported {_historyRecords.Count:N0} recent session(s) to {file.Name}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            HistoryResultCountText.Text = $"CSV export failed ({exception.GetType().Name}). Check the selected folder's permissions and try again.";
+            DiagnosticLogRequested?.Invoke($"History CSV export failed; exception={exception.GetType().Name}.");
         }
     }
 
@@ -318,6 +377,7 @@ public sealed partial class MainWindow : Window
         var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
+        StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
         QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
@@ -330,6 +390,27 @@ public sealed partial class MainWindow : Window
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
+    }
+
+    public void SetStatisticsSummary(ListeningStatistics summary)
+    {
+        StatisticsSessionsText.Text = summary.TotalSessionCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsListeningText.Text = FormatListeningTime(summary.ConfirmedListeningMilliseconds);
+        StatisticsEligibleText.Text = summary.EligibleSessionCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsAcceptedText.Text = summary.AcceptedScrobbleCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsTopArtistsList.Children.Clear();
+        if (summary.TopArtists.Count == 0)
+        {
+            StatisticsTopArtistsList.Children.Add(new TextBlock { Text = "No artist totals are available yet." });
+            return;
+        }
+        foreach (var artist in summary.TopArtists)
+        {
+            var row = new StackPanel { Spacing = 3 };
+            row.Children.Add(new TextBlock { Text = artist.Artist, FontSize = 15 });
+            row.Children.Add(new TextBlock { Text = $"{artist.PlayCount:N0} session(s) · {FormatListeningTime(artist.ConfirmedListeningMilliseconds)} confirmed", FontSize = 12 });
+            StatisticsTopArtistsList.Children.Add(row);
+        }
     }
 
     public void SetTodaySummary(TodaySummary summary)

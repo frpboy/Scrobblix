@@ -251,6 +251,24 @@ Assert(todaySummary.DetectedSessionCount >= 1
     && todaySummary.ConfirmedListeningMilliseconds >= 150_000,
     "Today's dashboard summary projects session count, eligibility, accepted scrobbles, and confirmed listening time from SQLite.");
 
+var listeningStatistics = await new SqliteStatisticsReader(connectionString).GetAsync(CancellationToken.None);
+Assert(listeningStatistics.TotalSessionCount >= 3
+    && listeningStatistics.EligibleSessionCount >= 3
+    && listeningStatistics.AcceptedScrobbleCount >= 1
+    && listeningStatistics.ConfirmedListeningMilliseconds >= 450_000
+    && listeningStatistics.TopArtists.Count > 0,
+    "Statistics are calculated from persisted listening sessions and accepted Last.fm actions.");
+
+var csvTest = HistoryCsvExporter.Export(new[]
+{
+    new RecentPlay("csv-test", observation.ObservedAtUtc, "=SUM(1,1)", "Track ""Quoted""", "Album, One",
+        180_000, 90_000, null, null),
+});
+Assert(csvTest.Contains("'=SUM(1,1)", StringComparison.Ordinal)
+    && csvTest.Contains("\"Track \"\"Quoted\"\"", StringComparison.Ordinal)
+    && csvTest.StartsWith("started_utc,artist,title", StringComparison.Ordinal),
+    "History CSV export quotes separators/quotes and guards spreadsheet formula injection.");
+
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
 {
