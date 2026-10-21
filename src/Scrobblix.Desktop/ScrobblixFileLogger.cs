@@ -67,7 +67,7 @@ public sealed class ScrobblixFileLogger
         normalized = Regex.Replace(normalized,
             @"(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)\s*[=:]\s*[^&\s,;]+",
             "$1=[REDACTED]");
-        normalized = Regex.Replace(normalized, @"(?i)https://www\.last\.fm/api/auth/\\?[^\s]+", "[AUTHORIZATION_URL_REDACTED]");
+        normalized = Regex.Replace(normalized, @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+", "[AUTHORIZATION_URL_REDACTED]");
         return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
     }
 
