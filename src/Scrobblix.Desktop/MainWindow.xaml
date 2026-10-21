@@ -51,9 +51,9 @@
                                 <TextBlock Text="No artwork" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
                             </Border>
                             <StackPanel Spacing="6" VerticalAlignment="Center">
-                                <TextBlock Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
-                                <TextBlock Text="Listening for supported media through Windows media controls." TextWrapping="Wrap" />
-                                <TextBlock Text="Source: not detected" Style="{StaticResource CaptionTextBlockStyle}" />
+                                <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
+                                <TextBlock x:Name="CurrentTrackDetail" Text="Listening for supported media through Windows media controls." TextWrapping="Wrap" />
+                                <TextBlock x:Name="CurrentTrackSource" Text="Source: not detected" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
                         </StackPanel>
                         <Border Padding="16" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">

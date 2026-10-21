@@ -42,6 +42,8 @@ public partial class App : Microsoft.UI.Xaml.Application
                 return;
             }
 
+            _window.SetCurrentPlayback(observation);
+
             var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
             var result = await ingestion.IngestAsync(observation, CancellationToken.None);
             _window.SetStartupStatus(
