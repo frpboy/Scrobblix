@@ -5,6 +5,9 @@ using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using Scrobblix.Application.Abstractions;
+using Scrobblix.Application.Providers;
+using Scrobblix.Infrastructure.Providers;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
@@ -40,6 +43,122 @@ public partial class App : Microsoft.UI.Xaml.Application
             var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
+
+            const string lastFmApiKeyResource = "Scrobblix.LastFm.ApiKey";
+            const string lastFmApiSecretResource = "Scrobblix.LastFm.ApiSecret";
+            const string lastFmApplicationAccount = "application";
+            const string lastFmSessionResource = "Scrobblix.LastFm";
+            var credentialStore = new WindowsCredentialStore();
+            var lastFmHttpClient = new HttpClient();
+            var lastFmApiKey = await credentialStore.GetAsync(lastFmApiKeyResource, lastFmApplicationAccount, CancellationToken.None);
+            var lastFmApiSecret = await credentialStore.GetAsync(lastFmApiSecretResource, lastFmApplicationAccount, CancellationToken.None);
+            LastFmDesktopAuthenticator? lastFmAuthenticator =
+                !string.IsNullOrWhiteSpace(lastFmApiKey) && !string.IsNullOrWhiteSpace(lastFmApiSecret)
+                    ? new LastFmDesktopAuthenticator(lastFmHttpClient, lastFmApiKey, lastFmApiSecret, credentialStore)
+                    : null;
+            var providerAccountStore = new SqliteProviderAccountStore(connectionString);
+            string? pendingLastFmToken = null;
+
+            if (lastFmAuthenticator is null)
+            {
+                _window.SetLastFmCredentialsStatus("API credentials are not configured. Create a Last.fm API application, then save its key and shared secret here.");
+                _window.SetLastFmStatus("Configure Last.fm API credentials before connecting your account.");
+            }
+            else
+            {
+                _window.SetLastFmCredentialsStatus("API key and shared secret are stored in Windows Credential Locker.");
+                var savedAccount = await providerAccountStore.GetConnectedAsync("lastfm", CancellationToken.None);
+                if (savedAccount is not null)
+                {
+                    var savedSession = await credentialStore.GetAsync(savedAccount.CredentialResource, savedAccount.UserName, CancellationToken.None);
+                    if (!string.IsNullOrWhiteSpace(savedSession))
+                    {
+                        _window.SetLastFmStatus($"Connected as {savedAccount.UserName}.", isConnected: true);
+                    }
+                    else
+                    {
+                        await providerAccountStore.UpsertAsync(savedAccount with { IsConnected = false }, CancellationToken.None);
+                        _window.SetLastFmStatus("The saved Last.fm session is missing. Reconnect your account.");
+                    }
+                }
+                else
+                {
+                    _window.SetLastFmStatus("Not connected. Connect a Last.fm account to enable scrobbling.");
+                }
+            }
+
+            _window.LastFmApiCredentialsSaveRequested += async (apiKey, apiSecret) =>
+            {
+                try
+                {
+                    await credentialStore.StoreAsync(lastFmApiKeyResource, lastFmApplicationAccount, apiKey, CancellationToken.None);
+                    await credentialStore.StoreAsync(lastFmApiSecretResource, lastFmApplicationAccount, apiSecret, CancellationToken.None);
+                    lastFmAuthenticator = new LastFmDesktopAuthenticator(lastFmHttpClient, apiKey, apiSecret, credentialStore);
+                    _window.SetLastFmCredentialsStatus("API key and shared secret saved in Windows Credential Locker.");
+                    _window.SetLastFmStatus("API credentials saved. Connect your Last.fm account next.");
+                }
+                catch (Exception exception)
+                {
+                    _window.SetLastFmCredentialsStatus($"Could not save the API credentials: {exception.Message}");
+                }
+            };
+
+            _window.LastFmConnectRequested += async () =>
+            {
+                if (lastFmAuthenticator is null)
+                {
+                    _window.SetLastFmStatus("Save your Last.fm API key and shared secret in Settings first.");
+                    return;
+                }
+
+                try
+                {
+                    _window.SetLastFmStatus("Requesting Last.fm authorization...");
+                    var authorization = await lastFmAuthenticator.BeginAsync(CancellationToken.None);
+                    pendingLastFmToken = authorization.Token;
+                    Process.Start(new ProcessStartInfo(authorization.AuthorizationUri.AbsoluteUri) { UseShellExecute = true });
+                    _window.SetLastFmStatus("Approve Scrobblix in your browser, return here, then choose Finish authorization.", awaitingApproval: true);
+                }
+                catch (Exception exception)
+                {
+                    _window.SetLastFmStatus($"Could not start Last.fm authorization: {exception.Message}");
+                }
+            };
+
+            _window.LastFmCompleteAuthorizationRequested += async () =>
+            {
+                if (lastFmAuthenticator is null)
+                {
+                    _window.SetLastFmStatus("Save your Last.fm API key and shared secret in Settings first.");
+                    return;
+                }
+
+                if (string.IsNullOrWhiteSpace(pendingLastFmToken))
+                {
+                    _window.SetLastFmStatus("Start Connect Last.fm first, then approve access in the browser.");
+                    return;
+                }
+
+                try
+                {
+                    var session = await lastFmAuthenticator.CompleteAsync(pendingLastFmToken, CancellationToken.None);
+                    await providerAccountStore.UpsertAsync(
+                        new ProviderAccount(
+                            $"lastfm:{session.UserName.ToLowerInvariant()}",
+                            "lastfm",
+                            session.UserName,
+                            lastFmSessionResource,
+                            true,
+                            DateTimeOffset.UtcNow),
+                        CancellationToken.None);
+                    pendingLastFmToken = null;
+                    _window.SetLastFmStatus($"Connected as {session.UserName}.", isConnected: true);
+                }
+                catch (Exception exception)
+                {
+                    _window.SetLastFmStatus($"Last.fm authorization did not complete: {exception.Message}", awaitingApproval: true);
+                }
+            };
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
             var recentHistory = await new SqliteHistoryReader(connectionString)
