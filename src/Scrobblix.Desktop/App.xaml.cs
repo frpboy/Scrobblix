@@ -96,8 +96,8 @@ public partial class App : Microsoft.UI.Xaml.Application
             void StartTracking()
             {
                 trackingCancellation?.Cancel();
-                trackingCancellation = new CancellationTokenSource();
-                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token, metadataEnricher, localPlayStore, metadataStarted, applicationCancellation.Token);
+                trackingCancellation = CancellationTokenSource.CreateLinkedTokenSource(applicationCancellation.Token);
+                _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, metadataEnricher, localPlayStore, metadataStarted, trackingCancellation.Token);
                 _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token, metadataEnricher, localPlayStore, metadataStarted, applicationCancellation.Token);
             }
 
@@ -362,11 +362,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
-        CancellationToken cancellationToken,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
         ConcurrentDictionary<string, byte> metadataStarted,
-        CancellationToken applicationCancellationToken)
+        CancellationToken cancellationToken)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         try
@@ -381,7 +380,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
                     window.DispatcherQueue.TryEnqueue(() => window.SetBrowserCompanionObservation(observation.SourceName));
-                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window, applicationCancellationToken);
+                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window, cancellationToken);
                     if (trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
@@ -399,11 +398,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
         MainWindow window,
-        CancellationToken cancellationToken,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
         ConcurrentDictionary<string, byte> metadataStarted,
-        CancellationToken applicationCancellationToken)
+        CancellationToken cancellationToken)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
         while (!cancellationToken.IsCancellationRequested)
@@ -441,7 +439,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
-                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window, applicationCancellationToken);
+                    ScheduleMetadataEnrichment(observation, trackingStatus, metadataEnricher, localPlayStore, metadataStarted, connectionString, window, cancellationToken);
                     if (trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);
@@ -508,9 +506,11 @@ public partial class App : Microsoft.UI.Xaml.Application
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
+                metadataStarted.TryRemove(jobKey, out _);
             }
             catch (Exception exception)
             {
+                metadataStarted.TryRemove(jobKey, out _);
                 Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
             }
         }, cancellationToken);
