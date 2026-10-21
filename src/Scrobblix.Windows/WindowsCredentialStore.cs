@@ -5,17 +5,14 @@ namespace Scrobblix.Windows;
 
 public sealed class WindowsCredentialStore : ICredentialStore
 {
+    private const int NotFoundHResult = unchecked((int)0x80070490);
     private readonly PasswordVault _vault = new();
 
-    public Task StoreAsync(string resource, string userName, string secret, CancellationToken cancellationToken)
+    public async Task StoreAsync(string resource, string userName, string secret, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        ArgumentException.ThrowIfNullOrWhiteSpace(resource);
-        ArgumentException.ThrowIfNullOrWhiteSpace(userName);
-        ArgumentException.ThrowIfNullOrWhiteSpace(secret);
-        Delete(resource, userName);
+        await DeleteAsync(resource, userName, cancellationToken);
         _vault.Add(new PasswordCredential(resource, userName, secret));
-        return Task.CompletedTask;
     }
 
     public Task<string?> GetAsync(string resource, string userName, CancellationToken cancellationToken)
@@ -27,7 +24,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
             credential.RetrievePassword();
             return Task.FromResult<string?>(credential.Password);
         }
-        catch (Exception exception) when (exception.HResult == unchecked((int)0x80070490))
+        catch (Exception exception) when (exception.HResult == NotFoundHResult)
         {
             return Task.FromResult<string?>(null);
         }
@@ -36,13 +33,14 @@ public sealed class WindowsCredentialStore : ICredentialStore
     public Task DeleteAsync(string resource, string userName, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        Delete(resource, userName);
-        return Task.CompletedTask;
-    }
+        try
+        {
+            _vault.Remove(_vault.Retrieve(resource, userName));
+        }
+        catch (Exception exception) when (exception.HResult == NotFoundHResult)
+        {
+        }
 
-    private void Delete(string resource, string userName)
-    {
-        try { _vault.Remove(_vault.Retrieve(resource, userName)); }
-        catch (Exception exception) when (exception.HResult == unchecked((int)0x80070490)) { }
+        return Task.CompletedTask;
     }
 }

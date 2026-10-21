@@ -15,6 +15,10 @@ public sealed partial class MainWindow : Window
 
     public event Action<bool>? TrackingModeChanged;
 
+    public event Func<Task>? ConnectLastFmRequested;
+
+    public event Func<Task>? CompleteLastFmRequested;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -87,6 +91,57 @@ public sealed partial class MainWindow : Window
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
+    }
+
+    public void SetLastFmUnavailable()
+    {
+        LastFmStatusText.Text = "Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.";
+        ConnectLastFmButton.IsEnabled = false;
+        CompleteLastFmButton.IsEnabled = false;
+    }
+
+    public void SetLastFmReadyToConnect()
+    {
+        LastFmStatusText.Text = "Not connected. Select Connect Last.fm to approve access in your browser.";
+        ConnectLastFmButton.IsEnabled = true;
+        CompleteLastFmButton.IsEnabled = false;
+    }
+
+    public void SetLastFmAuthorizationWaiting()
+    {
+        LastFmStatusText.Text = "Waiting for approval in your browser. Return here and select Finish approval.";
+        ConnectLastFmButton.IsEnabled = false;
+        CompleteLastFmButton.IsEnabled = true;
+    }
+
+    public void SetLastFmConnected(string userName)
+    {
+        LastFmStatusText.Text = $"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.";
+        ConnectLastFmButton.IsEnabled = false;
+        CompleteLastFmButton.IsEnabled = false;
+    }
+
+    public void SetLastFmConnectionError()
+    {
+        LastFmStatusText.Text = "Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.";
+        ConnectLastFmButton.IsEnabled = true;
+        CompleteLastFmButton.IsEnabled = false;
+    }
+
+    private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (ConnectLastFmRequested is not null)
+        {
+            await ConnectLastFmRequested.Invoke();
+        }
+    }
+
+    private async void CompleteLastFmButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (CompleteLastFmRequested is not null)
+        {
+            await CompleteLastFmRequested.Invoke();
+        }
     }
 
     private void TrackingToggleButton_Click(object sender, RoutedEventArgs args)

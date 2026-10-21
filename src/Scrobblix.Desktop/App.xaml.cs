@@ -9,6 +9,8 @@ using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 using Scrobblix.Application.Ingestion;
+using Scrobblix.Application.Queue;
+using Scrobblix.Infrastructure.Providers;
 using Scrobblix.Infrastructure.Storage;
 using Scrobblix.Infrastructure.Time;
 using Scrobblix.Windows;
@@ -28,7 +30,12 @@ public partial class App : Microsoft.UI.Xaml.Application
     {
         _window = new MainWindow();
         CancellationTokenSource? trackingCancellation = null;
-        _window.Closed += (_, _) => trackingCancellation?.Cancel();
+        var applicationCancellation = new CancellationTokenSource();
+        _window.Closed += (_, _) =>
+        {
+            trackingCancellation?.Cancel();
+            applicationCancellation.Cancel();
+        };
         _window.Activate();
 
         try
@@ -48,8 +55,13 @@ public partial class App : Microsoft.UI.Xaml.Application
             var queueSummary = await new SqliteQueueReader(connectionString)
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
+            var accountStore = new SqliteProviderAccountStore(connectionString);
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
-            var tracking = new PlaybackTrackingService(new SqliteLocalPlayStore(connectionString));
+            var tracking = new PlaybackTrackingService(
+                new ProviderAwareLocalPlayStore(
+                    new SqliteLocalPlayStore(connectionString),
+                    new SqliteEligiblePlayStore(connectionString),
+                    accountStore));
             var trackingClock = Stopwatch.StartNew();
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
@@ -83,10 +95,152 @@ public partial class App : Microsoft.UI.Xaml.Application
                 }
             };
             StartTracking();
+
+            ConfigureLastFm(connectionString, accountStore, applicationCancellation.Token);
         }
         catch (Exception exception)
         {
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
+        }
+    }
+
+    private void ConfigureLastFm(string connectionString, SqliteProviderAccountStore accountStore, CancellationToken cancellationToken)
+    {
+        if (!LastFmRuntimeConfiguration.TryCreate(
+                Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_KEY"),
+                Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_API_SECRET"),
+                out var configuration))
+        {
+            _window!.SetLastFmUnavailable();
+            return;
+        }
+
+        var credentialStore = new WindowsCredentialStore();
+        var client = new HttpClient();
+        var authenticator = new LastFmDesktopAuthenticator(client, configuration.ApiKey, configuration.ApiSecret, credentialStore);
+        var provider = new LastFmScrobbleProvider(client, configuration.ApiKey, configuration.ApiSecret);
+        var processor = new ProviderActionProcessor(new SqliteProviderActionStore(connectionString), provider);
+        LastFmAuthorization? authorization = null;
+
+        _window!.ConnectLastFmRequested += async () =>
+        {
+            try
+            {
+                var pendingAuthorization = await authenticator.BeginAsync(cancellationToken);
+                authorization = pendingAuthorization;
+                if (!await global::Windows.System.Launcher.LaunchUriAsync(pendingAuthorization.AuthorizationUri))
+                {
+                    _window.SetLastFmConnectionError();
+                    return;
+                }
+
+                _window.SetLastFmAuthorizationWaiting();
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+                _window.SetLastFmConnectionError();
+            }
+        };
+        _window.CompleteLastFmRequested += async () =>
+        {
+            if (authorization is null)
+            {
+                _window.SetLastFmConnectionError();
+                return;
+            }
+
+            try
+            {
+                var session = await authenticator.CompleteAsync(authorization.Token, cancellationToken);
+                await accountStore.UpsertAsync(
+                    new Scrobblix.Application.Providers.ProviderAccount(
+                        $"lastfm:{session.UserName}",
+                        "lastfm",
+                        session.UserName,
+                        LastFmDesktopAuthenticator.CredentialResource,
+                        true,
+                        DateTimeOffset.UtcNow),
+                    cancellationToken);
+                authorization = null;
+                _window.SetLastFmConnected(session.UserName);
+                await RefreshDashboardAsync(_window, connectionString, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+                _window.SetLastFmConnectionError();
+            }
+        };
+
+        _ = ProcessProviderQueueUntilClosedAsync(
+            processor,
+            accountStore,
+            credentialStore,
+            _window,
+            connectionString,
+            cancellationToken);
+        _ = SetLastFmInitialStateAsync(accountStore, credentialStore, cancellationToken);
+    }
+
+    private async Task SetLastFmInitialStateAsync(
+        SqliteProviderAccountStore accountStore,
+        WindowsCredentialStore credentialStore,
+        CancellationToken cancellationToken)
+    {
+        var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
+        if (account is null)
+        {
+            _window!.SetLastFmReadyToConnect();
+            return;
+        }
+
+        var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
+        if (string.IsNullOrWhiteSpace(sessionKey))
+        {
+            _window!.SetLastFmConnectionError();
+            return;
+        }
+
+        _window!.SetLastFmConnected(account.UserName);
+    }
+
+    private static async Task ProcessProviderQueueUntilClosedAsync(
+        ProviderActionProcessor processor,
+        SqliteProviderAccountStore accountStore,
+        WindowsCredentialStore credentialStore,
+        MainWindow window,
+        string connectionString,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
+                if (account is not null)
+                {
+                    var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
+                    if (!string.IsNullOrWhiteSpace(sessionKey)
+                        && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                    {
+                        await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                    }
+                }
+
+                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception)
+        {
+            window.DispatcherQueue.TryEnqueue(window.SetLastFmConnectionError);
         }
     }
 

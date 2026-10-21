@@ -14,7 +14,7 @@ public sealed class LastFmDesktopAuthenticator(
     ICredentialStore credentialStore)
 {
     private const string Endpoint = "https://ws.audioscrobbler.com/2.0/";
-    private const string CredentialResource = "Scrobblix.LastFm";
+    public const string CredentialResource = "Scrobblix.LastFm";
 
     public async Task<LastFmAuthorization> BeginAsync(CancellationToken cancellationToken)
     {

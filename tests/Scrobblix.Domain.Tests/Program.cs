@@ -150,6 +150,8 @@ var invalidSignatureResult = (ProviderSubmissionResult)mapErrorMethod.Invoke(nul
 var temporaryErrorResult = (ProviderSubmissionResult)mapErrorMethod.Invoke(null, [16])!;
 Assert(!invalidSignatureResult.Accepted && invalidSignatureResult.ReasonCode == ReasonCodes.Provider.InvalidSignature && !invalidSignatureResult.IsTransient, "Last.fm invalid signatures are permanent provider failures.");
 Assert(!temporaryErrorResult.Accepted && temporaryErrorResult.IsTransient, "Last.fm temporary service errors are retryable.");
+Assert(LastFmRuntimeConfiguration.TryCreate("development-key", "development-secret", out var runtimeConfiguration) && runtimeConfiguration is not null, "Last.fm runtime configuration accepts an externally supplied API key and secret.");
+Assert(!LastFmRuntimeConfiguration.TryCreate("development-key", null, out _), "Last.fm runtime configuration refuses partial credentials instead of attempting unauthenticated provider work.");
 
 var credentials = new RecordingCredentialStore();
 var authHandler = new SequenceHttpHandler("{\"token\":\"request-token\"}", "{\"session\":{\"name\":\"listener\",\"key\":\"session-key\"}}");
@@ -226,6 +228,11 @@ Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, Loca
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Count == 3, "Eligible local sessions are persisted to the same local history read model.");
+var queuedEligibleStore = new RecordingEligiblePlayStore();
+var connectedAccountStore = new RecordingProviderAccountStore(account);
+var providerAwareLocalPlayStore = new ProviderAwareLocalPlayStore(new RecordingLocalPlayStore(), queuedEligibleStore, connectedAccountStore);
+await providerAwareLocalPlayStore.UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
+Assert(queuedEligibleStore.QueueCount == 1, "An eligible play is atomically queued for the connected provider account instead of being duplicated in local-only storage.");
 File.Delete(databasePath);
 
 return;
@@ -293,6 +300,25 @@ sealed class RecordingLocalPlayStore : ILocalPlayStore
         StoredPlay = play;
         return Task.CompletedTask;
     }
+}
+
+sealed class RecordingEligiblePlayStore : IEligiblePlayStore
+{
+    public int QueueCount { get; private set; }
+
+    public Task<bool> TryPersistAndQueueAsync(LocalPlayRecord play, string provider, string accountId, DateTimeOffset queuedUtc, CancellationToken cancellationToken)
+    {
+        QueueCount++;
+        return Task.FromResult(true);
+    }
+}
+
+sealed class RecordingProviderAccountStore(ProviderAccount account) : IProviderAccountStore
+{
+    public Task UpsertAsync(ProviderAccount updatedAccount, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    public Task<ProviderAccount?> GetConnectedAsync(string provider, CancellationToken cancellationToken) =>
+        Task.FromResult<ProviderAccount?>(string.Equals(provider, account.Provider, StringComparison.Ordinal) ? account : null);
 }
 
 sealed class RecordingCredentialStore : ICredentialStore
