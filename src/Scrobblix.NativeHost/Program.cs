@@ -54,7 +54,7 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
             await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.host_not_connected" });
         }
     }
-    catch (JsonException)
+    catch (Exception exception) when (exception is JsonException or KeyNotFoundException or InvalidOperationException)
     {
         await WriteAsync(output, new { type = "error.v1", code = "extension.invalid_envelope" });
     }
@@ -66,7 +66,7 @@ static async Task<bool> ReadExactlyAsync(Stream stream, Memory<byte> buffer, Can
     while (offset < buffer.Length)
     {
         var read = await stream.ReadAsync(buffer[offset..], cancellationToken);
-        if (read == 0) return offset == 0;
+        if (read == 0) return false;
         offset += read;
     }
     return true;
