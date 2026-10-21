@@ -104,4 +104,70 @@ public sealed class SqliteHistoryReader(string connectionString)
 
         return new TodaySummary(sessionCount, eligibleCount, acceptedCount, confirmedMilliseconds);
     }
+
+    public async Task<ListeningStatistics> GetStatisticsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+
+        int totalSessions;
+        int eligiblePlays;
+        int uniqueArtists;
+        long confirmedMilliseconds;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT COUNT(*),
+                       COALESCE(SUM(CASE WHEN eligible_utc IS NOT NULL THEN 1 ELSE 0 END), 0),
+                       COUNT(DISTINCT NULLIF(TRIM(artist), '')),
+                       COALESCE(SUM(confirmed_played_ms), 0)
+                FROM plays;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            await reader.ReadAsync(cancellationToken);
+            totalSessions = reader.GetInt32(0);
+            eligiblePlays = reader.GetInt32(1);
+            uniqueArtists = reader.GetInt32(2);
+            confirmedMilliseconds = reader.GetInt64(3);
+        }
+
+        var thirtyDaysAgoUtc = DateTimeOffset.UtcNow.AddDays(-30).UtcDateTime
+            .ToString("O", CultureInfo.InvariantCulture);
+        int sessionsLast30Days;
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT COUNT(*) FROM plays WHERE started_utc >= $sinceUtc;";
+            command.Parameters.AddWithValue("$sinceUtc", thirtyDaysAgoUtc);
+            sessionsLast30Days = Convert.ToInt32(await command.ExecuteScalarAsync(cancellationToken), CultureInfo.InvariantCulture);
+        }
+
+        var topArtists = new List<TopArtistStatistic>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = """
+                SELECT artist, COUNT(*), COALESCE(SUM(confirmed_played_ms), 0)
+                FROM plays
+                WHERE artist IS NOT NULL AND TRIM(artist) <> ''
+                GROUP BY artist COLLATE NOCASE
+                ORDER BY COUNT(*) DESC, SUM(confirmed_played_ms) DESC, artist COLLATE NOCASE ASC
+                LIMIT 10;
+                """;
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                topArtists.Add(new TopArtistStatistic(
+                    reader.GetString(0),
+                    reader.GetInt32(1),
+                    reader.GetInt64(2)));
+            }
+        }
+
+        return new ListeningStatistics(
+            totalSessions,
+            eligiblePlays,
+            uniqueArtists,
+            confirmedMilliseconds,
+            sessionsLast30Days,
+            topArtists);
+    }
 }
