@@ -90,6 +90,63 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         catch (JsonException) { return new(false, ReasonCodes.Provider.ResponseInvalid, false); }
     }
 
+    public Task<ProviderSubmissionResult> LoveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
+        SendTrackLoveActionAsync("track.love", submission, cancellationToken);
+
+    public Task<ProviderSubmissionResult> UnloveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
+        SendTrackLoveActionAsync("track.unlove", submission, cancellationToken);
+
+    private async Task<ProviderSubmissionResult> SendTrackLoveActionAsync(
+        string method,
+        ScrobbleSubmission submission,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(submission.Artist);
+        ArgumentException.ThrowIfNullOrWhiteSpace(submission.Track);
+        ArgumentException.ThrowIfNullOrWhiteSpace(submission.SessionKey);
+        var parameters = new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["method"] = method,
+            ["api_key"] = apiKey,
+            ["sk"] = submission.SessionKey,
+            ["artist"] = submission.Artist,
+            ["track"] = submission.Track,
+            ["format"] = "json",
+        };
+        parameters["api_sig"] = Sign(parameters, apiSecret);
+
+        try
+        {
+            using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (!response.IsSuccessStatusCode)
+            {
+                return new(false, response.StatusCode == HttpStatusCode.TooManyRequests
+                    ? ReasonCodes.Provider.RateLimited
+                    : ReasonCodes.Provider.TemporaryUnavailable,
+                    true);
+            }
+
+            using var json = JsonDocument.Parse(payload);
+            return json.RootElement.TryGetProperty("error", out var error)
+                ? MapError(error.GetInt32())
+                : new(true, ReasonCodes.Provider.Accepted, false);
+        }
+        catch (HttpRequestException)
+        {
+            // Love/unlove set state idempotently, so retrying an ambiguous result is safe.
+            return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+        }
+        catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
+        {
+            return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+        }
+        catch (JsonException)
+        {
+            return new(false, ReasonCodes.Provider.ResponseInvalid, true);
+        }
+    }
+
     private static string Sign(IReadOnlyDictionary<string, string> parameters, string secret)
     {
         return LastFmRequestSigner.Sign(parameters, secret);
