@@ -6,6 +6,10 @@ using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
 using Scrobblix.Infrastructure.Storage;
 using Scrobblix.Application.Ingestion;
+using System.Reflection;
+using System.Security.Cryptography;
+using System.Text;
+using Scrobblix.Infrastructure.Providers;
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
@@ -115,6 +119,19 @@ var browserObservation = observation with
 var firstArbitration = arbitrator.Consider(observation);
 var browserArbitration = arbitrator.Consider(browserObservation);
 Assert(firstArbitration.IsAccepted && !browserArbitration.IsAccepted && browserArbitration.ReasonCode == ReasonCodes.Source.LowerPriorityObservation, "A lower-priority duplicate observation cannot replace the canonical source.");
+
+var signatureParameters = new Dictionary<string, string>
+{
+    ["api_key"] = "xxxxxxxx",
+    ["method"] = "auth.getSession",
+    ["token"] = "xxxxxxx",
+};
+var signMethod = typeof(LastFmScrobbleProvider).GetMethod("Sign", BindingFlags.NonPublic | BindingFlags.Static)!;
+var providerSignature = (string)signMethod.Invoke(null, [signatureParameters, "mysecret"])!;
+#pragma warning disable CA5351 // Last.fm requires MD5 for API request signing.
+var expectedLastFmSignature = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF8.GetBytes("api_keyxxxxxxxxmethodauth.getSessiontokenxxxxxxxmysecret")));
+#pragma warning restore CA5351
+Assert(providerSignature == expectedLastFmSignature, "Last.fm request signatures use the documented MD5 algorithm over sorted parameters and the shared secret.");
 
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
