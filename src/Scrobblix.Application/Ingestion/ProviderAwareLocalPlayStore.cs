@@ -33,4 +33,7 @@ public sealed class ProviderAwareLocalPlayStore(
 
     public Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken) =>
         UpsertAsync(play, cancellationToken);
+
+    public Task UpdateMetadataAsync(string playId, Scrobblix.Domain.Metadata.PlayMetadataEnrichment metadata, CancellationToken cancellationToken) =>
+        localPlayStore.UpdateMetadataAsync(playId, metadata, cancellationToken);
 }
