@@ -288,7 +288,7 @@ sealed class RecordingLocalPlayStore : ILocalPlayStore
 {
     public LocalPlayRecord? StoredPlay { get; private set; }
 
-    public Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken)
+    public Task UpsertAsync(LocalPlayRecord play, CancellationToken cancellationToken)
     {
         StoredPlay = play;
         return Task.CompletedTask;
