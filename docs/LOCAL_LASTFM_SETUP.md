@@ -1,50 +1,50 @@
-# Local Last.fm Setup (historical reference)
+# Local Last.fm Setup
 
-> The current desktop build uses the environment-variable setup in
-> [OWNER_SETUP_GUIDE.md](OWNER_SETUP_GUIDE.md), not the older in-app credential
-> form described below. Never put the shared secret in Git or chat.
-
-This guide configures Last.fm locally for Scrobblix. Never paste the shared secret or a Last.fm session key into chat, an issue, a screenshot, a log, or a Git-tracked file.
+This guide configures Last.fm directly in the Scrobblix Windows app. Never paste your shared secret or session key into chat, an issue, a screenshot, a log, or a Git-tracked file.
 
 ## 1. Create a Last.fm API application
 
 1. Sign in to Last.fm in your browser.
 2. Open the [Last.fm API application form](https://www.last.fm/api/account/create).
-3. Use these values:
-   - **Application name:** `Scrobblix`
-   - **Description:** `A privacy-first Windows listening companion that detects desktop and browser playback, keeps local listening history, and submits eligible plays to Last.fm.`
-4. Save the application and open its account/details page.
-5. Copy the API key and shared secret into a password manager temporarily. Treat the shared secret as a credential.
+3. Use the application name `Scrobblix` and a short description of the listening companion.
+4. Save the application and open its details page.
+5. Keep the API key and shared secret in a password manager until you are ready to enter them in Scrobblix.
 
-The API key and shared secret are different from your Last.fm username and password. Scrobblix must never ask for your Last.fm password.
+The API key and shared secret are not your Last.fm username and password. Scrobblix must never ask for your Last.fm password.
 
-## 2. Store the API credentials in Scrobblix
+## 2. Enter the API credentials in Scrobblix
 
-1. Build and launch the updated desktop app.
-2. Open **Settings**.
-3. Paste the API key into **API key** and the shared secret into **Shared secret**.
+1. Launch the updated Scrobblix Windows app.
+2. On **Home**, select **Configure API key / Login** in the Last.fm card, or select **Settings** in the left navigation.
+3. In **Last.fm API credentials**, paste the API key in **API key** and the shared secret in **Shared secret**.
 4. Select **Save API credentials securely**.
-5. Confirm that the app reports that the values were stored in Windows Credential Locker.
+5. Confirm the status says the API key and shared secret were saved in Windows Credential Locker.
 
-The app clears the input fields after the save operation. Do not add these values to the repository, an `.env` file, source code, or CI logs.
+Scrobblix clears the input fields after the save action. The credential values are stored locally under the current Windows user. Do not add them to an `.env` file, source code, repository, or CI logs. Environment variables named `SCROBBLIX_LASTFM_API_KEY` and `SCROBBLIX_LASTFM_API_SECRET` are still supported as a fallback for developer setups.
 
-## 3. Authorize your Last.fm account
+## 3. Sign in and authorize your Last.fm account
 
-1. In Settings, select **Connect Last.fm**.
-2. Scrobblix requests an authorization token and opens the Last.fm authorization page in your browser.
-3. Sign in to the Last.fm account you want to use and approve Scrobblix.
-4. Return to the desktop app and select **Finish authorization**.
-5. Confirm that Settings says **Connected as <username>**.
+1. In the same Settings section, select **Connect Last.fm**.
+2. Scrobblix requests a temporary authorization token and opens the Last.fm authorization page in your browser.
+3. Sign in to the Last.fm account whose listening history you want to update, then approve Scrobblix.
+4. Return to Scrobblix and select **Finish approval**.
+5. Confirm that the status says **Connected as <username>**.
 
-The browser approval and the final session exchange are separate steps. A successful browser approval alone does not mean the desktop app has saved the session key. Scrobblix stores that session key in Windows Credential Locker.
+Approval in the browser and the final session exchange in Scrobblix are separate steps. The session key is stored in Windows Credential Locker and is not written to the SQLite history database. **Disconnect** removes the locally saved session key and disconnects queue delivery without deleting local listening history.
 
-## 4. Test safely
+## 4. Artwork and metadata
 
-Use a separate Last.fm test account when possible. Before testing real playback, confirm the app is connected to that test account, then validate one eligible track and confirm that it appears only once in the account's Last.fm listening history. Continue with offline/reconnect and restart tests before using the main account.
+When a track is detected, Scrobblix first uses artwork and metadata supplied by Windows media controls or a supported browser source. If information is missing, it attempts a MusicBrainz release match and checks the Cover Art Archive. If a Last.fm API key is configured, Last.fm's public track information is used as an additional fallback. These lookups do not require a new paid subscription or a separate metadata API key.
 
-## Notes
+External results are best-effort: albums with ambiguous artist/release matches may remain without external artwork rather than showing the wrong cover. Artwork images are cached locally; SQLite stores the local file path and the metadata that was successfully resolved.
 
-- Scrobblix uses Last.fm's [desktop authentication flow](https://www.last.fm/api/desktopauth): request token, user approval in the browser, then session exchange in the app.
-- Last.fm request tokens expire after 60 minutes and can be used once to create a session. If the attempt becomes stale or fails, restart **Connect Last.fm** and authorize the new request.
-- API credentials and user session keys must remain outside Git. Review logs and screenshots before sharing diagnostics.
-- The current authentication UI does not, by itself, establish that the scrobble queue worker is running or that live submissions have passed end-to-end testing. Complete those checks before relying on Scrobblix for production listening history.
+## 5. Test safely
+
+Use a dedicated Last.fm test account when possible. After connecting it, play one eligible track and verify that it is submitted only once. Also test an offline period, a restart, a missing artwork case and a metadata lookup after saving the API key. Only switch to your main account after checking those results.
+
+## Reference
+
+- [Last.fm desktop authentication](https://www.last.fm/api/desktopauth)
+- [Last.fm track.getInfo](https://www.last.fm/api/show/track.getInfo)
+- [MusicBrainz Web Service rate limiting](https://musicbrainz.org/doc/MusicBrainz_API/Rate_Limiting)
+- [Cover Art Archive API](https://musicbrainz.org/doc/Cover_Art_Archive/API)
