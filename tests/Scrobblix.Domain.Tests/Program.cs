@@ -6,6 +6,9 @@ using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
 using Scrobblix.Infrastructure.Storage;
 using Scrobblix.Application.Ingestion;
+using Scrobblix.Application.Abstractions;
+using Scrobblix.Application.Providers;
+using Scrobblix.Application.Queue;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -144,6 +147,17 @@ Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == Obser
 var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "The provider action idempotency key prevents repeated queueing.");
+var actionStore = new SqliteProviderActionStore(connectionString);
+var lease = await actionStore.ClaimNextDueAsync("worker-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(lease is not null && lease.PlayId == "play-1" && lease.AttemptCount == 1, "A due provider action is leased exactly once before delivery.");
+await actionStore.CompleteAsync(lease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted, observation.ObservedAtUtc, CancellationToken.None);
+Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "An accepted provider action is not delivered again.");
+
+var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
+var recordingStore = new RecordingProviderActionStore(queuedLease);
+var processor = new ProviderActionProcessor(recordingStore, new AcceptingScrobbleProvider());
+Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
+Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
 File.Delete(databasePath);
 
 return;
@@ -154,4 +168,32 @@ static void Assert(bool condition, string message)
     {
         throw new InvalidOperationException(message);
     }
+}
+
+sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProviderActionStore
+{
+    private ProviderActionLease? _lease = lease;
+
+    public ProviderActionState? CompletedState { get; private set; }
+
+    public Task<ProviderActionLease?> ClaimNextDueAsync(string workerId, DateTimeOffset nowUtc, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    {
+        var next = _lease;
+        _lease = null;
+        return Task.FromResult(next);
+    }
+
+    public Task CompleteAsync(string actionId, ProviderActionState outcome, string reasonCode, DateTimeOffset completedUtc, CancellationToken cancellationToken)
+    {
+        CompletedState = outcome;
+        return Task.CompletedTask;
+    }
+}
+
+sealed class AcceptingScrobbleProvider : IScrobbleProvider
+{
+    public Task<ProviderSubmissionResult> UpdateNowPlayingAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => throw new NotSupportedException();
+
+    public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
+        Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
 }
