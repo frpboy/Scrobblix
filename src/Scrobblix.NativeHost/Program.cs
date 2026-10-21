@@ -2,11 +2,13 @@ using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
+using Scrobblix.NativeHost;
 
 const int maximumFrameBytes = 256 * 1024;
 var input = Console.OpenStandardInput();
 var output = Console.OpenStandardOutput();
 var lengthBuffer = new byte[sizeof(int)];
+var callerOrigin = args.FirstOrDefault(argument => argument.StartsWith("chrome-extension://", StringComparison.Ordinal));
 
 while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
 {
@@ -27,7 +29,8 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
     {
         using var message = JsonDocument.Parse(payload);
         var root = message.RootElement;
-        if (root.GetProperty("protocolVersion").GetInt32() != 1 ||
+        if (callerOrigin is null ||
+            root.GetProperty("protocolVersion").GetInt32() != 1 ||
             root.GetProperty("messageId").GetString() is not { Length: > 0 and <= 128 } messageId ||
             root.GetProperty("type").GetString() is not { Length: > 0 and <= 128 } type)
         {
@@ -38,9 +41,9 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
         {
             await WriteAsync(output, new { type = "pong.v1", messageId });
         }
-        else if (type != "playback.observation.v1")
+        else if (type != "playback.observation.v1" || !NativeHostCallerValidator.MatchesExtensionOrigin(callerOrigin, root))
         {
-            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.invalid_envelope" });
+            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.untrusted_sender" });
         }
         else if (await TryForwardToDesktopAsync(payload, CancellationToken.None))
         {

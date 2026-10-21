@@ -5,5 +5,6 @@
   <ItemGroup>
     <ProjectReference Include="../../src/Scrobblix.Domain/Scrobblix.Domain.csproj" />
     <ProjectReference Include="../../src/Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
+    <ProjectReference Include="../../src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj" />
   </ItemGroup>
 </Project>

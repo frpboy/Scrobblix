@@ -18,8 +18,15 @@ using System.Net;
 using System.Net.Http;
 using Microsoft.Data.Sqlite;
 using Scrobblix.Infrastructure.Providers;
+using Scrobblix.NativeHost;
+using System.Text.Json;
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
+
+using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
+using var mismatchedNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"different-extension"}""");
+Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement), "Native host forwarding accepts only an envelope matching the browser-provided extension origin.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement), "Native host forwarding rejects an envelope from a different extension identity.");
 Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
 
 var longTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 900_000, 240_000);
