@@ -52,7 +52,14 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             MapState(playback.PlaybackStatus),
             MetadataNormalizer.Normalize(media.Artist),
             MetadataNormalizer.Normalize(media.Title),
-            artworkPath);
+            artworkPath,
+            media.AlbumArtist,
+            media.TrackNumber > 0 ? checked((int)media.TrackNumber) : null,
+            null,
+            null,
+            null,
+            null,
+            artworkPath is null ? null : "windows-gsmtc");
     }
 
     private async Task<string?> TryCacheArtworkAsync(
