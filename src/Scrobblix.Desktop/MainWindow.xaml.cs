@@ -51,6 +51,7 @@ public sealed partial class MainWindow : Window
             ? "Artist unavailable"
             : observation.Artist;
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         var threshold = trackingStatus.Decision.ThresholdMilliseconds;
         EligibilityProgressBar.Value = threshold is > 0
