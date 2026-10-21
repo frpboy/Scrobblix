@@ -407,6 +407,12 @@ sealed class AcceptingScrobbleProvider : IScrobbleProvider
 
     public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
         Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+
+    public Task<ProviderSubmissionResult> LoveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
+        Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+
+    public Task<ProviderSubmissionResult> UnloveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
+        Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
 }
 
 sealed class SingleObservationSource(PlayObservation observation) : IPlaybackObservationSource
