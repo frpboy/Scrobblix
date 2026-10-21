@@ -66,6 +66,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetRecentHistory(recentHistory);
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
             _window.SetListeningStatistics(await historyReader.GetStatisticsAsync(CancellationToken.None));
+            _window.SetLovedTracks(await lovedTrackStore.GetLovedTracksAsync(200, CancellationToken.None));
             _window.HistoryRequested += async () =>
             {
                 try
@@ -83,11 +84,43 @@ public partial class App : Microsoft.UI.Xaml.Application
                     _window.DispatcherQueue.TryEnqueue(() => _window.SetStartupStatus("Local history could not be loaded. Open Diagnostics for details.", InfoBarSeverity.Warning));
                 }
             };
+            _window.TrackLoveRequested += async (playId, isLoved) =>
+            {
+                try
+                {
+                    var account = await accountStore.GetConnectedAsync("lastfm", applicationCancellation.Token);
+                    var result = await lovedTrackStore.SetLovedAsync(
+                        playId,
+                        isLoved,
+                        account?.Provider,
+                        account?.AccountId,
+                        DateTimeOffset.UtcNow,
+                        applicationCancellation.Token);
+                    logger.Info("LOVED_TRACK",
+                        $"Local love intent updated; track_key={(string.IsNullOrWhiteSpace(result.TrackKey) ? "(unavailable)" : result.TrackKey)}; play_id={playId}; is_loved={isLoved}; changed={result.Changed}; action_queued={result.ActionQueued}; connected={(account is not null)}; reason={result.Reason ?? "(none)"}.");
+                    _window.DispatcherQueue.TryEnqueue(() =>
+                        _window.SetStartupStatus(
+                            result.ActionQueued
+                                ? (isLoved ? "Loved locally; Last.fm sync is queued." : "Unlove saved locally; Last.fm sync is queued.")
+                                : (result.Reason ?? (isLoved ? "Track loved locally." : "Track un-loved locally.")),
+                            result.Reason is null ? InfoBarSeverity.Success : InfoBarSeverity.Informational));
+                    await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
+                }
+                catch (OperationCanceledException) when (applicationCancellation.IsCancellationRequested)
+                {
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("LOVED_TRACK", $"Could not update loved state; play_id={playId}; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                    _window.DispatcherQueue.TryEnqueue(() => _window.SetStartupStatus("The loved state could not be saved. Open Diagnostics for details.", InfoBarSeverity.Warning));
+                }
+            };
             var queueReader = new SqliteQueueReader(connectionString);
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
             var accountStore = new SqliteProviderAccountStore(connectionString);
+            var lovedTrackStore = new SqliteLovedTrackStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
             const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
             const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
@@ -156,7 +189,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             };
             StartTracking();
 
-            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, applicationCancellation.Token);
+            ConfigureLastFm(connectionString, accountStore, lovedTrackStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, applicationCancellation.Token);
         }
         catch (Exception exception)
         {
@@ -168,6 +201,7 @@ public partial class App : Microsoft.UI.Xaml.Application
     private void ConfigureLastFm(
         string connectionString,
         SqliteProviderAccountStore accountStore,
+        SqliteLovedTrackStore lovedTrackStore,
         WindowsCredentialStore credentialStore,
         string? initialApiKey,
         string? initialApiSecret,
@@ -288,15 +322,22 @@ public partial class App : Microsoft.UI.Xaml.Application
             {
                 logger.Info("LASTFM_AUTH", "Finishing the approved Last.fm authorization token exchange.");
                 var session = await authenticator.CompleteAsync(authorization.Token, cancellationToken);
+                var connectedAccountId = $"lastfm:{session.UserName.ToLowerInvariant()}";
                 await accountStore.UpsertAsync(
                     new Scrobblix.Application.Providers.ProviderAccount(
-                        $"lastfm:{session.UserName.ToLowerInvariant()}",
+                        connectedAccountId,
                         "lastfm",
                         session.UserName,
                         LastFmDesktopAuthenticator.CredentialResource,
                         true,
                         DateTimeOffset.UtcNow),
                     cancellationToken);
+                var loveActionsQueued = await lovedTrackStore.QueuePendingSyncAsync(
+                    "lastfm", connectedAccountId, DateTimeOffset.UtcNow, retryBlockedActions: true, cancellationToken);
+                if (loveActionsQueued > 0)
+                {
+                    logger.Info("LOVED_TRACK", $"Queued local love states after Last.fm authorization; count={loveActionsQueued}.");
+                }
                 authorization = null;
                 _window.SetLastFmConnected(session.UserName);
                 logger.Info("LASTFM", $"Account authorization completed; username={session.UserName}.");
@@ -340,6 +381,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         _ = ProcessProviderQueueUntilClosedAsync(
             () => processor,
             accountStore,
+            lovedTrackStore,
             credentialStore,
             _window,
             connectionString,
@@ -380,6 +422,7 @@ public partial class App : Microsoft.UI.Xaml.Application
     private static async Task ProcessProviderQueueUntilClosedAsync(
         Func<ProviderActionProcessor?> getProcessor,
         SqliteProviderAccountStore accountStore,
+        SqliteLovedTrackStore lovedTrackStore,
         WindowsCredentialStore credentialStore,
         MainWindow window,
         string connectionString,
@@ -406,10 +449,19 @@ public partial class App : Microsoft.UI.Xaml.Application
                     if (account is not null && processor is not null)
                     {
                         var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
-                        if (!string.IsNullOrWhiteSpace(sessionKey)
-                            && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                        if (!string.IsNullOrWhiteSpace(sessionKey))
                         {
-                            await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                            var loveActionsQueued = await lovedTrackStore.QueuePendingSyncAsync(
+                                account.Provider, account.AccountId, DateTimeOffset.UtcNow, retryBlockedActions: false, cancellationToken);
+                            if (loveActionsQueued > 0)
+                            {
+                                logger.Info("LOVED_TRACK", $"Reconciled local love states with Last.fm queue; count={loveActionsQueued}.");
+                            }
+
+                            if (await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                            {
+                                await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                            }
                         }
                     }
 
@@ -705,11 +757,13 @@ public partial class App : Microsoft.UI.Xaml.Application
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
+        var lovedTracks = await new SqliteLovedTrackStore(connectionString).GetLovedTracksAsync(200, cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
             window.SetRecentHistory(recentHistory);
             window.SetTodaySummary(todaySummary);
             window.SetListeningStatistics(statistics);
+            window.SetLovedTracks(lovedTracks);
             window.SetQueueSummary(queueSummary);
             window.SetQueueActions(queueActions);
         });
