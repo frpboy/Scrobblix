@@ -39,6 +39,56 @@ public sealed class SqliteQueueReader(string connectionString)
     }
 
 
+    public async Task<IReadOnlyList<LovedTrackSummary>> GetRecentLovedTracksAsync(int limit, CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT p.play_id, p.artist, p.title, p.album, p.artwork_path,
+                   a.action_type, a.state, a.attempt_count, a.last_reason_code, a.updated_utc
+            FROM provider_actions a
+            JOIN plays p ON p.play_id = a.play_id
+            WHERE a.provider = 'lastfm'
+              AND a.action_type IN ($love, $unlove)
+              AND a.action_id = (
+                  SELECT newer.action_id
+                  FROM provider_actions newer
+                  JOIN plays np ON np.play_id = newer.play_id
+                  WHERE newer.provider = a.provider
+                    AND newer.account_id = a.account_id
+                    AND newer.action_type IN ($love, $unlove)
+                    AND LOWER(TRIM(COALESCE(np.artist, ''))) = LOWER(TRIM(COALESCE(p.artist, '')))
+                    AND LOWER(TRIM(COALESCE(np.title, ''))) = LOWER(TRIM(COALESCE(p.title, '')))
+                  ORDER BY newer.created_utc DESC, newer.action_id DESC
+                  LIMIT 1
+              )
+            ORDER BY a.updated_utc DESC, a.action_id DESC
+            LIMIT $limit;
+            """;
+        command.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+        command.Parameters.AddWithValue("$unlove", (int)ProviderActionType.Unlove);
+        command.Parameters.AddWithValue("$limit", limit);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new List<LovedTrackSummary>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new LovedTrackSummary(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2),
+                reader.IsDBNull(3) ? null : reader.GetString(3),
+                reader.IsDBNull(4) ? null : reader.GetString(4),
+                (ProviderActionType)reader.GetInt32(5),
+                (ProviderActionState)reader.GetInt32(6),
+                reader.GetInt32(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                DateTimeOffset.Parse(reader.GetString(9), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)));
+        }
+        return result;
+    }
+
     public async Task<IReadOnlyList<QueueActionSummary>> GetRecentActionsAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);

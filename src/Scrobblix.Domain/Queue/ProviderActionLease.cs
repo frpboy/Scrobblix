@@ -10,4 +10,5 @@ public sealed record ProviderActionLease(
     string? Album,
     DateTimeOffset StartedUtc,
     int? DurationMilliseconds,
-    int AttemptCount);
+    int AttemptCount,
+    ProviderActionType ActionType = ProviderActionType.Scrobble);

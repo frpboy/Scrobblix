@@ -47,7 +47,7 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         await using var select = connection.CreateCommand();
         select.Transaction = transaction;
         select.CommandText = """
-            SELECT a.action_id, a.play_id, a.provider, a.account_id, p.artist, p.title, p.album, p.started_utc, p.duration_ms, a.attempt_count
+            SELECT a.action_id, a.play_id, a.provider, a.account_id, p.artist, p.title, p.album, p.started_utc, p.duration_ms, a.attempt_count, a.action_type
             FROM provider_actions a
             JOIN plays p ON p.play_id = a.play_id
             WHERE a.state IN ($pending, $retry) AND a.due_utc <= $now
@@ -75,7 +75,8 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
             reader.IsDBNull(6) ? null : reader.GetString(6),
             DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
             reader.IsDBNull(8) ? null : reader.GetInt32(8),
-            reader.GetInt32(9) + 1);
+            reader.GetInt32(9) + 1,
+            (ProviderActionType)reader.GetInt32(10));
         await reader.DisposeAsync();
 
         await using var update = connection.CreateCommand();
