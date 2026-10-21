@@ -65,10 +65,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             var lovedTrackStore = new SqliteLovedTrackStore(connectionString);
             var historyReader = new SqliteHistoryReader(connectionString);
             var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
+            _window.SetLovedTracks(await lovedTrackStore.GetLovedTracksAsync(200, CancellationToken.None));
             _window.SetRecentHistory(recentHistory);
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
             _window.SetListeningStatistics(await historyReader.GetStatisticsAsync(CancellationToken.None));
-            _window.SetLovedTracks(await lovedTrackStore.GetLovedTracksAsync(200, CancellationToken.None));
             _window.HistoryRequested += async () =>
             {
                 try
@@ -760,10 +760,10 @@ public partial class App : Microsoft.UI.Xaml.Application
         var lovedTracks = await new SqliteLovedTrackStore(connectionString).GetLovedTracksAsync(200, cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
+            window.SetLovedTracks(lovedTracks);
             window.SetRecentHistory(recentHistory);
             window.SetTodaySummary(todaySummary);
             window.SetListeningStatistics(statistics);
-            window.SetLovedTracks(lovedTracks);
             window.SetQueueSummary(queueSummary);
             window.SetQueueActions(queueActions);
         });
