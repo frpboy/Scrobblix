@@ -1,7 +1,6 @@
 using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
-using System.Net.Http.Headers;
 using System.Net.Sockets;
 using System.Security.Cryptography;
 using System.Text;
@@ -120,7 +119,8 @@ public sealed class TrackMetadataEnricher
             Normalize(observation.Artist),
             Normalize(observation.Title),
             Normalize(observation.Album),
-            Normalize(observation.AlbumArtist));
+            Normalize(observation.AlbumArtist),
+            observation.ArtworkUrl ?? string.Empty);
 
     private static string Normalize(string? value) =>
         string.Concat((value ?? string.Empty).Where(char.IsLetterOrDigit)).ToUpperInvariant();
@@ -391,13 +391,11 @@ public sealed class TrackMetadataEnricher
                 return null;
             }
 
-            string? albumTitle = null;
             string? albumMbid = null;
             string? imageUrl = null;
             string? albumArtist = null;
             if (track.TryGetProperty("album", out var album))
             {
-                albumTitle = ReadText(album, "title");
                 albumMbid = ReadText(album, "mbid");
                 albumArtist = ReadText(album, "artist");
                 if (album.TryGetProperty("image", out var images) && images.ValueKind == JsonValueKind.Array)
@@ -414,8 +412,6 @@ public sealed class TrackMetadataEnricher
             }
 
             var recordingId = ReadText(track, "mbid");
-            var trackArtist = track.TryGetProperty("artist", out var artist) ? ReadText(artist, "name") : null;
-            var credit = trackArtist ?? albumArtist;
             return new LastFmLookup(
                 new PlayMetadataEnrichment(
                     albumArtist,
@@ -450,10 +446,10 @@ public sealed class TrackMetadataEnricher
 
         var cacheKey = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(imageUri.AbsoluteUri)));
         Directory.CreateDirectory(_artworkDirectory);
-        var targetPath = Path.Combine(_artworkDirectory, cacheKey + ".image");
-        if (File.Exists(targetPath))
+        var cachedPath = Directory.EnumerateFiles(_artworkDirectory, cacheKey + ".*").FirstOrDefault();
+        if (cachedPath is not null)
         {
-            return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
+            return new PlayMetadataEnrichment(ArtworkPath: cachedPath, ArtworkSource: source);
         }
 
         var currentUri = imageUri;
@@ -489,6 +485,21 @@ public sealed class TrackMetadataEnricher
                 if (response.Content.Headers.ContentLength is > MaxArtworkBytes)
                 {
                     return new PlayMetadataEnrichment();
+                }
+
+                var extension = mediaType.ToLowerInvariant() switch
+                {
+                    "image/png" => ".png",
+                    "image/webp" => ".webp",
+                    "image/gif" => ".gif",
+                    "image/bmp" => ".bmp",
+                    "image/avif" => ".avif",
+                    _ => ".jpg",
+                };
+                var targetPath = Path.Combine(_artworkDirectory, cacheKey + extension);
+                if (File.Exists(targetPath))
+                {
+                    return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
                 }
 
                 await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken);
