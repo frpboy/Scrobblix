@@ -23,6 +23,9 @@ public sealed class TrackMetadataEnricher
     private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
     private readonly ConcurrentDictionary<string, PlayMetadataEnrichment> _cache = new(StringComparer.Ordinal);
+    private long _configurationVersion;
+
+    public long ConfigurationVersion => Interlocked.Read(ref _configurationVersion);
 
     public TrackMetadataEnricher(HttpClient client, string? lastFmApiKey, string artworkDirectory)
     {
@@ -41,6 +44,7 @@ public sealed class TrackMetadataEnricher
     {
         _lastFmApiKey = string.IsNullOrWhiteSpace(apiKey) ? null : apiKey.Trim();
         _cache.Clear();
+        Interlocked.Increment(ref _configurationVersion);
     }
 
     public async Task<PlayMetadataEnrichment> EnrichAsync(PlayObservation observation, CancellationToken cancellationToken)
