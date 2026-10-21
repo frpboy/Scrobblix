@@ -190,7 +190,7 @@ public sealed class TrackMetadataEnricher
                 return null;
             }
 
-            var artistQuery = observation.AlbumArtist ?? observation.Artist!;
+            var artistQuery = !string.IsNullOrWhiteSpace(observation.AlbumArtist) ? observation.AlbumArtist : observation.Artist!;
             var query = $"release:\"{EscapeQuery(observation.Album!)}\" AND artist:\"{EscapeQuery(artistQuery)}\"";
             var url = $"https://musicbrainz.org/ws/2/release/?query={Uri.EscapeDataString(query)}&fmt=json&limit=5";
             searchDocument = await TryGetMusicBrainzJsonAsync(url, cancellationToken);
