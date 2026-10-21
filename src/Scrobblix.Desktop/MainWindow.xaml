@@ -92,7 +92,7 @@
                 <StackPanel Spacing="8">
                     <TextBlock Text="Recent activity" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <Border Padding="16" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
-                        <StackPanel Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel x:Name="RecentActivityList" Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                 </StackPanel>
             </StackPanel>

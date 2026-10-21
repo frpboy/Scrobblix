@@ -160,6 +160,9 @@ Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc
 Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
 Assert(await actionStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 1, "An expired in-flight action is recovered after a restart-safe lease timeout.");
 Assert(await actionStore.ClaimNextDueAsync("worker-3", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A recovered action can be leased for a subsequent delivery attempt.");
+var historyReader = new SqliteHistoryReader(connectionString);
+var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
+Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);

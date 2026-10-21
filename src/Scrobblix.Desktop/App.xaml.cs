@@ -34,6 +34,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             await database.InitializeAsync(CancellationToken.None);
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
+            var recentHistory = await new SqliteHistoryReader(connectionString)
+                .GetRecentAsync(10, CancellationToken.None);
+            _window.SetRecentHistory(recentHistory);
             var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
