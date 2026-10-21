@@ -12,6 +12,8 @@ using Scrobblix.Application.Queue;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
+using System.Net;
+using System.Net.Http;
 using Scrobblix.Infrastructure.Providers;
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
@@ -136,6 +138,16 @@ var expectedLastFmSignature = Convert.ToHexStringLower(MD5.HashData(Encoding.UTF
 #pragma warning restore CA5351
 Assert(providerSignature == expectedLastFmSignature, "Last.fm request signatures use the documented MD5 algorithm over sorted parameters and the shared secret.");
 
+var credentials = new RecordingCredentialStore();
+var authHandler = new SequenceHttpHandler("{\"token\":\"request-token\"}", "{\"session\":{\"name\":\"listener\",\"key\":\"session-key\"}}");
+using var authClient = new HttpClient(authHandler);
+var authenticator = new LastFmDesktopAuthenticator(authClient, "api-key", "shared-secret", credentials);
+var authorization = await authenticator.BeginAsync(CancellationToken.None);
+Assert(authorization.AuthorizationUri.ToString().Contains("api_key=api-key", StringComparison.Ordinal) && authorization.AuthorizationUri.ToString().Contains("token=request-token", StringComparison.Ordinal), "Desktop authorization returns Last.fm's user-approval URL without exposing the shared secret.");
+var session = await authenticator.CompleteAsync(authorization.Token, CancellationToken.None);
+Assert(session.UserName == "listener" && credentials.StoredSecret == "session-key", "An approved Last.fm session is stored through the credential boundary.");
+Assert(authHandler.RequestBodies[1].Contains("token=request-token", StringComparison.Ordinal) && authHandler.RequestBodies[1].Contains("api_sig=", StringComparison.Ordinal), "The token exchange signs and submits the one-time authorization token.");
+
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
@@ -229,5 +241,36 @@ sealed class RecordingObservationStore : IPlaybackObservationStore
     {
         AppendCount++;
         return Task.FromResult(true);
+    }
+}
+
+sealed class RecordingCredentialStore : ICredentialStore
+{
+    public string? StoredSecret { get; private set; }
+
+    public Task StoreAsync(string resource, string userName, string secret, CancellationToken cancellationToken)
+    {
+        StoredSecret = secret;
+        return Task.CompletedTask;
+    }
+
+    public Task<string?> GetAsync(string resource, string userName, CancellationToken cancellationToken) => Task.FromResult(StoredSecret);
+
+    public Task DeleteAsync(string resource, string userName, CancellationToken cancellationToken)
+    {
+        StoredSecret = null;
+        return Task.CompletedTask;
+    }
+}
+
+sealed class SequenceHttpHandler(params string[] bodies) : HttpMessageHandler
+{
+    private readonly Queue<string> _bodies = new(bodies);
+    public List<string> RequestBodies { get; } = [];
+
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        RequestBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(_bodies.Dequeue(), Encoding.UTF8, "application/json") };
     }
 }
