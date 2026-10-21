@@ -57,7 +57,7 @@ public sealed partial class LocalFileLogger : IEventLogger, IAsyncDisposable
                 correlationId,
                 fields);
             var byteCount = Encoding.UTF8.GetByteCount(line) + Environment.NewLine.Length;
-            var length = new FileInfo(_activePath).Length;
+            var length = File.Exists(_activePath) ? new FileInfo(_activePath).Length : 0;
             if (length + byteCount > MaximumFileBytes && length > 0)
             {
                 RotateActiveFile();
@@ -171,9 +171,11 @@ public sealed partial class LocalFileLogger : IEventLogger, IAsyncDisposable
     private static bool TryReadEntryNumber(string line, out long number)
     {
         number = 0;
+        var end = line.IndexOf(']');
         return line.Length > 2
             && line[0] == '['
-            && long.TryParse(line.AsSpan(1, Math.Min(12, line.Length - 2)).TrimEnd(']'), NumberStyles.None, CultureInfo.InvariantCulture, out number);
+            && end > 1
+            && long.TryParse(line.AsSpan(1, end - 1), NumberStyles.None, CultureInfo.InvariantCulture, out number);
     }
 
     private static string? Safe(string? value)
