@@ -18,6 +18,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
+    private bool _isLastFmConnected;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
 
     public event Action<bool>? TrackingModeChanged;
@@ -35,6 +36,8 @@ public sealed partial class MainWindow : Window
     public event Func<string, Task<bool>>? QueueRetryNowRequested;
 
     public event Func<string, Task<bool>>? QueueCancelRequested;
+
+    public event Func<string, ProviderActionType, Task<bool>>? LovedTrackActionRequested;
 
     private string? _logDirectory;
 
@@ -80,6 +83,7 @@ public sealed partial class MainWindow : Window
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         _displayedPlayId = trackingStatus.PlayId;
+        UpdateLovedButtons();
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
@@ -383,6 +387,7 @@ public sealed partial class MainWindow : Window
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
         StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
+        LovedView.Visibility = destination == "loved" ? Visibility.Visible : Visibility.Collapsed;
         QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
@@ -546,6 +551,113 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void SetLovedTracks(IReadOnlyList<LovedTrackSummary> tracks)
+    {
+        LovedTracksList.Children.Clear();
+        LovedPageStatusText.Text = tracks.Count == 0
+            ? "No Love/Unlove actions have been recorded by Scrobblix yet."
+            : $"Showing {tracks.Count:N0} latest distinct track intent(s). Status reflects the local queue and provider response.";
+        if (tracks.Count == 0)
+        {
+            LovedTracksList.Children.Add(new TextBlock { Text = "Use Love or Unlove on Last.fm from the current-track card to create an action." });
+            return;
+        }
+
+        foreach (var track in tracks)
+        {
+            var card = new Border
+            {
+                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            };
+            var content = new StackPanel { Spacing = 5 };
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{track.Artist ?? "Unknown artist"} — {track.Title ?? "Unknown title"}",
+                FontSize = 15,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(track.Album))
+                content.Children.Add(new TextBlock { Text = track.Album, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{(track.RequestedAction == ProviderActionType.Love ? "Love" : "Unlove")} · {FormatLovedState(track.RequestedAction, track.State)} · attempts {track.AttemptCount:N0}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(track.LastReasonCode))
+                content.Children.Add(new TextBlock { Text = $"Reason: {track.LastReasonCode}", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            card.Child = content;
+            LovedTracksList.Children.Add(card);
+        }
+    }
+
+    private static string FormatLovedState(ProviderActionType actionType, ProviderActionState state) =>
+        (actionType, state) switch
+        {
+            (ProviderActionType.Love, ProviderActionState.Accepted) => "Loved on Last.fm",
+            (ProviderActionType.Unlove, ProviderActionState.Accepted) => "Unloved on Last.fm",
+            (_, ProviderActionState.Pending) => "Queued",
+            (_, ProviderActionState.InFlight) => "Sending to Last.fm",
+            (_, ProviderActionState.RetryScheduled) => "Retry scheduled",
+            (_, ProviderActionState.AuthBlocked) => "Blocked by authentication",
+            (_, ProviderActionState.PermanentFailure) => "Provider rejected the action",
+            (_, ProviderActionState.Cancelled) => "Cancelled / superseded",
+            _ => state.ToString(),
+        };
+
+    public void SetLovedActionFeedback(string message) => CurrentTrackLoveStatusText.Text = message;
+
+    private void UpdateLovedButtons()
+    {
+        var canAct = _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
+        if (CurrentTrackUnloveButton is not null) CurrentTrackUnloveButton.IsEnabled = canAct;
+        if (CurrentTrackLoveStatusText is null) return;
+        CurrentTrackLoveStatusText.Text = !_isLastFmConnected
+            ? "Connect Last.fm in Settings to manage loved tracks."
+            : string.IsNullOrWhiteSpace(_displayedPlayId)
+                ? "Start a supported track to love or unlove it."
+                : "Requests are saved locally first; provider status appears on the Loved page.";
+    }
+
+    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args) =>
+        await RequestLovedTrackActionAsync(ProviderActionType.Love);
+
+    private async void CurrentTrackUnloveButton_Click(object sender, RoutedEventArgs args) =>
+        await RequestLovedTrackActionAsync(ProviderActionType.Unlove);
+
+    private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
+    {
+        if (string.IsNullOrWhiteSpace(_displayedPlayId))
+        {
+            SetLovedActionFeedback("Wait for Scrobblix to save the current listening session before requesting Love/Unlove.");
+            return;
+        }
+        if (LovedTrackActionRequested is null)
+        {
+            SetLovedActionFeedback("Loved-track actions are not initialized. Restart Scrobblix and try again.");
+            return;
+        }
+
+        CurrentTrackLoveButton.IsEnabled = false;
+        CurrentTrackUnloveButton.IsEnabled = false;
+        try
+        {
+            var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
+            if (!queued)
+                SetLovedActionFeedback("No duplicate request was created. Check Loved and Queue for the current state.");
+            else
+                SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; delivery status appears on Loved.");
+        }
+        finally
+        {
+            UpdateLovedButtons();
+        }
+    }
+
     public void SetTodaySummary(TodaySummary summary)
     {
         TodayStateText.Text = summary.DetectedSessionCount == 0
@@ -557,6 +669,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmUnavailable()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
@@ -565,6 +679,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmReadyToConnect()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
@@ -581,6 +697,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnected(string userName)
     {
+        _isLastFmConnected = true;
+        UpdateLovedButtons();
         SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
@@ -589,6 +707,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnectionError()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;

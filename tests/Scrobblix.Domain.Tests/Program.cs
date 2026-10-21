@@ -185,6 +185,19 @@ var session = await authenticator.CompleteAsync(authorization.Token, Cancellatio
 Assert(session.UserName == "listener" && credentials.StoredSecret == "session-key", "An approved Last.fm session is stored through the credential boundary.");
 Assert(authHandler.RequestBodies[1].Contains("token=request-token", StringComparison.Ordinal) && authHandler.RequestBodies[1].Contains("api_sig=", StringComparison.Ordinal), "The token exchange signs and submits the one-time authorization token.");
 
+var lovedHandler = new SequenceHttpHandler("{\"status\":\"ok\"}", "{\"status\":\"ok\"}");
+using var lovedClient = new HttpClient(lovedHandler);
+var lovedProvider = new LastFmScrobbleProvider(lovedClient, "api-key", "shared-secret");
+var lovedSubmission = new ScrobbleSubmission("Artist", "Track", observation.ObservedAtUtc, "session-key");
+Assert((await lovedProvider.LoveTrackAsync(lovedSubmission, CancellationToken.None)).Accepted
+    && (await lovedProvider.UnloveTrackAsync(lovedSubmission, CancellationToken.None)).Accepted,
+    "Last.fm love and unlove commands parse successful provider responses.");
+Assert(lovedHandler.RequestBodies[0].Contains("method=track.love", StringComparison.Ordinal)
+    && lovedHandler.RequestBodies[1].Contains("method=track.unlove", StringComparison.Ordinal)
+    && lovedHandler.RequestBodies.All(body => body.Contains("api_sig=", StringComparison.Ordinal)),
+    "Love and Unlove requests use signed Last.fm API methods.");
+
+
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
@@ -202,6 +215,18 @@ Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == Obser
 Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Duplicate, "Duplicate source observations are ignored by the database constraint.");
 var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
+var lovedWriter = new SqliteLovedActionWriter(connectionString);
+Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc, CancellationToken.None),
+    "A Love intent is durably queued for a persisted track.");
+Assert(!await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+    "A repeated already-pending Love intent is not queued again.");
+Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Unlove, observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None),
+    "A newer Unlove intent supersedes an unstarted Love intent.");
+var lovedReader = new SqliteQueueReader(connectionString);
+var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
+Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
+    "The Loved read model reflects the newest persisted intent for the same track.");
+
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "The provider action idempotency key prevents repeated queueing.");
 var actionStore = new SqliteProviderActionStore(connectionString);
 var lease = await actionStore.ClaimNextDueAsync("worker-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
@@ -335,6 +360,21 @@ var recordingStore = new RecordingProviderActionStore(queuedLease);
 var processor = new ProviderActionProcessor(recordingStore, new AcceptingScrobbleProvider());
 Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
 Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
+
+var loveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-love", ActionType = ProviderActionType.Love });
+var loveProvider = new AcceptingScrobbleProvider();
+var loveProcessor = new ProviderActionProcessor(loveActionStore, loveProvider);
+Assert(await loveProcessor.ProcessNextAsync("worker-love", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && loveProvider.LastAction == "love" && loveActionStore.CompletedState == ProviderActionState.Accepted,
+    "The shared provider queue dispatches Love actions through the Last.fm provider boundary.");
+
+var unloveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-unlove", ActionType = ProviderActionType.Unlove });
+var unloveProvider = new AcceptingScrobbleProvider();
+var unloveProcessor = new ProviderActionProcessor(unloveActionStore, unloveProvider);
+Assert(await unloveProcessor.ProcessNextAsync("worker-unlove", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && unloveProvider.LastAction == "unlove" && unloveActionStore.CompletedState == ProviderActionState.Accepted,
+    "The shared provider queue dispatches Unlove actions through the Last.fm provider boundary.");
+
 var pollingStore = new RecordingObservationStore();
 var poller = new PlaybackObservationPollingService(new SingleObservationSource(observation), new PlaybackObservationIngestionService(pollingStore));
 Assert(await poller.PollOnceAsync(CancellationToken.None) == ObservationIngestionResult.Accepted && pollingStore.AppendCount == 1, "A playback poll persists the current observation through the ingestion boundary.");
@@ -444,10 +484,31 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
 
 sealed class AcceptingScrobbleProvider : IScrobbleProvider
 {
-    public Task<ProviderSubmissionResult> UpdateNowPlayingAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => throw new NotSupportedException();
+    public string? LastAction { get; private set; }
 
-    public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
-        Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    public Task<ProviderSubmissionResult> UpdateNowPlayingAsync(ScrobbleSubmission submission, CancellationToken cancellationToken)
+    {
+        LastAction = "now-playing";
+        return Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    }
+
+    public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken)
+    {
+        LastAction = "scrobble";
+        return Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    }
+
+    public Task<ProviderSubmissionResult> LoveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken)
+    {
+        LastAction = "love";
+        return Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    }
+
+    public Task<ProviderSubmissionResult> UnloveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken)
+    {
+        LastAction = "unlove";
+        return Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    }
 }
 
 sealed class SingleObservationSource(PlayObservation observation) : IPlaybackObservationSource

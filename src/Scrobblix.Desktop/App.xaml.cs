@@ -72,6 +72,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
+            _window.SetLovedTracks(await queueReader.GetRecentLovedTracksAsync(200, CancellationToken.None));
 
             _window.QueueRetryNowRequested += async actionId =>
             {
@@ -91,6 +92,29 @@ public partial class App : Microsoft.UI.Xaml.Application
             };
             var accountStore = new SqliteProviderAccountStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
+            _window.LovedTrackActionRequested += async (playId, actionType) =>
+            {
+                var account = await accountStore.GetConnectedAsync("lastfm", applicationCancellation.Token);
+                if (account is null)
+                {
+                    _window.SetLovedActionFeedback("Connect Last.fm in Settings before managing loved tracks.");
+                    return false;
+                }
+
+                var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, applicationCancellation.Token);
+                if (string.IsNullOrWhiteSpace(sessionKey))
+                {
+                    _window.SetLovedActionFeedback("The Last.fm session is missing. Disconnect and reconnect in Settings.");
+                    return false;
+                }
+
+                var changed = await new SqliteLovedActionWriter(connectionString)
+                    .EnqueueAsync(playId, account.AccountId, actionType, DateTimeOffset.UtcNow, applicationCancellation.Token);
+                logger.Info("LOVED_ACTION", $"Loved action requested; play_id={playId}; type={actionType}; account={account.AccountId}; enqueued={changed}.");
+                await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
+                return changed;
+            };
+
             const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
             const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
             const string applicationCredentialUser = "application";
@@ -735,6 +759,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
+        var lovedTracks = await queueReader.GetRecentLovedTracksAsync(200, cancellationToken);
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
@@ -743,6 +768,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
             window.SetQueueActions(queueActions);
+            window.SetLovedTracks(lovedTracks);
             window.SetStatisticsSummary(statistics);
         });
     }
