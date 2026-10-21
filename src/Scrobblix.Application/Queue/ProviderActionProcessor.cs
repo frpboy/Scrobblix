@@ -5,7 +5,7 @@ using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Application.Queue;
 
-public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IScrobbleProvider provider)
+public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IScrobbleProvider provider, Action<string>? log = null)
 {
     public async Task<bool> ProcessNextAsync(
         string workerId,
@@ -24,6 +24,7 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
         {
             var metadataReason = string.IsNullOrWhiteSpace(action.Artist) ? ReasonCodes.Metadata.MissingArtist : ReasonCodes.Metadata.MissingTitle;
             await actionStore.CompleteAsync(action.ActionId, ProviderActionState.PermanentFailure, metadataReason, nowUtc, cancellationToken);
+            log?.Invoke($"Scrobble was not sent because metadata is incomplete; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; attempt={action.AttemptCount}; outcome=PermanentFailure; reason={metadataReason}.");
             return true;
         }
 
@@ -38,6 +39,7 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
                     ? ProviderActionState.RetryScheduled
                     : ProviderActionState.PermanentFailure;
         await actionStore.CompleteAsync(action.ActionId, outcome, result.ReasonCode, nowUtc, cancellationToken);
+        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={result.ReasonCode}.");
         return true;
     }
 }
