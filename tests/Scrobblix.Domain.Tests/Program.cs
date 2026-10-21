@@ -268,6 +268,63 @@ Assert(listeningStatistics.TotalSessions >= todaySummary.ListeningSessionCount
     && listeningStatistics.TopArtists.Any(artist => artist.Artist.Equals("Artist", StringComparison.OrdinalIgnoreCase)),
     "The Statistics read model projects all-time totals, recent activity, and top artists from local history.");
 
+var lovedTrackStore = new SqliteLovedTrackStore(connectionString);
+var lovedNow = DateTimeOffset.UtcNow;
+var lovedMutation = await lovedTrackStore.SetLovedAsync(
+    todayRecord.PlayId, true, "lastfm", "account-today", lovedNow, CancellationToken.None);
+Assert(lovedMutation.Changed && lovedMutation.ActionQueued && !string.IsNullOrWhiteSpace(lovedMutation.TrackKey),
+    "Loving a locally recorded track stores local intent and queues a Last.fm Love action.");
+
+var repeatedLoveMutation = await lovedTrackStore.SetLovedAsync(
+    todayRecord.PlayId, true, "lastfm", "account-today", lovedNow.AddSeconds(1), CancellationToken.None);
+Assert(!repeatedLoveMutation.Changed && repeatedLoveMutation.ActionQueued,
+    "Repeating an existing love intent reuses the active queue action instead of creating a duplicate.");
+
+var pendingLoveAction = (await new SqliteQueueReader(connectionString).GetRecentActionsAsync(50, CancellationToken.None))
+    .FirstOrDefault(action => action.PlayId == todayRecord.PlayId
+        && action.ActionType == ProviderActionType.Love
+        && action.State == ProviderActionState.Pending);
+Assert(pendingLoveAction is not null,
+    "The Love action is persisted in the same durable provider queue as scrobbles.");
+
+await using (var loveConnection = new SqliteConnection(connectionString))
+{
+    await loveConnection.OpenAsync(CancellationToken.None);
+    await using var startLove = loveConnection.CreateCommand();
+    startLove.CommandText = "UPDATE provider_actions SET state = $inFlight WHERE action_id = $actionId AND state = $pending;";
+    startLove.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
+    startLove.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+    startLove.Parameters.AddWithValue("$actionId", pendingLoveAction!.ActionId);
+    Assert(await startLove.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+        "The test Love action is placed into the provider worker's in-flight state.");
+}
+
+await new SqliteProviderActionStore(connectionString).CompleteAsync(
+    pendingLoveAction!.ActionId,
+    ProviderActionState.Accepted,
+    ReasonCodes.Provider.Accepted,
+    lovedNow.AddSeconds(2),
+    CancellationToken.None);
+var syncedLovedTracks = await lovedTrackStore.GetLovedTracksAsync(20, CancellationToken.None);
+Assert(syncedLovedTracks.Any(track => track.TrackKey == lovedMutation.TrackKey
+    && track.LocalLoved
+    && track.ProviderLoved == true
+    && track.CurrentActionState == ProviderActionState.Accepted),
+    "A successfully accepted Love action updates provider_loved atomically with queue completion.");
+
+var unloveMutation = await lovedTrackStore.SetLovedAsync(
+    todayRecord.PlayId, false, "lastfm", "account-today", lovedNow.AddSeconds(3), CancellationToken.None);
+Assert(unloveMutation.Changed && unloveMutation.ActionQueued,
+    "Unloving a remotely loved track updates the local intent and queues a durable Unlove action.");
+var unloveQueueItem = (await new SqliteQueueReader(connectionString).GetRecentActionsAsync(50, CancellationToken.None))
+    .FirstOrDefault(action => action.PlayId == todayRecord.PlayId
+        && action.ActionType == ProviderActionType.Unlove
+        && action.State == ProviderActionState.Pending);
+Assert(unloveQueueItem is not null,
+    "Unlove is persisted as a distinct provider action instead of being treated as a scrobble.");
+Assert(!(await lovedTrackStore.GetLovedTracksAsync(20, CancellationToken.None)).Any(track => track.TrackKey == lovedMutation.TrackKey),
+    "A local unlove removes the track from the Loved screen while preserving its queued Last.fm synchronization.");
+
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
 {
