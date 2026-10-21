@@ -19,11 +19,17 @@ public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
     private IReadOnlyList<RecentPlay> _historyPlays = Array.Empty<RecentPlay>();
+    private IReadOnlyList<LovedTrackItem> _lovedTrackItems = Array.Empty<LovedTrackItem>();
+    private HashSet<string> _lovedTrackKeys = new(StringComparer.Ordinal);
     private string? _displayedPlayId;
+    private string? _displayedArtist;
+    private string? _displayedTitle;
 
     public event Action<bool>? TrackingModeChanged;
 
     public event Action? HistoryRequested;
+
+    public event Func<string, bool, Task>? TrackLoveRequested;
 
     public event Func<Task>? ConnectLastFmRequested;
 
@@ -82,6 +88,8 @@ public sealed partial class MainWindow : Window
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         _displayedPlayId = trackingStatus.PlayId;
+        _displayedArtist = observation.Artist;
+        _displayedTitle = observation.Title;
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
@@ -101,6 +109,7 @@ public sealed partial class MainWindow : Window
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Informational);
+        UpdateCurrentTrackLoveButton();
     }
 
     public void SetEnrichedMetadata(string playId, PlayObservation observation, PlayMetadataEnrichment metadata)
@@ -238,6 +247,204 @@ public sealed partial class MainWindow : Window
         RenderFilteredHistory();
     }
 
+    public void SetLovedTracks(IReadOnlyList<LovedTrackItem> items)
+    {
+        _lovedTrackItems = items;
+        _lovedTrackKeys = items
+            .Where(item => item.LocalLoved)
+            .Select(item => item.TrackKey)
+            .ToHashSet(StringComparer.Ordinal);
+        LovedStatusText.Text = items.Count == 0
+            ? "No locally loved tracks yet"
+            : $"{items.Count:N0} locally loved track{(items.Count == 1 ? string.Empty : "s")}";
+        LovedTrackList.Children.Clear();
+
+        if (items.Count == 0)
+        {
+            LovedTrackList.Children.Add(new TextBlock
+            {
+                Text = "Use Love track in Home or History to save a track here. Scrobblix will keep your local choice even when Last.fm is disconnected.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            UpdateCurrentTrackLoveButton();
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            var card = new Border
+            {
+                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(8),
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardStrokeColorDefaultBrush"],
+                BorderThickness = new Thickness(1),
+                Background = (Microsoft.UI.Xaml.Media.Brush)Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+            };
+            var content = new StackPanel { Spacing = 6 };
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{item.Artist} — {item.Title}",
+                FontSize = 16,
+                FontWeight = Microsoft.UI.Text.FontWeights.SemiBold,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            if (!string.IsNullOrWhiteSpace(item.Album))
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = item.Album,
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            var syncState = GetLovedSyncStatus(item);
+            content.Children.Add(new TextBlock
+            {
+                Text = syncState,
+                TextWrapping = TextWrapping.Wrap,
+            });
+
+            if (!string.IsNullOrWhiteSpace(item.LastReasonCode)
+                && item.CurrentActionState is not ProviderActionState.Accepted)
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = ExplainQueueReason(item.LastReasonCode),
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            var actions = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            var unloveButton = new Button
+            {
+                Content = "Unlove",
+                HorizontalAlignment = HorizontalAlignment.Left,
+                AutomationProperties = { Name = $"Unlove {item.Artist} — {item.Title}" },
+            };
+            unloveButton.Click += async (_, _) => await RequestTrackLoveAsync(item.SourcePlayId, false);
+            actions.Children.Add(unloveButton);
+            content.Children.Add(actions);
+            card.Child = content;
+            LovedTrackList.Children.Add(card);
+        }
+
+        UpdateCurrentTrackLoveButton();
+    }
+
+    private static string GetLovedSyncStatus(LovedTrackItem item)
+    {
+        if (item.ProviderLoved == true && item.LocalLoved)
+        {
+            return "Synced with Last.fm";
+        }
+
+        if (item.CurrentActionState == ProviderActionState.Pending)
+        {
+            return "Saved locally · queued for Last.fm";
+        }
+
+        if (item.CurrentActionState == ProviderActionState.InFlight)
+        {
+            return "Saved locally · syncing with Last.fm";
+        }
+
+        if (item.CurrentActionState == ProviderActionState.RetryScheduled)
+        {
+            return "Saved locally · Last.fm sync will retry";
+        }
+
+        if (item.CurrentActionState == ProviderActionState.AuthBlocked)
+        {
+            return "Saved locally · reconnect Last.fm to sync";
+        }
+
+        if (item.CurrentActionState is ProviderActionState.PermanentFailure)
+        {
+            return "Saved locally · Last.fm did not accept the action";
+        }
+
+        if (item.ProviderLoved is null)
+        {
+            return "Saved locally · Last.fm has not confirmed this state";
+        }
+
+        return "Local love state differs from Last.fm";
+    }
+
+    private void UpdateCurrentTrackLoveButton()
+    {
+        if (CurrentTrackLoveButton is null)
+        {
+            return;
+        }
+
+        var key = TryGetDisplayedTrackKey();
+        var hasPlay = !string.IsNullOrWhiteSpace(_displayedPlayId)
+            && !string.IsNullOrWhiteSpace(_displayedArtist)
+            && !string.IsNullOrWhiteSpace(_displayedTitle)
+            && key is not null;
+        CurrentTrackLoveButton.IsEnabled = hasPlay;
+        CurrentTrackLoveButton.Content = key is not null && _lovedTrackKeys.Contains(key)
+            ? "Unlove track"
+            : "Love track";
+    }
+
+    private string? TryGetDisplayedTrackKey()
+    {
+        if (string.IsNullOrWhiteSpace(_displayedArtist) || string.IsNullOrWhiteSpace(_displayedTitle))
+        {
+            return null;
+        }
+
+        try
+        {
+            return TrackKey.Create(_displayedArtist, _displayedTitle);
+        }
+        catch (ArgumentException)
+        {
+            return null;
+        }
+    }
+
+    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_displayedPlayId))
+        {
+            return;
+        }
+
+        var key = TryGetDisplayedTrackKey();
+        if (key is null)
+        {
+            SetStartupStatus("This track does not have enough metadata to love safely.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        await RequestTrackLoveAsync(_displayedPlayId, !_lovedTrackKeys.Contains(key));
+    }
+
+    private async Task RequestTrackLoveAsync(string playId, bool isLoved)
+    {
+        if (TrackLoveRequested is null)
+        {
+            SetStartupStatus("Loved-track actions are not available yet.", InfoBarSeverity.Warning);
+            return;
+        }
+
+        try
+        {
+            await TrackLoveRequested.Invoke(playId, isLoved);
+        }
+        catch (Exception exception)
+        {
+            DiagnosticLogRequested?.Invoke($"Loved-track action failed; exception={exception.GetType().Name}.");
+            SetStartupStatus("The local loved state could not be updated. Open Diagnostics for details.", InfoBarSeverity.Warning);
+        }
+    }
+
     private void HistorySearch_TextChanged(object sender, TextChangedEventArgs args) =>
         RenderFilteredHistory();
 
@@ -309,6 +516,26 @@ public sealed partial class MainWindow : Window
         if (facts.Count > 0) details.Children.Add(new TextBlock { Text = string.Join(" · ", facts), FontSize = 12 });
         details.Children.Add(new TextBlock { Text = play.EligibleUtc is not null ? "Eligible for scrobbling" : "Saved locally · not scrobble-eligible yet", FontSize = 12 });
         row.Children.Add(details);
+
+        var isLoved = false;
+        try
+        {
+            isLoved = _lovedTrackKeys.Contains(TrackKey.Create(play.Artist ?? string.Empty, play.Title ?? string.Empty));
+        }
+        catch (ArgumentException)
+        {
+            // Missing or empty metadata means this row cannot be safely keyed for Love/Unlove.
+        }
+
+        var loveButton = new Button
+        {
+            Content = isLoved ? "Unlove" : "Love",
+            VerticalAlignment = VerticalAlignment.Center,
+            IsEnabled = !string.IsNullOrWhiteSpace(play.Artist) && !string.IsNullOrWhiteSpace(play.Title),
+            AutomationProperties = { Name = $"{(isLoved ? "Unlove" : "Love")} {play.Artist ?? "unknown artist"} — {play.Title ?? "unknown title"}" },
+        };
+        loveButton.Click += async (_, _) => await RequestTrackLoveAsync(play.PlayId, !isLoved);
+        details.Children.Add(loveButton);
         target.Children.Add(row);
     }
 
@@ -372,6 +599,7 @@ public sealed partial class MainWindow : Window
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
         StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
+        LovedView.Visibility = destination == "loved" ? Visibility.Visible : Visibility.Collapsed;
         QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
@@ -482,6 +710,7 @@ public sealed partial class MainWindow : Window
         ReasonCodes.Provider.LeaseExpired => "A worker stopped before completing this action. It was recovered after its lease expired.",
         ReasonCodes.Provider.InvalidApiKey => "The API key was rejected. Check the key in Settings.",
         ReasonCodes.Provider.InvalidSignature => "Last.fm rejected the request signature. Recheck the saved credentials.",
+        ReasonCodes.Provider.ActionSuperseded => "A newer local love choice replaced this action before it was sent.",
         _ => $"Last reason: {reasonCode}",
     };
 
