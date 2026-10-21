@@ -322,8 +322,8 @@ public sealed partial class MainWindow : Window
             {
                 Content = "Unlove",
                 HorizontalAlignment = HorizontalAlignment.Left,
-                AutomationProperties = { Name = $"Unlove {item.Artist} — {item.Title}" },
             };
+            AutomationProperties.SetName(unloveButton, $"Unlove {item.Artist} — {item.Title}");
             unloveButton.Click += async (_, _) => await RequestTrackLoveAsync(item.SourcePlayId, false);
             actions.Children.Add(unloveButton);
             content.Children.Add(actions);
@@ -532,8 +532,8 @@ public sealed partial class MainWindow : Window
             Content = isLoved ? "Unlove" : "Love",
             VerticalAlignment = VerticalAlignment.Center,
             IsEnabled = !string.IsNullOrWhiteSpace(play.Artist) && !string.IsNullOrWhiteSpace(play.Title),
-            AutomationProperties = { Name = $"{(isLoved ? "Unlove" : "Love")} {play.Artist ?? "unknown artist"} — {play.Title ?? "unknown title"}" },
         };
+        AutomationProperties.SetName(loveButton, $"{(isLoved ? "Unlove" : "Love")} {play.Artist ?? "unknown artist"} — {play.Title ?? "unknown title"}");
         loveButton.Click += async (_, _) => await RequestTrackLoveAsync(play.PlayId, !isLoved);
         details.Children.Add(loveButton);
         target.Children.Add(row);
