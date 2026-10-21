@@ -1,6 +1,7 @@
 using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Scrobblix.Application.Abstractions;
+using Scrobblix.Domain.Diagnostics;
 using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Infrastructure.Storage;
@@ -8,6 +9,25 @@ namespace Scrobblix.Infrastructure.Storage;
 public sealed class SqliteProviderActionStore(string connectionString) : IProviderActionStore
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+
+    public async Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $retry, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
+                last_reason_code = $reason, updated_utc = $now
+            WHERE state = $inFlight AND lease_expires_utc IS NOT NULL AND lease_expires_utc <= $now;
+            """;
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
+        command.Parameters.AddWithValue("$reason", ReasonCodes.Provider.LeaseExpired);
+        command.Parameters.AddWithValue("$now", now);
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 
     public async Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,

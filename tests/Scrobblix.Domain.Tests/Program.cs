@@ -158,6 +158,8 @@ var retryLease = await actionStore.ClaimNextDueAsync("worker-1", observation.Obs
 await actionStore.CompleteAsync(retryLease!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
 Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddSeconds(30), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "Transient provider failures observe a retry delay.");
 Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
+Assert(await actionStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 1, "An expired in-flight action is recovered after a restart-safe lease timeout.");
+Assert(await actionStore.ClaimNextDueAsync("worker-3", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A recovered action can be leased for a subsequent delivery attempt.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);
@@ -181,6 +183,8 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
     private ProviderActionLease? _lease = lease;
 
     public ProviderActionState? CompletedState { get; private set; }
+
+    public Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(0);
 
     public Task<ProviderActionLease?> ClaimNextDueAsync(string workerId, DateTimeOffset nowUtc, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {

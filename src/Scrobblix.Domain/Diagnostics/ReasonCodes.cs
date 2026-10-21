@@ -35,6 +35,7 @@ public static class ReasonCodes
 
     public static class Provider
     {
+        public const string LeaseExpired = "provider.lease_expired";
         public const string Accepted = "provider.accepted";
         public const string IgnoredArtist = "provider.ignored.artist";
         public const string IgnoredTrack = "provider.ignored.track";

@@ -4,6 +4,8 @@ namespace Scrobblix.Application.Abstractions;
 
 public interface IProviderActionStore
 {
+    Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
     Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,
         DateTimeOffset nowUtc,
