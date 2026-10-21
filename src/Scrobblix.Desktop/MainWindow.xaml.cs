@@ -18,9 +18,12 @@ namespace Scrobblix.Desktop;
 public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
+    private IReadOnlyList<RecentPlay> _historyPlays = Array.Empty<RecentPlay>();
     private string? _displayedPlayId;
 
     public event Action<bool>? TrackingModeChanged;
+
+    public event Action? HistoryRequested;
 
     public event Func<Task>? ConnectLastFmRequested;
 
@@ -216,18 +219,63 @@ public sealed partial class MainWindow : Window
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
     {
         RecentActivityList.Children.Clear();
-        HistoryList.Children.Clear();
         if (plays.Count == 0)
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
-            HistoryList.Children.Add(new TextBlock { Text = "No listening sessions recorded yet." });
             return;
         }
 
         foreach (var play in plays)
         {
             AddPlayRow(RecentActivityList, play);
+        }
+    }
+
+    public void SetHistory(IReadOnlyList<RecentPlay> plays)
+    {
+        _historyPlays = plays;
+        RenderFilteredHistory();
+    }
+
+    private void HistorySearch_TextChanged(object sender, TextChangedEventArgs args) =>
+        RenderFilteredHistory();
+
+    private void RenderFilteredHistory()
+    {
+        if (HistoryList is null || HistorySearchTextBox is null)
+        {
+            return;
+        }
+
+        var query = HistorySearchTextBox.Text?.Trim();
+        var filtered = _historyPlays.Where(play =>
+            string.IsNullOrWhiteSpace(query)
+            || (play.Artist?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (play.Title?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (play.Album?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false)
+            || (play.AlbumArtist?.Contains(query, StringComparison.OrdinalIgnoreCase) ?? false))
+            .ToList();
+
+        HistoryList.Children.Clear();
+        HistoryCountText.Text = string.IsNullOrWhiteSpace(query)
+            ? $"Showing {_historyPlays.Count:N0} most recent local sessions"
+            : $"Showing {filtered.Count:N0} of {_historyPlays.Count:N0} sessions matching “{query}”";
+
+        if (filtered.Count == 0)
+        {
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(query)
+                    ? "No listening sessions recorded yet."
+                    : "No local sessions match this search.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+            return;
+        }
+
+        foreach (var play in filtered)
+        {
             AddPlayRow(HistoryList, play);
         }
     }
@@ -242,7 +290,7 @@ public sealed partial class MainWindow : Window
             Width = 56,
             Height = 56,
             Stretch = Stretch.UniformToFill,
-            Source = new SvgImageSource { UriSource = new Uri("ms-appx:///Assets/music-placeholder.svg") },
+            Source = new SvgImageSource { UriSource = new Uri(Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg"), UriKind.Absolute) },
         };
         artFrame.Children.Add(image);
         artFrame.Children.Add(fallback);
@@ -328,6 +376,10 @@ public sealed partial class MainWindow : Window
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        if (destination == "history")
+        {
+            HistoryRequested?.Invoke();
+        }
     }
 
     public void SetQueueSummary(QueueSummary summary)
