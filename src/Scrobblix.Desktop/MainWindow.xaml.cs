@@ -19,6 +19,8 @@ public sealed partial class MainWindow : Window
 
     public event Func<Task>? CompleteLastFmRequested;
 
+    public event Func<Task>? DisconnectLastFmRequested;
+
     public MainWindow()
     {
         InitializeComponent();
@@ -98,6 +100,7 @@ public sealed partial class MainWindow : Window
         LastFmStatusText.Text = "Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.";
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
+        DisconnectLastFmButton.IsEnabled = false;
     }
 
     public void SetLastFmReadyToConnect()
@@ -105,6 +108,7 @@ public sealed partial class MainWindow : Window
         LastFmStatusText.Text = "Not connected. Select Connect Last.fm to approve access in your browser.";
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
+        DisconnectLastFmButton.IsEnabled = false;
     }
 
     public void SetLastFmAuthorizationWaiting()
@@ -112,6 +116,7 @@ public sealed partial class MainWindow : Window
         LastFmStatusText.Text = "Waiting for approval in your browser. Return here and select Finish approval.";
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = true;
+        DisconnectLastFmButton.IsEnabled = false;
     }
 
     public void SetLastFmConnected(string userName)
@@ -119,6 +124,7 @@ public sealed partial class MainWindow : Window
         LastFmStatusText.Text = $"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.";
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
+        DisconnectLastFmButton.IsEnabled = true;
     }
 
     public void SetLastFmConnectionError()
@@ -126,6 +132,7 @@ public sealed partial class MainWindow : Window
         LastFmStatusText.Text = "Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.";
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
+        DisconnectLastFmButton.IsEnabled = false;
     }
 
     private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
@@ -141,6 +148,23 @@ public sealed partial class MainWindow : Window
         if (CompleteLastFmRequested is not null)
         {
             await CompleteLastFmRequested.Invoke();
+        }
+    }
+
+    private async void DisconnectLastFmButton_Click(object sender, RoutedEventArgs args)
+    {
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Disconnect Last.fm?",
+            Content = "This removes the locally stored session key. Your local listening history and queued items stay on this device.",
+            PrimaryButtonText = "Disconnect",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() == ContentDialogResult.Primary && DisconnectLastFmRequested is not null)
+        {
+            await DisconnectLastFmRequested.Invoke();
         }
     }
 

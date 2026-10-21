@@ -176,6 +176,28 @@ public partial class App : Microsoft.UI.Xaml.Application
                 _window.SetLastFmConnectionError();
             }
         };
+        _window.DisconnectLastFmRequested += async () =>
+        {
+            try
+            {
+                var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
+                if (account is not null)
+                {
+                    await credentialStore.DeleteAsync(account.CredentialResource, account.UserName, cancellationToken);
+                    await accountStore.DisconnectAsync("lastfm", cancellationToken);
+                }
+
+                _window.SetLastFmReadyToConnect();
+                await RefreshDashboardAsync(_window, connectionString, cancellationToken);
+            }
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+            {
+            }
+            catch (Exception)
+            {
+                _window.SetLastFmConnectionError();
+            }
+        };
 
         _ = ProcessProviderQueueUntilClosedAsync(
             processor,

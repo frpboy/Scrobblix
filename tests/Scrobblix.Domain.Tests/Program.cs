@@ -203,6 +203,8 @@ var accountStore = new SqliteProviderAccountStore(connectionString);
 var account = new ProviderAccount("account-1", "lastfm", "listener", "Scrobblix.LastFm", true, observation.ObservedAtUtc);
 await accountStore.UpsertAsync(account, CancellationToken.None);
 Assert(await accountStore.GetConnectedAsync("lastfm", CancellationToken.None) is { UserName: "listener", CredentialResource: "Scrobblix.LastFm" }, "Connected provider account metadata is stored without a session secret.");
+await accountStore.DisconnectAsync("lastfm", CancellationToken.None);
+Assert(await accountStore.GetConnectedAsync("lastfm", CancellationToken.None) is null, "Disconnecting a provider removes it from active queue delivery without deleting local history.");
 
 var emptyQueue = new QueueSummary(0, 0, 0, 0, 0, 0);
 Assert(DashboardStatusText.QueueHeadline(emptyQueue) == "No queued actions", "An empty durable queue is described without implying a provider configuration.");
@@ -319,6 +321,8 @@ sealed class RecordingProviderAccountStore(ProviderAccount account) : IProviderA
 
     public Task<ProviderAccount?> GetConnectedAsync(string provider, CancellationToken cancellationToken) =>
         Task.FromResult<ProviderAccount?>(string.Equals(provider, account.Provider, StringComparison.Ordinal) ? account : null);
+
+    public Task DisconnectAsync(string provider, CancellationToken cancellationToken) => Task.CompletedTask;
 }
 
 sealed class RecordingCredentialStore : ICredentialStore

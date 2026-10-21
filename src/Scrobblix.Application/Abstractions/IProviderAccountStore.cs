@@ -7,4 +7,6 @@ public interface IProviderAccountStore
     Task UpsertAsync(ProviderAccount account, CancellationToken cancellationToken);
 
     Task<ProviderAccount?> GetConnectedAsync(string provider, CancellationToken cancellationToken);
+
+    Task DisconnectAsync(string provider, CancellationToken cancellationToken);
 }

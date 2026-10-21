@@ -65,4 +65,19 @@ public sealed class SqliteProviderAccountStore(string connectionString) : IProvi
             reader.GetInt32(4) == 1,
             DateTimeOffset.Parse(reader.GetString(5), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind));
     }
+
+    public async Task DisconnectAsync(string provider, CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE accounts
+            SET is_connected = 0, updated_utc = $updatedUtc
+            WHERE provider = $provider AND is_connected = 1;
+            """;
+        command.Parameters.AddWithValue("$provider", provider);
+        command.Parameters.AddWithValue("$updatedUtc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
 }
