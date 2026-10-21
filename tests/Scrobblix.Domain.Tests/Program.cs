@@ -222,6 +222,35 @@ Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "pla
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
+var localMidday = new DateTimeOffset(DateTime.Today.AddHours(12)).AddMinutes(-10);
+var todayRecord = historyRecord with
+{
+    PlayId = "play-today-summary",
+    FirstObservedUtc = localMidday,
+    LastObservedUtc = localMidday.AddMinutes(3),
+    ConfirmedPlayedMilliseconds = 150_000,
+    Eligibility = standardTrack,
+};
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(todayRecord, "lastfm", "account-today", DateTimeOffset.UtcNow, CancellationToken.None),
+    "A test play is stored before today's dashboard projection is checked.");
+await using (var acceptedConnection = new SqliteConnection(connectionString))
+{
+    await acceptedConnection.OpenAsync(CancellationToken.None);
+    await using var acceptCommand = acceptedConnection.CreateCommand();
+    acceptCommand.CommandText = "UPDATE provider_actions SET state = $accepted, completed_utc = $completed WHERE play_id = $playId AND action_type = $scrobble;";
+    acceptCommand.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+    acceptCommand.Parameters.AddWithValue("$completed", DateTimeOffset.UtcNow.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+    acceptCommand.Parameters.AddWithValue("$playId", todayRecord.PlayId);
+    acceptCommand.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+    Assert(await acceptCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1, "The test scrobble is marked accepted to validate the dashboard projection.");
+}
+var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None);
+Assert(todaySummary.ListeningSessionCount >= 1
+    && todaySummary.EligiblePlayCount >= 1
+    && todaySummary.AcceptedScrobbleCount >= 1
+    && todaySummary.ConfirmedListeningMilliseconds >= 150_000,
+    "Today's dashboard summary projects session count, eligibility, accepted scrobbles, and confirmed listening time from SQLite.");
+
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
 {
