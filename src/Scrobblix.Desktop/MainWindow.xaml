@@ -5,7 +5,7 @@
     Title="Scrobblix">
     <Grid>
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="224" />
+            <ColumnDefinition Width="232" />
             <ColumnDefinition Width="*" />
         </Grid.ColumnDefinitions>
 
@@ -53,8 +53,12 @@
                         <TextBlock Text="NOW PLAYING" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel Orientation="Horizontal" Spacing="16">
                             <Grid Width="88" Height="88" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
+                                <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill">
+                                    <Image.Source>
+                                        <SvgImageSource UriSource="ms-appx:///Assets/music-placeholder.svg" />
+                                    </Image.Source>
+                                </Image>
                                 <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
-                                <TextBlock x:Name="CurrentTrackArtworkFallback" Text="No artwork" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
                             </Grid>
                             <StackPanel Spacing="6" VerticalAlignment="Center">
                                 <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
@@ -160,6 +164,10 @@
                     <StackPanel Spacing="8">
                         <TextBlock Text="Current observation" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="DiagnosticsPlaybackText" Text="No supported playback has been observed yet." TextWrapping="Wrap" />
+                        <TextBlock Text="Local event log" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock x:Name="LogDirectoryText" Text="Log directory is being prepared." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <Button Content="Open log folder" Click="OpenLogFolderButton_Click" HorizontalAlignment="Left" />
+                        <TextBlock Text="Each entry has a sequential number and UTC timestamp. Credentials, authorization tokens and session keys are excluded from diagnostics." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Recommendation" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <TextBlock Text="Start a track in a Windows media-control-enabled app. If metadata stays incomplete, install the optional Browser Companion for that supported site." TextWrapping="Wrap" />
                     </StackPanel>
