@@ -10,15 +10,16 @@ public sealed class ProviderAwareLocalPlayStore(
 {
     public async Task UpsertAsync(LocalPlayRecord play, CancellationToken cancellationToken)
     {
-        await localPlayStore.UpsertAsync(play, cancellationToken);
         if (!play.Eligibility.IsEligible)
         {
+            await localPlayStore.UpsertAsync(play, cancellationToken);
             return;
         }
 
         var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
         if (account is null)
         {
+            await localPlayStore.UpsertAsync(play, cancellationToken);
             return;
         }
 

@@ -206,6 +206,20 @@ var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.Non
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
+
+var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
+var preEligibleRecord = historyRecord with
+{
+    PlayId = "play-atomic",
+    ConfirmedPlayedMilliseconds = 0,
+    Eligibility = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 0),
+    ArtworkPath = artworkPath,
+};
+await new SqliteLocalPlayStore(connectionString).UpsertAsync(preEligibleRecord, CancellationToken.None);
+var eligibleRecord = preEligibleRecord with { ConfirmedPlayedMilliseconds = 150_000, Eligibility = standardTrack };
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "An already-recorded local session becomes eligible and queues atomically without losing its history row.");
+Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(eligibleRecord, "lastfm", "account-2", observation.ObservedAtUtc, CancellationToken.None), "The existing local session still receives only one provider action after becoming eligible.");
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == "play-atomic" && play.EligibleUtc is not null && play.ArtworkPath == artworkPath), "Atomic queueing updates the existing local history row and retains its cached artwork reference.");
 var accountStore = new SqliteProviderAccountStore(connectionString);
 var account = new ProviderAccount("account-1", "lastfm", "listener", "Scrobblix.LastFm", true, observation.ObservedAtUtc);
 await accountStore.UpsertAsync(account, CancellationToken.None);
@@ -241,7 +255,7 @@ var trackedStatus = await tracking.ObserveAsync(localObservation with { Playback
 Assert(localPlayStore.StoredPlay is { ConfirmedPlayedMilliseconds: 150_000, LocalReasonCode: null } eligiblePlay && eligiblePlay.Eligibility.IsEligible, "An eligible local playback session is persisted even without a connected provider.");
 Assert(trackedStatus.ConfirmedPlayedMilliseconds == 150_000 && trackedStatus.DidPersistEligiblePlay, "Tracking reports the confirmed duration and newly persisted eligibility for live UI refreshes.");
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
-Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Count == 3, "Eligible local sessions are persisted to the same local history read model.");
+Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
 var queuedEligibleStore = new RecordingEligiblePlayStore();
 var connectedAccountStore = new RecordingProviderAccountStore(account);
 var providerAwareLocalPlayStore = new ProviderAwareLocalPlayStore(new RecordingLocalPlayStore(), queuedEligibleStore, connectedAccountStore);
