@@ -28,6 +28,7 @@ public partial class App : Microsoft.UI.Xaml.Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        LoadLocalLastFmEnvironment();
         _window = new MainWindow();
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
@@ -208,6 +209,33 @@ public partial class App : Microsoft.UI.Xaml.Application
             connectionString,
             cancellationToken);
         _ = SetLastFmInitialStateAsync(accountStore, credentialStore, cancellationToken);
+    }
+
+    private static void LoadLocalLastFmEnvironment()
+    {
+        var path = Path.Combine(Environment.CurrentDirectory, ".env");
+        if (!File.Exists(path))
+        {
+            return;
+        }
+
+        foreach (var line in File.ReadLines(path))
+        {
+            var separator = line.IndexOf('=');
+            if (separator <= 0)
+            {
+                continue;
+            }
+
+            var name = line[..separator].Trim();
+            if (name is not ("SCROBBLIX_LASTFM_API_KEY" or "SCROBBLIX_LASTFM_API_SECRET") ||
+                !string.IsNullOrWhiteSpace(Environment.GetEnvironmentVariable(name)))
+            {
+                continue;
+            }
+
+            Environment.SetEnvironmentVariable(name, line[(separator + 1)..].Trim());
+        }
     }
 
     private async Task SetLastFmInitialStateAsync(
