@@ -52,6 +52,7 @@ public sealed class SqliteEligiblePlayStore(string connectionString) : IEligible
                     release_mbid = COALESCE(excluded.release_mbid, plays.release_mbid),
                     artwork_source = COALESCE(excluded.artwork_source, plays.artwork_source),
                     updated_utc = excluded.updated_utc;
+                """;
             playCommand.Parameters.AddWithValue("$playId", play.PlayId);
             playCommand.Parameters.AddWithValue("$startedUtc", play.FirstObservedUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
             playCommand.Parameters.AddWithValue("$artist", (object?)play.Artist ?? DBNull.Value);
