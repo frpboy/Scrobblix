@@ -8,7 +8,6 @@ namespace Scrobblix.Application.Ingestion;
 
 public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : IDisposable
 {
-    private readonly SemaphoreSlim _gate = new(1, 1);
     private CanonicalPlayTracker _tracker = new();
     private string? _playId;
     private DateTimeOffset _firstObservedUtc;
@@ -18,19 +17,6 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
     public void Dispose() => _gate.Dispose();
 
     public async Task<PlaybackTrackingStatus> ObserveAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
-    {
-        await _gate.WaitAsync(cancellationToken);
-        try
-        {
-            return await ObserveCoreAsync(observation, monotonicMilliseconds, cancellationToken);
-        }
-        finally
-        {
-            _gate.Release();
-        }
-    }
-
-    private async Task<PlaybackTrackingStatus> ObserveCoreAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
     {
         var didStartPlay = false;
         var sameTrack = IsSameTrack(_previousObservation, observation);
