@@ -79,9 +79,10 @@ static async Task<bool> TryForwardToDesktopAsync(byte[] payload, CancellationTok
 {
     try
     {
+        var pipeName = Environment.GetEnvironmentVariable("SCROBBLIX_BROWSER_PIPE") ?? "scrobblix.browser.v1";
         await using var pipe = new NamedPipeClientStream(
             ".",
-            "scrobblix.browser.v1",
+            pipeName,
             PipeDirection.Out,
             PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
         await pipe.ConnectAsync(TimeSpan.FromSeconds(1), cancellationToken);
