@@ -8,12 +8,17 @@ public sealed class ProviderAwareLocalPlayStore(
     IEligiblePlayStore eligiblePlayStore,
     IProviderAccountStore accountStore) : ILocalPlayStore
 {
-    public async Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken)
+    public async Task UpsertAsync(LocalPlayRecord play, CancellationToken cancellationToken)
     {
+        await localPlayStore.UpsertAsync(play, cancellationToken);
+        if (!play.Eligibility.IsEligible)
+        {
+            return;
+        }
+
         var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
         if (account is null)
         {
-            await localPlayStore.UpsertEligibleAsync(play, cancellationToken);
             return;
         }
 
@@ -24,4 +29,7 @@ public sealed class ProviderAwareLocalPlayStore(
             play.LastObservedUtc,
             cancellationToken);
     }
+
+    public Task UpsertEligibleAsync(LocalPlayRecord play, CancellationToken cancellationToken) =>
+        UpsertAsync(play, cancellationToken);
 }

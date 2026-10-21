@@ -1,5 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
+using Microsoft.UI.Xaml.Media.Imaging;
 using System.Globalization;
 using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
@@ -39,6 +41,7 @@ public sealed partial class MainWindow : Window
             ? "Artist unavailable"
             : observation.Artist;
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         var threshold = trackingStatus.Decision.ThresholdMilliseconds;
         EligibilityProgressBar.Value = threshold is > 0
@@ -54,6 +57,30 @@ public sealed partial class MainWindow : Window
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Informational);
+    }
+
+    private static void SetArtwork(Image image, TextBlock fallback, string? artworkPath)
+    {
+        if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
+        {
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
+            return;
+        }
+
+        try
+        {
+            image.Source = new BitmapImage(new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute));
+            image.Visibility = Visibility.Visible;
+            fallback.Visibility = Visibility.Collapsed;
+        }
+        catch (Exception exception) when (exception is UriFormatException or ArgumentException or IOException or UnauthorizedAccessException)
+        {
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
+        }
     }
 
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)

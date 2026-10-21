@@ -9,4 +9,5 @@ public sealed record RecentPlay(
     int? DurationMilliseconds,
     long ConfirmedPlayedMilliseconds,
     DateTimeOffset? EligibleUtc,
-    string? TerminalReasonCode);
+    string? TerminalReasonCode,
+    string? ArtworkPath = null);

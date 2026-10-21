@@ -11,6 +11,7 @@ public sealed class SqliteDatabase(string connectionString)
     [
         ("0001_initial", "Scrobblix.Infrastructure.Storage.Migrations.0001_initial.sql"),
         ("0002_accounts", "Scrobblix.Infrastructure.Storage.Migrations.0002_accounts.sql"),
+        ("0003_local_history_artwork", "Scrobblix.Infrastructure.Storage.Migrations.0003_local_history_artwork.sql"),
     ];
 
     public async Task InitializeAsync(CancellationToken cancellationToken)

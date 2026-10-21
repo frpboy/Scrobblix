@@ -56,7 +56,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 .GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
             var accountStore = new SqliteProviderAccountStore(connectionString);
-            var source = new GsmTcPlaybackObservationSource(new SystemWallClock());
+            var source = new GsmTcPlaybackObservationSource(new SystemWallClock(), Path.Combine(dataDirectory, "artwork"));
             var tracking = new PlaybackTrackingService(
                 new ProviderAwareLocalPlayStore(
                     new SqliteLocalPlayStore(connectionString),

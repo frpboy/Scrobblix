@@ -16,6 +16,7 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
 
     public async Task<PlaybackTrackingStatus> ObserveAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
     {
+        var didStartPlay = false;
         var trackIdentity = GetTrackIdentity(observation);
         if (!string.Equals(trackIdentity, _trackIdentity, StringComparison.Ordinal))
         {
@@ -24,31 +25,32 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
             _playId = Guid.NewGuid().ToString("N");
             _firstObservedUtc = observation.ObservedAtUtc;
             _persistedEligiblePlay = false;
+            didStartPlay = true;
         }
 
         var decision = _tracker.Observe(observation, monotonicMilliseconds);
-        var didPersistEligiblePlay = false;
-        if (decision.IsEligible && !_persistedEligiblePlay)
+        var didPersistEligiblePlay = decision.IsEligible && !_persistedEligiblePlay;
+        var record = new LocalPlayRecord(
+            _playId!,
+            _firstObservedUtc,
+            observation.ObservedAtUtc,
+            observation.Artist,
+            observation.Title,
+            observation.Album,
+            observation.DurationMilliseconds,
+            _tracker.ConfirmedPlayedMilliseconds,
+            decision,
+            null,
+            null,
+            null,
+            observation.ArtworkPath);
+        await localPlayStore.UpsertAsync(record, cancellationToken);
+        if (didPersistEligiblePlay)
         {
-            var record = new LocalPlayRecord(
-                _playId!,
-                _firstObservedUtc,
-                observation.ObservedAtUtc,
-                observation.Artist,
-                observation.Title,
-                observation.Album,
-                observation.DurationMilliseconds,
-                _tracker.ConfirmedPlayedMilliseconds,
-                decision,
-                null,
-                null,
-                null);
-            await localPlayStore.UpsertEligibleAsync(record, cancellationToken);
             _persistedEligiblePlay = true;
-            didPersistEligiblePlay = true;
         }
 
-        return new PlaybackTrackingStatus(decision, _tracker.ConfirmedPlayedMilliseconds, didPersistEligiblePlay);
+        return new PlaybackTrackingStatus(decision, _tracker.ConfirmedPlayedMilliseconds, didPersistEligiblePlay, didStartPlay);
     }
 
     private static string GetTrackIdentity(PlayObservation observation) => string.Join(

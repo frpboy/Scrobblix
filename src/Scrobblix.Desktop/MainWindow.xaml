@@ -49,9 +49,10 @@
                     <StackPanel Spacing="16">
                         <TextBlock Text="NOW PLAYING" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel Orientation="Horizontal" Spacing="16">
-                            <Border Width="88" Height="88" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
-                                <TextBlock Text="No artwork" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
-                            </Border>
+                            <Grid Width="88" Height="88" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
+                                <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
+                                <TextBlock x:Name="CurrentTrackArtworkFallback" Text="No artwork" HorizontalAlignment="Center" VerticalAlignment="Center" Style="{StaticResource CaptionTextBlockStyle}" />
+                            </Grid>
                             <StackPanel Spacing="6" VerticalAlignment="Center">
                                 <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
                                 <TextBlock x:Name="CurrentTrackDetail" Text="Listening for supported media through Windows media controls." TextWrapping="Wrap" />

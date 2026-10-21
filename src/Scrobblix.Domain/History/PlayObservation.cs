@@ -16,4 +16,5 @@ public sealed record PlayObservation(
     long? PositionMilliseconds,
     PlayState PlaybackState,
     NormalizedMetadataValue? NormalizedArtist,
-    NormalizedMetadataValue? NormalizedTitle);
+    NormalizedMetadataValue? NormalizedTitle,
+    string? ArtworkPath = null);

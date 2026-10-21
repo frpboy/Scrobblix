@@ -1,0 +1,1 @@
+ALTER TABLE plays ADD COLUMN artwork_path TEXT NULL;
