@@ -88,7 +88,7 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void AddPlayRow(Panel target, RecentPlay play)
+    private static void AddPlayRow(Panel target, RecentPlay play)
     {
         var row = new StackPanel
         {
