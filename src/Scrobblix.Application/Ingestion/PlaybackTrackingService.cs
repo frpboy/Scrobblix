@@ -6,7 +6,7 @@ using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Application.Ingestion;
 
-public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
+public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : IDisposable
 {
     private readonly SemaphoreSlim _gate = new(1, 1);
     private CanonicalPlayTracker _tracker = new();
@@ -15,6 +15,8 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
     private DateTimeOffset _firstObservedUtc;
     private bool _persistedEligiblePlay;
     private PlayObservation? _previousObservation;
+
+    public void Dispose() => _gate.Dispose();
 
     public async Task<PlaybackTrackingStatus> ObserveAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
     {
