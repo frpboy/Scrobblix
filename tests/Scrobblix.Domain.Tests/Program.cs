@@ -215,17 +215,7 @@ Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == Obser
 Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Duplicate, "Duplicate source observations are ignored by the database constraint.");
 var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
-var lovedWriter = new SqliteLovedActionWriter(connectionString);
-Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc, CancellationToken.None),
-    "A Love intent is durably queued for a persisted track.");
-Assert(!await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
-    "A repeated already-pending Love intent is not queued again.");
-Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Unlove, observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None),
-    "A newer Unlove intent supersedes an unstarted Love intent.");
-var lovedReader = new SqliteQueueReader(connectionString);
-var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
-Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
-    "The Loved read model reflects the newest persisted intent for the same track.");
+
 
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "The provider action idempotency key prevents repeated queueing.");
 var actionStore = new SqliteProviderActionStore(connectionString);
@@ -444,6 +434,17 @@ var connectedAccountStore = new RecordingProviderAccountStore(account);
 var providerAwareLocalPlayStore = new ProviderAwareLocalPlayStore(new RecordingLocalPlayStore(), queuedEligibleStore, connectedAccountStore);
 await providerAwareLocalPlayStore.UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert(queuedEligibleStore.QueueCount == 1, "An eligible play is atomically queued for the connected provider account instead of being duplicated in local-only storage.");
+var lovedWriter = new SqliteLovedActionWriter(connectionString);
+Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc, CancellationToken.None),
+    "A Love intent is durably queued for a persisted track.");
+Assert(!await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Love, observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+    "A repeated already-pending Love intent is not queued again.");
+Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.Unlove, observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None),
+    "A newer Unlove intent supersedes an unstarted Love intent.");
+var lovedReader = new SqliteQueueReader(connectionString);
+var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
+Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
+    "The Loved read model reflects the newest persisted intent for the same track.");
 File.Delete(databasePath);
 
 return;
