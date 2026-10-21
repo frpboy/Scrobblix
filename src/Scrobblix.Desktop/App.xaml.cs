@@ -40,6 +40,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             applicationCancellation.Cancel();
         };
         _window.Activate();
+        ScrobblixFileLogger? fileLogger = null;
 
         try
         {
@@ -48,6 +49,9 @@ public partial class App : Microsoft.UI.Xaml.Application
                 "Scrobblix");
             Directory.CreateDirectory(dataDirectory);
             var logger = new ScrobblixFileLogger(dataDirectory);
+            fileLogger = logger;
+            _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
+            _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={logger.LogPath}");
             var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
             var database = new SqliteDatabase(connectionString);
@@ -134,6 +138,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
         catch (Exception exception)
         {
+            fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; message={exception.Message}");
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
         }
     }
