@@ -152,6 +152,12 @@ var lease = await actionStore.ClaimNextDueAsync("worker-1", observation.Observed
 Assert(lease is not null && lease.PlayId == "play-1" && lease.AttemptCount == 1, "A due provider action is leased exactly once before delivery.");
 await actionStore.CompleteAsync(lease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted, observation.ObservedAtUtc, CancellationToken.None);
 Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "An accepted provider action is not delivered again.");
+var retryRecord = historyRecord with { PlayId = "play-2" };
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(retryRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "A distinct eligible play can be placed in the provider queue.");
+var retryLease = await actionStore.ClaimNextDueAsync("worker-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
+await actionStore.CompleteAsync(retryLease!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
+Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddSeconds(30), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "Transient provider failures observe a retry delay.");
+Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);

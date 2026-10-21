@@ -7,6 +7,8 @@ namespace Scrobblix.Infrastructure.Storage;
 
 public sealed class SqliteProviderActionStore(string connectionString) : IProviderActionStore
 {
+    private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+
     public async Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,
         DateTimeOffset nowUtc,
@@ -95,18 +97,23 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         }
 
         var completed = completedUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var retryDue = completedUtc.Add(RetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE provider_actions
             SET state = $state, lease_owner = NULL, lease_expires_utc = NULL,
-                last_reason_code = $reason, updated_utc = $completed, completed_utc = $completed
+                last_reason_code = $reason, updated_utc = $completed,
+                due_utc = CASE WHEN $state = $retry THEN $retryDue ELSE due_utc END,
+                completed_utc = CASE WHEN $state = $retry THEN NULL ELSE $completed END
             WHERE action_id = $actionId AND state = $inFlight;
             """;
         command.Parameters.AddWithValue("$state", (int)outcome);
         command.Parameters.AddWithValue("$reason", reasonCode);
         command.Parameters.AddWithValue("$completed", completed);
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$retryDue", retryDue);
         command.Parameters.AddWithValue("$actionId", actionId);
         command.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
         if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
