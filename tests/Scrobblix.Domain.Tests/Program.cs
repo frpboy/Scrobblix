@@ -244,7 +244,7 @@ await using (var acceptedConnection = new SqliteConnection(connectionString))
     acceptCommand.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
     Assert(await acceptCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1, "The test scrobble is marked accepted to validate the dashboard projection.");
 }
-var todaySummary = await historyReader.GetTodaySummaryAsync(new DateTimeOffset(2026, 8, 1, 12, 0, 0, TimeSpan.Zero), CancellationToken.None);
+var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None);
 Assert(todaySummary.DetectedSessionCount >= 1
     && todaySummary.EligibleSessionCount >= 1
     && todaySummary.AcceptedScrobbleCount >= 1
