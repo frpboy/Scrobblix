@@ -61,15 +61,10 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetCurrentPlayback(observation);
 
             var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
-            var result = await ingestion.IngestAsync(observation, CancellationToken.None);
+            await ingestion.IngestAsync(observation, CancellationToken.None);
             await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
-            _window.SetStartupStatus(
-                result == ObservationIngestionResult.Accepted
-                    ? $"Tracking {observation.Artist} — {observation.Title}."
-                    : "Current playback was already recorded.",
-                InfoBarSeverity.Success);
-            _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, trackingCancellation.Token);
-            _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, trackingCancellation.Token);
+            _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
+            _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
         }
         catch (Exception exception)
         {
@@ -82,6 +77,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         string connectionString,
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
+        MainWindow window,
         CancellationToken cancellationToken)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
@@ -89,12 +85,13 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             while (!cancellationToken.IsCancellationRequested)
             {
-                await Task.Delay(TimeSpan.FromSeconds(10), cancellationToken);
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
                 var observation = await source.GetCurrentAsync(cancellationToken);
                 if (observation is not null)
                 {
                     await ingestion.IngestAsync(observation, cancellationToken);
                     await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
+                    PublishCurrentPlayback(window, observation);
                 }
             }
         }
@@ -107,6 +104,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         string connectionString,
         PlaybackTrackingService tracking,
         Stopwatch trackingClock,
+        MainWindow window,
         CancellationToken cancellationToken)
     {
         var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
@@ -144,6 +142,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                 {
                     await ingestion.IngestAsync(observation, cancellationToken);
                     await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
+                    PublishCurrentPlayback(window, observation);
                 }
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
@@ -155,6 +154,9 @@ public partial class App : Microsoft.UI.Xaml.Application
             }
         }
     }
+
+    private static void PublishCurrentPlayback(MainWindow window, PlayObservation observation) =>
+        window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(observation));
 
     private static PlayObservation? TryCreateBrowserObservation(byte[] message)
     {

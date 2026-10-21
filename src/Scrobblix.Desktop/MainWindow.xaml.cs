@@ -2,6 +2,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Domain.History;
+using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Desktop;
 
@@ -25,6 +26,13 @@ public sealed partial class MainWindow : Window
             ? "Artist unavailable"
             : observation.Artist;
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        SetStartupStatus(
+            observation.PlaybackState == PlayState.Playing
+                ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
+                : $"Last observed {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}.",
+            observation.PlaybackState == PlayState.Playing
+                ? InfoBarSeverity.Success
+                : InfoBarSeverity.Informational);
     }
 
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
