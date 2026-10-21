@@ -120,13 +120,6 @@ public sealed class SqliteLovedTrackStore(string connectionString)
         }
 
         var targetAction = isLoved ? ProviderActionType.Love : ProviderActionType.Unlove;
-        var cancelledActions = await CancelOppositePendingActionsAsync(
-            connection, transaction, trackKey, targetAction, now, cancellationToken);
-        if (cancelledActions > 0)
-        {
-            providerLoved = providerLoved;
-        }
-
         string? actionId = null;
         var actionQueued = false;
         string? reason = null;
@@ -153,6 +146,16 @@ public sealed class SqliteLovedTrackStore(string connectionString)
         }
         else
         {
+            await CancelOppositePendingActionsAsync(
+                connection, transaction, trackKey, targetAction, now, cancellationToken);
+            actionId = await FindActionIdAsync(
+                connection,
+                transaction,
+                trackKey,
+                targetAction,
+                new[] { ProviderActionState.Pending, ProviderActionState.InFlight, ProviderActionState.RetryScheduled, ProviderActionState.AuthBlocked, ProviderActionState.PermanentFailure },
+                cancellationToken);
+            actionQueued = actionId is not null;
             reason = isLoved
                 ? "Saved locally. Connect Last.fm to sync this love state."
                 : "Unlove saved locally. Connect Last.fm to sync the removal.";
