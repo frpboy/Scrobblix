@@ -108,30 +108,31 @@ release-ready.
 
 - [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md): complete file-by-file catalogue.
 - [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md): generated structural validation results and limitations.
-- [`00_Project/RECOMMENDATIONS.md`](00_Project/RECOMMENDATIONS.md): consolidated product, architecture, privacy, release, and scope recommendations.
-- [`00_Project`](00_Project/README.md): vision, scope, principles, terminology, product rules, risks, and decisions.
-- [`01_Product`](01_Product/README.md): PRD, features, personas, journeys, metrics, and product strategy.
-- [`02_Research`](02_Research/README.md): competitor research, pain points, validation plan, and source notes.
-- [`03_Requirements`](03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
-- [`04_UserExperience`](04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
-- [`05_Architecture`](05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
-- [`06_Data`](06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
-- [`07_Interfaces`](07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.
-- [`08_DesktopApp`](08_DesktopApp/README.md): Windows app behavior, GSMTC, tray, startup, notifications, packaging, and updates.
-- [`09_BrowserExtension`](09_BrowserExtension/README.md): extension architecture, adapters, permissions, browser differences, and privacy.
-- [`10_CoreEngine`](10_CoreEngine/README.md): playback tracking, metadata normalization, arbitration, eligibility, deduplication, queueing, and sync.
-- [`11_SecurityPrivacy`](11_SecurityPrivacy/README.md): threat model, credentials, privacy, telemetry, and legal considerations.
-- [`12_Testing`](12_Testing/README.md): unit, integration, E2E, performance, accessibility, and release qualification.
-- [`13_Engineering`](13_Engineering/README.md): repository layout, coding standards, Git workflow, CI/CD, versioning, and contribution workflow.
-- [`14_Operations`](14_Operations/README.md): logs, diagnostics, recovery, support bundles, and observability.
-- [`15_Roadmap`](15_Roadmap/README.md): milestones, prioritized backlog, and future platform strategy.
-- [`16_AI_Agents`](16_AI_Agents/README.md): mandatory rules and context for AI coding agents.
-- [`17_UserDocumentation`](17_UserDocumentation/README.md): installation, onboarding, daily use, troubleshooting, privacy, data, and removal guides.
-- [`18_Brand`](18_Brand/README.md): brand identity, product copy, release assets, and name/IP diligence.
-- [`19_Localization`](19_Localization/README.md): internationalization requirements and translation workflow.
-- [`20_ProjectManagement`](20_ProjectManagement/README.md): delivery phases, issue readiness, labels, release notes, and launch controls.
-- [`diagrams`](diagrams/README.md): Mermaid architecture, sequence, state, ER, and UI-flow diagrams.
-- [`references`](references/README.md): official source register and terminology references.
+- [`00_Project/RECOMMENDATIONS.md`](Scrobblix-Docs/00_Project/RECOMMENDATIONS.md): consolidated product, architecture, privacy, release, and scope recommendations.
+- [`00_Project`](Scrobblix-Docs/00_Project/README.md): vision, scope, principles, terminology, product rules, risks, and decisions.
+- [`01_Product`](Scrobblix-Docs/01_Product/README.md): PRD, features, personas, journeys, metrics, and product strategy.
+- [`02_Research`](Scrobblix-Docs/02_Research/README.md): competitor research, pain points, validation plan, and source notes.
+- [`03_Requirements`](Scrobblix-Docs/03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
+- [`04_UserExperience`](Scrobblix-Docs/04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
+- [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPLEMENTATION_HANDOFF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
+- [`05_Architecture`](Scrobblix-Docs/05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
+- [`06_Data`](Scrobblix-Docs/06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
+- [`07_Interfaces`](Scrobblix-Docs/07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.
+- [`08_DesktopApp`](Scrobblix-Docs/08_DesktopApp/README.md): Windows app behavior, GSMTC, tray, startup, notifications, packaging, and updates.
+- [`09_BrowserExtension`](Scrobblix-Docs/09_BrowserExtension/README.md): extension architecture, adapters, permissions, browser differences, and privacy.
+- [`10_CoreEngine`](Scrobblix-Docs/10_CoreEngine/README.md): playback tracking, metadata normalization, arbitration, eligibility, deduplication, queueing, and sync.
+- [`11_SecurityPrivacy`](Scrobblix-Docs/11_SecurityPrivacy/README.md): threat model, credentials, privacy, telemetry, and legal considerations.
+- [`12_Testing`](Scrobblix-Docs/12_Testing/README.md): unit, integration, E2E, performance, accessibility, and release qualification.
+- [`13_Engineering`](Scrobblix-Docs/13_Engineering/README.md): repository layout, coding standards, Git workflow, CI/CD, versioning, and contribution workflow.
+- [`14_Operations`](Scrobblix-Docs/14_Operations/README.md): logs, diagnostics, recovery, support bundles, and observability.
+- [`15_Roadmap`](Scrobblix-Docs/15_Roadmap/README.md): milestones, prioritized backlog, and future platform strategy.
+- [`16_AI_Agents`](Scrobblix-Docs/16_AI_Agents/README.md): mandatory rules and context for AI coding agents.
+- [`17_UserDocumentation`](Scrobblix-Docs/17_UserDocumentation/README.md): installation, onboarding, daily use, troubleshooting, privacy, data, and removal guides.
+- [`18_Brand`](Scrobblix-Docs/18_Brand/README.md): brand identity, product copy, release assets, and name/IP diligence.
+- [`19_Localization`](Scrobblix-Docs/19_Localization/README.md): internationalization requirements and translation workflow.
+- [`20_ProjectManagement`](Scrobblix-Docs/20_ProjectManagement/README.md): delivery phases, issue readiness, labels, release notes, and launch controls.
+- [`diagrams`](Scrobblix-Docs/diagrams/README.md): Mermaid architecture, sequence, state, ER, and UI-flow diagrams.
+- [`references`](Scrobblix-Docs/references/README.md): official source register and terminology references.
 
 ## Non-negotiable behavior
 
