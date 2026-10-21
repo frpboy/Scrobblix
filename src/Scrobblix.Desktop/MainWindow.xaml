@@ -26,7 +26,7 @@
                 <NavigationView.MenuItems>
                     <NavigationViewItem Content="Home" Tag="home" IsSelected="True"><NavigationViewItem.Icon><FontIcon Glyph="&#xE80F;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="History" Tag="history"><NavigationViewItem.Icon><FontIcon Glyph="&#xE81C;" /></NavigationViewItem.Icon></NavigationViewItem>
-                    <NavigationViewItem Content="Statistics" IsEnabled="False" ToolTipService.ToolTip="Statistics are not available in this build."><NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="Statistics" Tag="statistics"><NavigationViewItem.Icon><FontIcon Glyph="&#xE9D2;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="Loved" IsEnabled="False" ToolTipService.ToolTip="Loved tracks are not available in this build."><NavigationViewItem.Icon><FontIcon Glyph="&#xEB51;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="Queue" Tag="queue"><NavigationViewItem.Icon><FontIcon Glyph="&#xE896;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="Sources" Tag="sources"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D7;" /></NavigationViewItem.Icon></NavigationViewItem>
@@ -102,6 +102,69 @@
                         <StackPanel x:Name="RecentActivityList" Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                 </StackPanel>
+            </StackPanel>
+        </ScrollViewer>
+
+        <ScrollViewer x:Name="StatisticsView" Grid.Column="1" Visibility="Collapsed">
+            <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Statistics" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="Listening patterns computed from the local history on this device. No cloud history is required." Style="{StaticResource BodyTextBlockStyle}" />
+                </StackPanel>
+                <Grid ColumnSpacing="12" RowSpacing="12">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                        <RowDefinition Height="Auto" />
+                    </Grid.RowDefinitions>
+                    <Border Padding="18" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Listening sessions" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="StatisticsTotalSessionsText" Text="—" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock Text="All recorded local sessions" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Column="1" Padding="18" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Eligible plays" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="StatisticsEligibleText" Text="—" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock Text="Met Last.fm listening-time requirements" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1" Padding="18" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Confirmed listening" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="StatisticsListeningText" Text="—" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock Text="Counted only while playback is known to be playing" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="1" Grid.Column="1" Padding="18" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Unique artists" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="StatisticsArtistsText" Text="—" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock Text="Distinct non-empty artist names in local history" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                    <Border Grid.Row="2" Grid.ColumnSpan="2" Padding="18" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Recent activity" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="StatisticsRecentText" Text="Calculating sessions from the last 30 days." Style="{StaticResource SubtitleTextBlockStyle}" />
+                        </StackPanel>
+                    </Border>
+                </Grid>
+                <Border Padding="20" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="Top artists" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="Ranked by recorded session count; totals are local and may contain different releases or versions of the same track." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <StackPanel x:Name="TopArtistsList" Spacing="8">
+                            <TextBlock Text="Not enough listening history yet." />
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </ScrollViewer>
 
