@@ -51,6 +51,7 @@ public static class ReasonCodes
         public const string TemporaryUnavailable = "provider.temporary_unavailable";
         public const string SubmissionOutcomeUnknown = "provider.submission_outcome_unknown";
         public const string ResponseInvalid = "provider.response_invalid";
+        public const string ActionSuperseded = "provider.action_superseded";
     }
 
     public static class Extension
