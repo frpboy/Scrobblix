@@ -49,6 +49,7 @@ public static class ReasonCodes
         public const string SuspendedKey = "provider.suspended_key";
         public const string RateLimited = "provider.rate_limited";
         public const string TemporaryUnavailable = "provider.temporary_unavailable";
+        public const string SubmissionOutcomeUnknown = "provider.submission_outcome_unknown";
         public const string ResponseInvalid = "provider.response_invalid";
     }
 
