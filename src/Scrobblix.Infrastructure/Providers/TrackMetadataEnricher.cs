@@ -72,13 +72,13 @@ public sealed class TrackMetadataEnricher
         if (release is not null)
         {
             result = Merge(result, release.Metadata);
-            if (string.IsNullOrWhiteSpace(result.ArtworkPath))
+            if (HasWeakArtwork(result))
             {
                 var coverPath = await TryCacheArtworkAsync(
                     $"https://coverartarchive.org/release/{release.ReleaseId}/front-250",
                     "cover-art-archive",
                     cancellationToken);
-                result = Merge(result, coverPath);
+                result = MergeArtwork(result, coverPath);
             }
         }
 
@@ -87,17 +87,17 @@ public sealed class TrackMetadataEnricher
                 || string.IsNullOrWhiteSpace(result.ReleaseMusicBrainzId)
                 || string.IsNullOrWhiteSpace(result.AlbumArtist)
                 || result.ReleaseYear is null
-                || string.IsNullOrWhiteSpace(result.ArtworkPath));
+                || HasWeakArtwork(result));
         if (needsLastFm)
         {
             var lastFm = await TryLastFmAsync(observation, cancellationToken);
             if (lastFm is not null)
             {
                 result = Merge(result, lastFm.Metadata);
-                if (string.IsNullOrWhiteSpace(result.ArtworkPath) && !string.IsNullOrWhiteSpace(lastFm.ArtworkUrl))
+                if (!string.IsNullOrWhiteSpace(lastFm.ArtworkUrl) && HasWeakArtwork(result))
                 {
                     var lastFmArtwork = await TryCacheArtworkAsync(lastFm.ArtworkUrl, "last.fm", cancellationToken);
-                    result = Merge(result, lastFmArtwork);
+                    result = MergeArtwork(result, lastFmArtwork);
                 }
             }
         }
@@ -114,6 +114,28 @@ public sealed class TrackMetadataEnricher
         observation.ReleaseMusicBrainzId,
         observation.ArtworkPath,
         observation.ArtworkSource);
+
+    private static bool HasWeakArtwork(PlayMetadataEnrichment metadata) =>
+        string.IsNullOrWhiteSpace(metadata.ArtworkPath)
+        || !File.Exists(metadata.ArtworkPath)
+        || string.Equals(metadata.ArtworkSource, "windows-gsmtc", StringComparison.OrdinalIgnoreCase);
+
+    private static PlayMetadataEnrichment MergeArtwork(
+        PlayMetadataEnrichment existing,
+        PlayMetadataEnrichment fallback)
+    {
+        if (!string.IsNullOrWhiteSpace(fallback.ArtworkPath)
+            && (HasWeakArtwork(existing) || string.IsNullOrWhiteSpace(existing.ArtworkSource)))
+        {
+            return existing with
+            {
+                ArtworkPath = fallback.ArtworkPath,
+                ArtworkSource = fallback.ArtworkSource,
+            };
+        }
+
+        return Merge(existing, fallback);
+    }
 
     private static PlayMetadataEnrichment Merge(PlayMetadataEnrichment preferred, PlayMetadataEnrichment fallback) => new(
         preferred.AlbumArtist ?? fallback.AlbumArtist,
