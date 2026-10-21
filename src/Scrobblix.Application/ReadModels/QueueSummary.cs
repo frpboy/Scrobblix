@@ -6,4 +6,5 @@ public sealed record QueueSummary(
     int AcceptedCount,
     int RetryScheduledCount,
     int AuthBlockedCount,
-    int PermanentFailureCount);
+    int PermanentFailureCount,
+    int SubmissionOutcomeUnknownCount = 0);

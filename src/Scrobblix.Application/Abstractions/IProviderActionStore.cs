@@ -21,5 +21,6 @@ public interface IProviderActionStore
         ProviderActionState outcome,
         string reasonCode,
         DateTimeOffset completedUtc,
-        CancellationToken cancellationToken);
+        CancellationToken cancellationToken,
+        TimeSpan? retryAfter = null);
 }
