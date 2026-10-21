@@ -24,15 +24,26 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
         {
             var metadataReason = string.IsNullOrWhiteSpace(action.Artist) ? ReasonCodes.Metadata.MissingArtist : ReasonCodes.Metadata.MissingTitle;
             await actionStore.CompleteAsync(action.ActionId, ProviderActionState.PermanentFailure, metadataReason, nowUtc, cancellationToken);
-            log?.Invoke($"Scrobble was not sent because metadata is incomplete; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; attempt={action.AttemptCount}; outcome=PermanentFailure; reason={metadataReason}.");
+            log?.Invoke($"Provider action was not sent because metadata is incomplete; action_id={action.ActionId}; play_id={action.PlayId}; action={action.ActionType}; provider={action.Provider}; attempt={action.AttemptCount}; outcome=PermanentFailure; reason={metadataReason}.");
             return true;
         }
 
-        log?.Invoke($"Scrobble submission started; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; started_utc={action.StartedUtc:O}.");
+        log?.Invoke($"Provider action started; action_id={action.ActionId}; play_id={action.PlayId}; action={action.ActionType}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; started_utc={action.StartedUtc:O}.");
 
-        var result = await provider.SubmitScrobbleAsync(
-            new ScrobbleSubmission(action.Artist, action.Title, action.StartedUtc, sessionKey, action.Album, action.DurationMilliseconds / 1000),
-            cancellationToken);
+        var submission = new ScrobbleSubmission(
+            action.Artist,
+            action.Title,
+            action.StartedUtc,
+            sessionKey,
+            action.Album,
+            action.DurationMilliseconds / 1000);
+        var result = action.ActionType switch
+        {
+            ProviderActionType.Scrobble => await provider.SubmitScrobbleAsync(submission, cancellationToken),
+            ProviderActionType.Love => await provider.LoveTrackAsync(submission, cancellationToken),
+            ProviderActionType.Unlove => await provider.UnloveTrackAsync(submission, cancellationToken),
+            _ => new ProviderSubmissionResult(false, ReasonCodes.Provider.ResponseInvalid, false),
+        };
         var outcome = result.Accepted
             ? ProviderActionState.Accepted
             : result.ReasonCode == ReasonCodes.Provider.AuthInvalidSession
@@ -41,7 +52,7 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
                     ? ProviderActionState.RetryScheduled
                     : ProviderActionState.PermanentFailure;
         await actionStore.CompleteAsync(action.ActionId, outcome, result.ReasonCode, nowUtc, cancellationToken);
-        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={result.ReasonCode}; response_utc={nowUtc:O}.");
+        log?.Invoke($"Provider action finished; action_id={action.ActionId}; play_id={action.PlayId}; action={action.ActionType}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={result.ReasonCode}; response_utc={nowUtc:O}.");
         return true;
     }
 }
