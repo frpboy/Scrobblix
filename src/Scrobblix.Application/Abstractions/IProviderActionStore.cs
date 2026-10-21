@@ -12,6 +12,10 @@ public interface IProviderActionStore
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);
 
+    Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
+    Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
     Task CompleteAsync(
         string actionId,
         ProviderActionState outcome,

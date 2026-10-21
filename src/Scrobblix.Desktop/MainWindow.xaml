@@ -151,6 +151,11 @@
                         <TextBlock x:Name="QueuePageStateText" Text="Loading queue status" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="QueuePageDetailText" Text="Reading durable provider actions." TextWrapping="Wrap" />
                         <TextBlock Text="Last.fm delivery remains off until an account is configured. Local history is kept independently." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Recent provider actions" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,16,0,0" />
+                        <TextBlock x:Name="QueuePageActionFeedbackText" Text="Actions can be retried or cancelled when their state permits." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <StackPanel x:Name="QueuePageActionList" Spacing="10">
+                            <TextBlock Text="No queue actions have been recorded yet." />
+                        </StackPanel>
                     </StackPanel>
                 </Border>
             </StackPanel>

@@ -102,6 +102,49 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         return lease;
     }
 
+    public async Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $pending, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
+                last_reason_code = NULL, completed_utc = NULL, updated_utc = $now
+            WHERE action_id = $actionId AND state = $retry;
+            """;
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $cancelled, last_reason_code = $reason, completed_utc = $now, updated_utc = $now,
+                lease_owner = NULL, lease_expires_utc = NULL
+            WHERE action_id = $actionId AND state IN ($pending, $retry, $authBlocked);
+            """;
+        command.Parameters.AddWithValue("$cancelled", (int)ProviderActionState.Cancelled);
+        command.Parameters.AddWithValue("$reason", "user.cancelled");
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$authBlocked", (int)ProviderActionState.AuthBlocked);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
     public async Task CompleteAsync(
         string actionId,
         ProviderActionState outcome,

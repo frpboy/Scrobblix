@@ -31,6 +31,10 @@ public sealed partial class MainWindow : Window
 
     public event Action<string>? DiagnosticLogRequested;
 
+    public event Func<string, Task<bool>>? QueueRetryNowRequested;
+
+    public event Func<string, Task<bool>>? QueueCancelRequested;
+
     private string? _logDirectory;
 
     public MainWindow()
@@ -382,6 +386,134 @@ public sealed partial class MainWindow : Window
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
+    {
+        QueuePageActionList.Children.Clear();
+        if (actions.Count == 0)
+        {
+            QueuePageActionList.Children.Add(new TextBlock { Text = "No provider actions have been recorded yet." });
+            return;
+        }
+
+        foreach (var action in actions)
+        {
+            var card = new Border
+            {
+                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            };
+            var content = new StackPanel { Spacing = 6 };
+            var track = string.IsNullOrWhiteSpace(action.Artist) && string.IsNullOrWhiteSpace(action.Title)
+                ? "Unknown track"
+                : $"{action.Artist ?? "Unknown artist"} — {action.Title ?? "Unknown title"}";
+            content.Children.Add(new TextBlock { Text = track, FontSize = 15, TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{action.Provider} · {action.ActionType} · {FormatQueueState(action.State)} · attempts {action.AttemptCount:N0}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = action.State is ProviderActionState.Accepted or ProviderActionState.Cancelled
+                    ? $"Finished: {action.DueUtc.ToLocalTime():g}"
+                    : $"Next attempt / due: {action.DueUtc.ToLocalTime():g}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(action.LastReasonCode))
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = $"Reason: {action.LastReasonCode}",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (action.State == ProviderActionState.RetryScheduled)
+            {
+                actionsRow.Children.Add(new Button
+                {
+                    Content = "Retry now",
+                    Tag = action.ActionId,
+                    Click = QueueRetryNowButton_Click,
+                });
+            }
+
+            if (action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled or ProviderActionState.AuthBlocked)
+            {
+                actionsRow.Children.Add(new Button
+                {
+                    Content = "Cancel action",
+                    Tag = action.ActionId,
+                    Click = QueueCancelButton_Click,
+                });
+            }
+
+            if (actionsRow.Children.Count > 0) content.Children.Add(actionsRow);
+            card.Child = content;
+            QueuePageActionList.Children.Add(card);
+        }
+    }
+
+    private static string FormatQueueState(ProviderActionState state) => state switch
+    {
+        ProviderActionState.RetryScheduled => "Retry scheduled",
+        ProviderActionState.AuthBlocked => "Authentication blocked",
+        ProviderActionState.PermanentFailure => "Failed",
+        ProviderActionState.ProviderIgnored => "Ignored by provider",
+        ProviderActionState.InFlight => "In progress",
+        _ => state.ToString(),
+    };
+
+    private async void QueueRetryNowButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueRetryNowRequested is null) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueRetryNowRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "Retry scheduled immediately. The worker will attempt delivery when Last.fm is connected."
+                : "This action changed before it could be retried. Refreshing its current state.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Retry could not be scheduled ({exception.GetType().Name}).";
+        }
+    }
+
+    private async void QueueCancelButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueCancelRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Cancel queued action?",
+            Content = "This keeps the history record but marks the selected provider action as cancelled. It does not remove an already accepted Last.fm scrobble.",
+            PrimaryButtonText = "Cancel action",
+            CloseButtonText = "Keep action",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueCancelRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "The queued action was cancelled. Local listening history was kept."
+                : "This action is already running or has changed and could not be cancelled.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Action could not be cancelled ({exception.GetType().Name}).";
+        }
     }
 
     public void SetQueueSummary(QueueSummary summary)

@@ -68,9 +68,27 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetHistoryPage(await historyReader.GetRecentAsync(500, CancellationToken.None));
             _window.SetStatisticsSummary(await new SqliteStatisticsReader(connectionString).GetAsync(CancellationToken.None));
             _window.SetTodaySummary(await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, CancellationToken.None));
-            var queueSummary = await new SqliteQueueReader(connectionString)
-                .GetSummaryAsync(CancellationToken.None);
+            var queueReader = new SqliteQueueReader(connectionString);
+            var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
+            _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
+
+            _window.QueueRetryNowRequested += async actionId =>
+            {
+                var changed = await new SqliteProviderActionStore(connectionString)
+                    .RetryNowAsync(actionId, DateTimeOffset.UtcNow, applicationCancellation.Token);
+                logger.Info("QUEUE_ACTION", $"Manual retry requested; action_id={actionId}; changed={changed}.");
+                await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
+                return changed;
+            };
+            _window.QueueCancelRequested += async actionId =>
+            {
+                var changed = await new SqliteProviderActionStore(connectionString)
+                    .CancelAsync(actionId, DateTimeOffset.UtcNow, applicationCancellation.Token);
+                logger.Info("QUEUE_ACTION", $"Manual cancellation requested; action_id={actionId}; changed={changed}.");
+                await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
+                return changed;
+            };
             var accountStore = new SqliteProviderAccountStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
             const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
@@ -714,7 +732,9 @@ public partial class App : Microsoft.UI.Xaml.Application
         var recentHistory = await historyReader.GetRecentAsync(10, cancellationToken);
         var historyPage = await historyReader.GetRecentAsync(500, cancellationToken);
         var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
-        var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(cancellationToken);
+        var queueReader = new SqliteQueueReader(connectionString);
+        var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
+        var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
@@ -722,6 +742,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             window.SetHistoryPage(historyPage);
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
+            window.SetQueueActions(queueActions);
             window.SetStatisticsSummary(statistics);
         });
     }

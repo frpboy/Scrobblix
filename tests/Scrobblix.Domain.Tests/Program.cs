@@ -219,6 +219,12 @@ Assert(await actionStore.ClaimNextDueAsync("worker-3", observation.ObservedAtUtc
 var historyReader = new SqliteHistoryReader(connectionString);
 var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
+var queueReader = new SqliteQueueReader(connectionString);
+var queueActions = await queueReader.GetRecentActionsAsync(50, CancellationToken.None);
+Assert(queueActions.Count >= 2
+    && queueActions.Any(action => action.ActionType == ProviderActionType.Scrobble && action.Artist == "Artist"),
+    "Queue details expose real persisted actions and related local track metadata.");
+
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
@@ -268,6 +274,27 @@ Assert(csvTest.Contains("'=SUM(1,1)", StringComparison.Ordinal)
     && csvTest.Contains("\"Track \"\"Quoted\"\"", StringComparison.Ordinal)
     && csvTest.StartsWith("started_utc,artist,title", StringComparison.Ordinal),
     "History CSV export quotes separators/quotes and guards spreadsheet formula injection.");
+
+// Exercise explicit retry/cancel transitions without deleting listening history.
+var userRetryRecord = historyRecord with { PlayId = "play-user-retry" };
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(userRetryRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
+    "A new eligible record can be queued for manual retry testing.");
+var retryCandidate = (await queueReader.GetRecentActionsAsync(50, CancellationToken.None))
+    .Single(action => action.PlayId == "play-user-retry");
+var retryCandidateLease = await actionStore.ClaimNextDueAsync("worker-user-retry", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(retryCandidateLease is not null, "Queued actions can be leased for retry-state testing.");
+await actionStore.CompleteAsync(retryCandidateLease!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
+Assert(await actionStore.RetryNowAsync(retryCandidateLease.ActionId, observation.ObservedAtUtc.AddSeconds(10), CancellationToken.None),
+    "A retry-scheduled action can be moved to immediate pending delivery.");
+var immediateRetry = await actionStore.ClaimNextDueAsync("worker-user-retry-2", observation.ObservedAtUtc.AddSeconds(10), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(immediateRetry is not null && immediateRetry.ActionId == retryCandidate.ActionId,
+    "Retry now makes the selected action eligible for immediate leasing.");
+await actionStore.CompleteAsync(immediateRetry!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
+Assert(await actionStore.CancelAsync(immediateRetry.ActionId, observation.ObservedAtUtc.AddSeconds(20), CancellationToken.None),
+    "A pending retry can be cancelled without deleting its local play.");
+Assert((await historyReader.GetRecentAsync(100, CancellationToken.None)).Any(play => play.PlayId == "play-user-retry"),
+    "Cancelling a queued action preserves the local listening history row.");
+
 
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
@@ -403,6 +430,10 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
         _lease = null;
         return Task.FromResult(next);
     }
+
+    public Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    public Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
 
     public Task CompleteAsync(string actionId, ProviderActionState outcome, string reasonCode, DateTimeOffset completedUtc, CancellationToken cancellationToken)
     {
