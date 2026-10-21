@@ -286,6 +286,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     await ingestion.IngestAsync(observation, cancellationToken);
                     var trackingStatus = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
                     PublishCurrentPlayback(window, observation, trackingStatus);
+                    window.DispatcherQueue.TryEnqueue(() => window.SetBrowserCompanionObservation(observation.SourceName));
                     if (trackingStatus.DidPersistEligiblePlay)
                     {
                         await RefreshDashboardAsync(window, connectionString, cancellationToken);

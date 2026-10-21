@@ -91,7 +91,7 @@ public sealed partial class MainWindow : Window
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
-            HistoryList.Children.Add(new TextBlock { Text = "No eligible plays recorded yet." });
+            HistoryList.Children.Add(new TextBlock { Text = "No listening sessions recorded yet." });
             return;
         }
 
@@ -124,7 +124,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmUnavailable()
     {
-        LastFmStatusText.Text = "Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.";
+        SetLastFmStatus("Last.fm setup needs an API key and shared secret supplied outside the app. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;
@@ -132,7 +132,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmReadyToConnect()
     {
-        LastFmStatusText.Text = "Not connected. Select Connect Last.fm to approve access in your browser.";
+        SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;
@@ -140,7 +140,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmAuthorizationWaiting()
     {
-        LastFmStatusText.Text = "Waiting for approval in your browser. Return here and select Finish approval.";
+        SetLastFmStatus("Waiting for approval in your browser. Return here and select Finish approval.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = true;
         DisconnectLastFmButton.IsEnabled = false;
@@ -148,7 +148,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnected(string userName)
     {
-        LastFmStatusText.Text = $"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.";
+        SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = true;
@@ -156,10 +156,23 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnectionError()
     {
-        LastFmStatusText.Text = "Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.";
+        SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;
+    }
+
+    public void SetBrowserCompanionObservation(string sourceName)
+    {
+        var status = $"Browser Companion received playback from {sourceName}.";
+        BrowserCompanionHomeStatusText.Text = status;
+        BrowserCompanionSourceStatusText.Text = status;
+    }
+
+    private void SetLastFmStatus(string status)
+    {
+        LastFmStatusText.Text = status;
+        LastFmHomeStatusText.Text = status;
     }
 
     private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
