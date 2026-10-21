@@ -130,6 +130,13 @@
                         <TextBlock Text="Last.fm delivery remains off until an account is configured. Local history is kept independently." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                     </StackPanel>
                 </Border>
+                <StackPanel Spacing="8">
+                    <TextBlock Text="Recent delivery actions" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Pending, retrying, blocked, failed, and accepted actions are read from the local SQLite queue." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                    <StackPanel x:Name="QueueActionList" Spacing="8">
+                        <TextBlock Text="Loading queue actions..." />
+                    </StackPanel>
+                </StackPanel>
             </StackPanel>
         </ScrollViewer>
 
