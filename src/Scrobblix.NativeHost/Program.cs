@@ -1,4 +1,5 @@
 using System.Buffers.Binary;
+using System.IO.Pipes;
 using System.Text;
 using System.Text.Json;
 
@@ -33,9 +34,18 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
             throw new JsonException();
         }
 
-        await WriteAsync(output, type == "ping.v1"
-            ? new { type = "pong.v1", messageId }
-            : new { type = "error.v1", messageId, code = "extension.host_not_connected" });
+        if (type == "ping.v1")
+        {
+            await WriteAsync(output, new { type = "pong.v1", messageId });
+        }
+        else if (await TryForwardToDesktopAsync(payload, CancellationToken.None))
+        {
+            await WriteAsync(output, new { type = "accepted.v1", messageId });
+        }
+        else
+        {
+            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.host_not_connected" });
+        }
     }
     catch (JsonException)
     {
@@ -63,4 +73,31 @@ static async Task WriteAsync(Stream output, object response)
     await output.WriteAsync(length);
     await output.WriteAsync(payload);
     await output.FlushAsync();
+}
+
+static async Task<bool> TryForwardToDesktopAsync(byte[] payload, CancellationToken cancellationToken)
+{
+    try
+    {
+        await using var pipe = new NamedPipeClientStream(
+            ".",
+            "scrobblix.browser.v1",
+            PipeDirection.Out,
+            PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
+        await pipe.ConnectAsync(TimeSpan.FromSeconds(1), cancellationToken);
+        var length = new byte[sizeof(int)];
+        BinaryPrimitives.WriteInt32LittleEndian(length, payload.Length);
+        await pipe.WriteAsync(length, cancellationToken);
+        await pipe.WriteAsync(payload, cancellationToken);
+        await pipe.FlushAsync(cancellationToken);
+        return true;
+    }
+    catch (TimeoutException)
+    {
+        return false;
+    }
+    catch (IOException)
+    {
+        return false;
+    }
 }
