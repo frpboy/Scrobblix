@@ -9,6 +9,7 @@ using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.Abstractions;
 using Scrobblix.Application.Providers;
 using Scrobblix.Application.Queue;
+using Scrobblix.Application.ReadModels;
 using System.Reflection;
 using System.Security.Cryptography;
 using System.Text;
@@ -187,6 +188,11 @@ var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.Non
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
+
+var emptyQueue = new QueueSummary(0, 0, 0, 0, 0, 0);
+Assert(DashboardStatusText.QueueHeadline(emptyQueue) == "No queued actions", "An empty durable queue is described without implying a provider configuration.");
+var attentionQueue = new QueueSummary(2, 1, 4, 3, 1, 2);
+Assert(DashboardStatusText.QueueHeadline(attentionQueue) == "6 action(s) awaiting delivery" && DashboardStatusText.QueueDetail(attentionQueue) == "Blocked: 1; failed: 2", "Queue summaries prioritize persisted blocked and failed actions over completed actions.");
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);

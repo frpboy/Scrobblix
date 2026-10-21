@@ -55,14 +55,15 @@ public partial class App : Microsoft.UI.Xaml.Application
             if (observation is null)
             {
                 _window.SetStartupStatus("Ready. No supported playback is active.", InfoBarSeverity.Informational);
-                return;
             }
+            else
+            {
+                _window.SetCurrentPlayback(observation);
 
-            _window.SetCurrentPlayback(observation);
-
-            var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
-            await ingestion.IngestAsync(observation, CancellationToken.None);
-            await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
+                var ingestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
+                await ingestion.IngestAsync(observation, CancellationToken.None);
+                await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, CancellationToken.None);
+            }
             _ = TrackUntilClosedAsync(source, connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
             _ = ListenForBrowserIngressAsync(connectionString, tracking, trackingClock, _window, trackingCancellation.Token);
         }

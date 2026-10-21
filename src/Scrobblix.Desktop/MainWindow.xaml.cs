@@ -26,6 +26,7 @@ public sealed partial class MainWindow : Window
             ? "Artist unavailable"
             : observation.Artist;
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         SetStartupStatus(
             observation.PlaybackState == PlayState.Playing
                 ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
@@ -57,18 +58,20 @@ public sealed partial class MainWindow : Window
 
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
-        var isHistory = args.SelectedItem is NavigationViewItem { Tag: "history" };
-        HomeView.Visibility = isHistory ? Visibility.Collapsed : Visibility.Visible;
-        HistoryView.Visibility = isHistory ? Visibility.Visible : Visibility.Collapsed;
+        var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
+        HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
+        HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
+        QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
+        SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
+        DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
+        SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
     }
 
     public void SetQueueSummary(QueueSummary summary)
     {
-        QueueStateText.Text = summary.PendingCount + summary.RetryScheduledCount + summary.InFlightCount == 0
-            ? "No queued actions"
-            : $"{summary.PendingCount + summary.RetryScheduledCount + summary.InFlightCount} action(s) awaiting delivery";
-        QueueDetailText.Text = summary.AuthBlockedCount + summary.PermanentFailureCount == 0
-            ? $"Accepted: {summary.AcceptedCount}"
-            : $"Blocked: {summary.AuthBlockedCount}; failed: {summary.PermanentFailureCount}";
+        QueueStateText.Text = DashboardStatusText.QueueHeadline(summary);
+        QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
+        QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
+        QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
 }

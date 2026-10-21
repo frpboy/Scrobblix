@@ -25,6 +25,7 @@ appsettings.Development.local.json
 logs/
 artwork-cache/
 support-bundles/
+.superpowers/
 
 # Packaging/signing
 *.pfx
