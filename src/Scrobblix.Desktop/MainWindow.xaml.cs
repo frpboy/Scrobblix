@@ -336,7 +336,7 @@ public sealed partial class MainWindow : Window
     {
         TodayStateText.Text = summary.DetectedSessionCount == 0
             ? "No listening activity yet today"
-            : $"{summary.ListeningSessionCount:N0} listening session{(summary.ListeningSessionCount == 1 ? string.Empty : "s")} today";
+            : $"{summary.DetectedSessionCount:N0} listening session{(summary.DetectedSessionCount == 1 ? string.Empty : "s")} today";
         TodayDetailText.Text =
             $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligibleSessionCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
     }
