@@ -529,10 +529,17 @@ public partial class App : Microsoft.UI.Xaml.Application
         try
         {
             var ingestionResult = await observationIngestion.IngestAsync(observation, cancellationToken);
-            var arbitration = sourceArbitrator.Consider(observation);
             logger.Info("OBSERVATION",
                 $"Received source={observation.SourceName}; source_instance={observation.SourceEventKey.SourceInstanceId}; session={observation.SourceEventKey.SessionId ?? "(none)"}; sequence={observation.SourceEventKey.SequenceNumber}; event_id={observation.SourceEventKey.EventId ?? "(none)"}; storage={ingestionResult}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}; album={observation.Album ?? "(missing)"}; state={observation.PlaybackState}; duration_ms={observation.DurationMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}; position_ms={observation.PositionMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}.");
 
+            if (ingestionResult == ObservationIngestionResult.Duplicate)
+            {
+                logger.Warning("OBSERVATION_DEDUP",
+                    $"Duplicate observation was discarded before playback tracking; source={observation.SourceName}; source_instance={observation.SourceEventKey.SourceInstanceId}; sequence={observation.SourceEventKey.SequenceNumber}; event_id={observation.SourceEventKey.EventId ?? "(none)"}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}.");
+                return;
+            }
+
+            var arbitration = sourceArbitrator.Consider(observation);
             if (!arbitration.IsAccepted)
             {
                 logger.Warning("SOURCE_ARBITRATION",
