@@ -19,7 +19,7 @@
                 <TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" />
                 <TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
-            <NavigationView Grid.Row="1" PaneDisplayMode="LeftMinimal" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
+            <NavigationView x:Name="AppNavigationView" Grid.Row="1" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
                 <NavigationView.MenuItems>
                     <NavigationViewItem Content="Home" Tag="home" IsSelected="True" />
                     <NavigationViewItem Content="History" Tag="history" />
