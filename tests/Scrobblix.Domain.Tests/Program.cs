@@ -251,6 +251,15 @@ Assert(todaySummary.ListeningSessionCount >= 1
     && todaySummary.ConfirmedListeningMilliseconds >= 150_000,
     "Today's dashboard summary projects session count, eligibility, accepted scrobbles, and confirmed listening time from SQLite.");
 
+var listeningStatistics = await historyReader.GetStatisticsAsync(CancellationToken.None);
+Assert(listeningStatistics.TotalSessions >= todaySummary.ListeningSessionCount
+    && listeningStatistics.EligiblePlays >= todaySummary.EligiblePlayCount
+    && listeningStatistics.UniqueArtists >= 1
+    && listeningStatistics.ConfirmedListeningMilliseconds >= todaySummary.ConfirmedListeningMilliseconds
+    && listeningStatistics.SessionsLast30Days >= 1
+    && listeningStatistics.TopArtists.Any(artist => artist.Artist.Equals("Artist", StringComparison.OrdinalIgnoreCase)),
+    "The Statistics read model projects all-time totals, recent activity, and top artists from local history.");
+
 var artworkPath = Path.Combine(Path.GetTempPath(), "scrobblix-atomic-artwork.jpg");
 var preEligibleRecord = historyRecord with
 {
