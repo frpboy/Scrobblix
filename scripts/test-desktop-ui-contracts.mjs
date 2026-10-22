@@ -84,6 +84,16 @@ for (const view of ["HomeView", "HistoryView", "StatisticsView", "LovedView", "Q
 }
 assert.ok(xaml.includes('Text="Source: not detected"') && xaml.includes('x:Name="CurrentTrackSourceIcon"'), "Unknown playback must retain a readable neutral source fallback.");
 assert.ok(xaml.includes('Content="Show artist and track title in notifications (off by default)"'), "Notification track-detail privacy must remain opt-in.");
+assert.ok(!xaml.includes('Padding="32"'), "Core pages should not waste workspace with the former 32px outer inset.");
+assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth=/g) ?? []).length, 8, "All eight page roots should share the compact 24px / 16px content rhythm.");
+assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth="[^"]+" HorizontalAlignment="Stretch">/g) ?? []).length, 8, "All eight page roots should stretch to use the available workspace instead of leaving a blank right column.");
+assert.equal((xaml.match(/<ScrollViewer x:Name="(?:HomeView|HistoryView|StatisticsView|LovedView|QueueView|SourcesView|DiagnosticsView|SettingsView)" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"/g) ?? []).length, 8, "All core page scroll views should use the viewport width and avoid horizontal scroll waste.");
+assert.ok(xaml.includes('x:Name="StartupInfo" IsOpen="False" IsClosable="True"'), "Routine startup/playback status must not reserve Home vertical space.");
+assert.ok(code.includes("StartupInfo.IsOpen = isAttention || isTrackingAction;"), "The Home status banner should appear only for attention and explicit pause/resume actions.");
+assert.ok(xaml.includes('<StackPanel Spacing="12">') && xaml.includes('Border Padding="12" CornerRadius="6"'), "Now Playing internal rhythm should be compact without removing the focal card.");
+assert.ok(xaml.includes('Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left"') && xaml.includes('<Button x:Name="TrackingToggleButton"') && xaml.includes('<Button x:Name="CurrentTrackLoveButton"') && xaml.includes('<Button x:Name="CurrentTrackUnloveButton"'), "Tracking and Love/Unlove actions should share one compact row.");
+assert.ok(xaml.includes('Border Padding="20" CornerRadius="8"') && !xaml.includes('Border Padding="24"'), "Keep the primary Now Playing card slightly roomier and compact secondary cards.");
+
 assert.ok(!xaml.includes("<Storyboard") && !xaml.includes("AcrylicBrush"), "The utility rail must not introduce decorative motion or unsupported new surface treatments.");
 
 console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");

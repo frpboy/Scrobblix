@@ -22,6 +22,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 - Reorganized desktop Settings into General, Last.fm, Detection, Notifications, Privacy, Storage, and collapsed Advanced details.
 - Added truthful source labels from exact observed application IDs/origins, neutral fallbacks, and a local asset approval ledger; third-party marks remain absent until their usage is reviewed.
 - Added static desktop UI contract checks and real-Windows acceptance rows for navigation, scaling, keyboard/screen reader, high contrast, and activation paths.
+- Tightened repeated page margins/gaps while retaining the existing Fluent visual language, stretched page roots so cards/grids use the available content width, consolidated current-track actions into one row, and hid routine Home status banners so primary content remains visible sooner.
 - Expanded desktop UI contract assertions for navigation order/accessibility, responsive rail behavior, preference safety, source identity allow-lists, local logo fallback, and notification privacy.
 
 - Bounded Browser Companion named-pipe I/O retries and throttled repetitive warnings while retaining suppressed-warning counts.
