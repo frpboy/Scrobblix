@@ -8,9 +8,6 @@
     "storage"
   ],
   "background": {
-    "scripts": [
-      "dist/service-worker.js"
-    ],
     "service_worker": "dist/service-worker.js",
     "type": "module"
   },
