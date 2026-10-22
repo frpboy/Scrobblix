@@ -32,9 +32,9 @@ Scrobblix has the main product flows implemented. The next milestone is **privat
 
 ## Track D — supportability and privacy
 
-- [ ] Qualify the Diagnostics export in a real Windows session: verify confirmation text, Save/cancel behavior, ZIP integrity/hash, UI status, no auto-upload and accessibility. Run seeded-canary redaction assertions in CI.
+- [ ] Qualify the Diagnostics export in a real Windows session: verify confirmation text, Save/cancel behavior, ZIP integrity/hash, UI status, no auto-upload and accessibility. Run seeded-canary redaction assertions in CI. The format-version-2 bundle now includes only normalized source kind, playback state, last-observation UTC time and tracking enabled/paused in addition to sanitized operational events.
 - [ ] Exclude Last.fm API key/shared secret/session key, SQLite/history, cached artwork, full URLs, unrelated logs, usernames and raw crash dumps by default.
-- [ ] Seed canary secrets into log/diagnostic test inputs and verify no archive entry contains them.
+- [ ] Seed canary secrets into log/diagnostic test inputs and verify no archive entry contains them; test forged source/state strings normalize to fixed allow-list values.
 - [ ] Verify archive is built atomically, temporary files are cleaned, the final hash/size is shown and the user chooses how to share it.
 
 ## Track E — UI/design qualification
