@@ -166,7 +166,7 @@ Assert(
     "Home status explains a track that ended before eligibility.");
 var adTrackingStatus = countdownStatus with
 {
-    Decision = new ScrobbleEligibilityDecision(false, null, ReasonCodes.Playback.Advertisement),
+    Decision = new EligibilityDecision(false, null, ReasonCodes.Playback.Advertisement),
 };
 Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — advertisement playback is ignored",
