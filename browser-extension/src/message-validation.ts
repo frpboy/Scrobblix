@@ -60,6 +60,36 @@ export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean
   }
 }
 
+export type CustomSiteRegistration = { origin: string; pattern: string; id: string };
+
+export function isAuthorizedObservationSender(
+  sender: chrome.runtime.MessageSender,
+  customSites: CustomSiteRegistration[],
+): boolean {
+  if (isSupportedSender(sender)) return true;
+  if (!sender.tab || !Number.isSafeInteger(sender.tab.id) || !sender.url) return false;
+
+  try {
+    const url = new URL(sender.url);
+    if (url.protocol !== "https:" && url.protocol !== "http:") return false;
+    // Optional host permission alone is not authorization: this origin must have
+    // an explicit user-created registration in extension storage.
+    return customSites.some((site) => {
+      try {
+        const registered = new URL(site.origin);
+        return registered.origin === site.origin
+          && registered.origin === url.origin
+          && site.pattern === `${url.origin}/*`
+          && /^site_[a-f0-9]{32}$/u.test(site.id);
+      } catch {
+        return false;
+      }
+    });
+  } catch {
+    return false;
+  }
+}
+
 export function isPlaybackObservation(value: unknown): value is PlaybackObservation {
   if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
 
