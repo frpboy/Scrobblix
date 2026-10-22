@@ -68,7 +68,7 @@ commands above for a reproducible build. Close Scrobblix before rebuilding to av
 MSBuild assembly-lock errors. The `update-and-run.ps1` helper belongs to the
 continuation workflow and should only be used when intentionally working on that branch.
 
-For manual validation without launching, omit the final `dotnet run` command.
+For automated validation without launching the app:
 
 ```powershell
 dotnet restore Scrobblix.slnx
@@ -77,7 +77,7 @@ dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj 
 npm --prefix browser-extension ci
 npm --prefix browser-extension run check
 npm --prefix browser-extension run build
-dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
+node scripts/validate-browser-manifests.mjs
 ```
 
 If WinUI reports `0x80040154 Class not registered`, install/register the
