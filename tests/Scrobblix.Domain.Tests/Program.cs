@@ -21,6 +21,11 @@ using Scrobblix.Infrastructure.Providers;
 using Scrobblix.NativeHost;
 using System.Text.Json;
 
+Assert(PlaybackArtworkPolicy.IsLikelyBrowserApplication("chrome.exe"), "Chrome GSMTC thumbnails are not treated as album cover art.");
+Assert(PlaybackArtworkPolicy.IsLikelyBrowserApplication("Microsoft.MicrosoftEdge.Stable_8wekyb3d8bbwe"), "Edge GSMTC thumbnails are not treated as album cover art.");
+Assert(!PlaybackArtworkPolicy.IsLikelyBrowserApplication("Spotify.exe"), "Native music app artwork remains eligible for GSMTC caching.");
+Assert(!PlaybackArtworkPolicy.IsLikelyBrowserApplication(null), "Missing application IDs do not trigger browser-specific behavior.");
+
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");

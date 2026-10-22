@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
 using Scrobblix.Application.Abstractions;
+using Scrobblix.Application.Ingestion;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
@@ -32,12 +33,16 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
         var playback = session.GetPlaybackInfo();
         var timeline = session.GetTimelineProperties();
         var capturedUtc = clock.UtcNow;
-        var artworkPath = await TryCacheArtworkAsync(
-            media.Thumbnail,
-            session.SourceAppUserModelId,
-            media.Artist,
-            media.Title,
-            cancellationToken);
+        // Browser GSMTC thumbnails frequently contain the browser's app icon rather than cover art.
+        // Skip them so metadata providers can find a real cover or the UI can show its branded placeholder.
+        var artworkPath = PlaybackArtworkPolicy.IsLikelyBrowserApplication(session.SourceAppUserModelId)
+            ? null
+            : await TryCacheArtworkAsync(
+                media.Thumbnail,
+                session.SourceAppUserModelId,
+                media.Artist,
+                media.Title,
+                cancellationToken);
         return new PlayObservation(
             new SourceEventKey(session.SourceAppUserModelId, session.SourceAppUserModelId, Interlocked.Increment(ref _sequence)),
             capturedUtc,
