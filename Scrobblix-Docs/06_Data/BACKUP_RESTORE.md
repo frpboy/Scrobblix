@@ -32,3 +32,8 @@ Use SQLite backup API or a validated checkpoint/snapshot method. Write to tempor
 ## Portability
 
 Backups may move between compatible Scrobblix installations for the same user. Credentials require reauthentication unless a future encrypted credential-export design is explicitly approved.
+
+
+## Atomic restore replacement and sidecars
+
+The restore path prepares and validates a replacement file before touching the active database. When applying it, Scrobblix moves the current database and any SQLite `-wal`/`-shm` sidecars to a tracked rollback set, then activates the replacement. If a sidecar cannot be detached (for example, a file lock), the operation fails closed and restores moved files to their original paths. If rollback itself is blocked, the exception names the preserved rollback files; do not delete them until recovery is complete. A validated pre-restore database snapshot is also retained.
