@@ -123,6 +123,7 @@ See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANU
 - [`03_Requirements`](Scrobblix-Docs/03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
 - [`04_UserExperience`](Scrobblix-Docs/04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
 - [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPLEMENTATION_HANDOFF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
+- [Current Stitch UI handoff](docs/STITCH_UI_HANDOFF_2026-10-22.md): recorded lightweight Home screen, private Stitch project/artifact IDs, and boundaries between design reference and native WinUI implementation.
 - [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): current-main status, validation discipline and continue/build/run commands.
 - [Private beta readiness](docs/PRIVATE_BETA_READINESS.md): ordered acceptance tracks and beta entry criteria.
 - [Real-world manual test matrix](Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md): Spotify, Last.fm, recovery, soak, browser, Windows UX and beta decision record.
