@@ -6,7 +6,9 @@ namespace Scrobblix.Desktop;
 /// Only non-secret UI preferences are persisted here. Provider keys and session credentials
 /// remain in Windows Credential Locker, not in this JSON file.
 /// </summary>
-internal sealed record ScrobblixUserPreferences(bool DesktopNotificationsEnabled)
+internal sealed record ScrobblixUserPreferences(
+    bool DesktopNotificationsEnabled,
+    bool IncludeTrackDetailsInNotifications = false)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
