@@ -24,6 +24,10 @@ namespace Scrobblix.Desktop;
 public partial class App : Microsoft.UI.Xaml.Application
 {
     private static long _lastDashboardRefreshUtcTicks;
+    private static long _lastBrowserPipeIoWarningUtcTicks;
+    private static int _suppressedBrowserPipeIoWarnings;
+    private static int _browserPipeIoFailureStreak;
+    private static readonly TimeSpan BrowserPipeIoWarningInterval = TimeSpan.FromSeconds(30);
     private MainWindow? _window;
     private ScrobblixUserPreferences _userPreferences = new(false);
 
@@ -767,6 +771,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(cancellationToken);
+                Interlocked.Exchange(ref _browserPipeIoFailureStreak, 0);
 
                 var expectedNativeHostPath = Path.Combine(
                     Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -821,13 +826,44 @@ public partial class App : Microsoft.UI.Xaml.Application
             }
             catch (IOException exception)
             {
-                logger.Warning("BROWSER_INGRESS", $"Native-host pipe error; exception={exception.GetType().Name}; message={exception.Message}");
+                // The host can race the single-instance pipe while it is being disposed
+                // and recreated. Do not write one warning per connection attempt.
+                await BackoffAndLogBrowserPipeIoFailureAsync(exception, logger, cancellationToken);
             }
             catch (Exception exception)
             {
                 logger.Error("BROWSER_INGRESS", $"Browser listener failed; exception={exception.GetType().Name}; message={exception.Message}");
+                await Task.Delay(TimeSpan.FromSeconds(1), cancellationToken);
             }
         }
+    }
+
+    private static async Task BackoffAndLogBrowserPipeIoFailureAsync(
+        IOException exception,
+        ScrobblixFileLogger logger,
+        CancellationToken cancellationToken)
+    {
+        var nowTicks = DateTime.UtcNow.Ticks;
+        var lastTicks = Interlocked.Read(ref _lastBrowserPipeIoWarningUtcTicks);
+        var shouldLog = nowTicks - lastTicks >= BrowserPipeIoWarningInterval.Ticks
+            && Interlocked.CompareExchange(ref _lastBrowserPipeIoWarningUtcTicks, nowTicks, lastTicks) == lastTicks;
+
+        if (shouldLog)
+        {
+            var suppressed = Interlocked.Exchange(ref _suppressedBrowserPipeIoWarnings, 0);
+            logger.Warning(
+                "BROWSER_INGRESS",
+                $"Native-host pipe connection is busy/unavailable; exception={exception.GetType().Name}; message={exception.Message}; suppressed_warnings={suppressed}. Retrying with backoff.");
+        }
+        else
+        {
+            Interlocked.Increment(ref _suppressedBrowserPipeIoWarnings);
+        }
+
+        // Back off at 500 ms, 1 s, 2 s, 4 s, then 8 s. Recovery remains automatic.
+        var failures = Math.Min(5, Interlocked.Increment(ref _browserPipeIoFailureStreak));
+        var delayMilliseconds = Math.Min(8000, 250 * (1 << failures));
+        await Task.Delay(TimeSpan.FromMilliseconds(delayMilliseconds), cancellationToken);
     }
 
     private static async Task ProcessObservationAsync(
