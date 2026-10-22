@@ -996,6 +996,11 @@ public sealed partial class MainWindow : Window
     {
         LastFmStatusText.Text = status;
         LastFmHomeStatusText.Text = status;
+        var isConnected = status.StartsWith("Connected as ", StringComparison.Ordinal);
+        LastFmHomeDetailText.Text = isConnected
+            ? "Your account is connected. Manage credentials and delivery settings in Settings."
+            : "Add API credentials and approve your account in Settings.";
+        OpenLastFmSettingsButton.Content = isConnected ? "Manage Last.fm settings" : "Configure API key / Login";
     }
 
     private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
