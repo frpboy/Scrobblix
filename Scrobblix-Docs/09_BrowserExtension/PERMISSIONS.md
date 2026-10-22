@@ -14,9 +14,9 @@ Request the minimum permission at the moment it is needed and explain the direct
 - `nativeMessaging` — communicate with installed Scrobblix host.
 - `storage` — adapter preferences and local extension state.
 - `tabs` or limited tab access only if necessary for source identity; avoid broad URL/title collection.
-- `scripting` and optional host permissions for enabled supported sites.
+- `scripting` and site access limited to supported playback sites.
 
-Use `optional_host_permissions` where supported so users grant site access intentionally. Do not request `<all_urls>` by default unless a later generic mode has strong justification and store approval.
+For a companion with no options page, declare the small fixed set of supported playback sites in Chromium `host_permissions` so the observer can run immediately after the user approves installation. Firefox retains optional development permissions. Do not request `<all_urls>` unless a later generic mode has strong justification and store approval.
 
 ## Incognito/private browsing
 

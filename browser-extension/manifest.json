@@ -24,7 +24,7 @@
       "run_at": "document_idle"
     }
   ],
-  "optional_host_permissions": [
+  "host_permissions": [
     "https://www.youtube.com/*",
     "https://music.youtube.com/*",
     "https://open.spotify.com/*"

@@ -18,8 +18,9 @@ node scripts/validate-browser-manifests.mjs
 1. Open `chrome://extensions` or `edge://extensions`.
 2. Enable Developer mode and choose **Load unpacked**.
 3. Select the `browser-extension` directory.
-4. Copy the extension ID shown by the browser.
-5. Publish the native host and register the exact extension ID from PowerShell:
+4. Accept the requested access for YouTube, YouTube Music, and Spotify Web Player.
+5. Copy the extension ID shown by the browser.
+6. Publish the native host and register the exact extension ID from PowerShell:
 
 ```powershell
 dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --output artifacts/Scrobblix/native-host

@@ -17,6 +17,8 @@ requireCondition(chromium.background?.service_worker === "dist/service-worker.js
 requireCondition(!chromium.background?.scripts, "Chromium Manifest V3 must not use Firefox background scripts.");
 requireCondition(chromium.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Chromium media observer is missing.");
 requireCondition(chromium.content_scripts?.some(script => script.matches?.includes("https://www.youtube.com/*")), "Chromium media observer must support YouTube.");
+requireCondition(chromium.host_permissions?.includes("https://www.youtube.com/*"), "Chromium YouTube access must be granted at installation.");
+requireCondition(!chromium.optional_host_permissions, "Chromium companion must not leave its supported playback sites ungranted.");
 requireCondition(firefox.manifest_version === 3, "Firefox companion must use Manifest V3.");
 requireCondition(firefox.background?.scripts?.includes("dist/service-worker.js"), "Firefox background script is missing.");
 requireCondition(!firefox.background?.service_worker, "Firefox manifest must not depend on a service_worker property.");
