@@ -104,21 +104,10 @@ try {
     dotnet restore Scrobblix.slnx
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed.' }
 
-    $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
-    $msbuild = if (Test-Path -LiteralPath $vswhere) {
-        (& $vswhere -latest -products * -requires Microsoft.Component.MSBuild -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1)
-    }
-
-    if ($msbuild) {
-        Write-Host 'Building with Visual Studio MSBuild to avoid the WinUI CLI XAML compiler failure.'
-        & $msbuild Scrobblix.slnx /t:Build /p:Restore=false /p:Configuration=Release /v:minimal /nologo
-    }
-    else {
-        dotnet build Scrobblix.slnx --no-restore --configuration Release
-    }
+    dotnet build Scrobblix.slnx --no-restore --configuration Release
 
     if ($LASTEXITCODE -ne 0) {
-        throw 'The .NET Release build failed. If this only reports XamlCompiler.exe with MSB3073, install Visual Studio Build Tools with the MSBuild and Windows App SDK workloads, then rerun this script.'
+        throw 'The .NET Release build failed. Review the compiler error above, then rerun this script.'
     }
 
     dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
