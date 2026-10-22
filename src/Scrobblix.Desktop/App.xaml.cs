@@ -45,7 +45,16 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         LoadLocalLastFmEnvironment();
-        _window = new MainWindow();
+        try
+        {
+            _window = new MainWindow();
+        }
+        catch
+        {
+            Dispose();
+            throw;
+        }
+
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
         ScrobblixFileLogger? fileLogger = null;
