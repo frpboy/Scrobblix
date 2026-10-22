@@ -94,11 +94,13 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             }
 
             _window.SetDesktopNotificationsEnabled(_userPreferences.DesktopNotificationsEnabled);
+            _window.SetNotificationTrackDetailsEnabled(_userPreferences.IncludeTrackDetailsInNotifications);
             try
             {
                 _notificationService = new ScrobblixNotificationService(
                     message => logger.Info("NOTIFICATIONS", message),
                     RestoreWindowFromNotification);
+                _notificationService.SetIncludeTrackDetails(_userPreferences.IncludeTrackDetailsInNotifications);
                 _notificationService.SetEnabled(_userPreferences.DesktopNotificationsEnabled);
             }
             catch (Exception exception)
@@ -139,9 +141,37 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                     }
 
                     _userPreferences = _userPreferences with { DesktopNotificationsEnabled = false };
+                    try
+                    {
+                        await ScrobblixUserPreferences.SaveAsync(dataDirectory, _userPreferences, CancellationToken.None);
+                    }
+                    catch (Exception persistenceException)
+                    {
+                        logger.Warning("PREFERENCES", $"Could not persist notifications-off rollback; exception={persistenceException.GetType().Name}.");
+                    }
+
                     _window.SetDesktopNotificationsEnabled(false);
                     _window.SetDesktopNotificationsStatus("The notification preference could not be saved or registered. Notifications remain off.");
                     logger.Warning("PREFERENCES", $"Could not update desktop notification preference; notifications disabled for safety; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                }
+            };
+
+            _window.NotificationTrackDetailsPreferenceChanged += async includeDetails =>
+            {
+                var updatedPreferences = _userPreferences with { IncludeTrackDetailsInNotifications = includeDetails };
+                try
+                {
+                    await ScrobblixUserPreferences.SaveAsync(dataDirectory, updatedPreferences, applicationCancellation.Token);
+                    _notificationService?.SetIncludeTrackDetails(includeDetails);
+                    _userPreferences = updatedPreferences;
+                    _window.SetNotificationTrackDetailsEnabled(includeDetails);
+                    logger.Info("PREFERENCES", $"Updated notification track-detail privacy; include_details={includeDetails}.");
+                }
+                catch (Exception exception)
+                {
+                    _window.SetNotificationTrackDetailsEnabled(_userPreferences.IncludeTrackDetailsInNotifications);
+                    logger.Warning("PREFERENCES", $"Could not save notification track-detail privacy; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                    throw;
                 }
             };
 
