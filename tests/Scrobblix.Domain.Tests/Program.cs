@@ -161,6 +161,12 @@ Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction }) == "Queued safely — waiting for Last.fm",
     "Home status shows a pending provider action as queued, not sent.");
 Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.InFlight } }) == "Sending to Last.fm…",
+    "Home status distinguishes an active submission from a queue waiting for a retry.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.RetryScheduled } }) == "Queued safely — retry scheduled",
+    "Home status explains a scheduled retry without implying a successful submission.");
+Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.Accepted } }) == "Sent to Last.fm",
     "Home status only says sent when the matching scrobble action is provider-accepted.");
 Assert(
