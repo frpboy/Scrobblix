@@ -87,7 +87,7 @@ function isPopupMessage(message: unknown): message is PopupMessage {
 
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus> {
   if (message.type === "companion.get-state") {
-    return scrobblixWorkerApi.storage.local.get({ paused: false } satisfies CompanionSettings);
+    return scrobblixWorkerApi.storage.local.get({ paused: false, customSites: [] } satisfies CompanionSettings);
   }
 
   return testNativeHost();
