@@ -19,7 +19,7 @@ Raw log messages are read locally only to extract an allow-list of fields; the o
 
 - Last.fm API key/shared secret, authorization token and session key.
 - Full listening database/history, track identities (artist/title/album), artwork/cache and user preferences.
-- Original/free-form log messages, artist/title/album, full URLs, usernames, full local paths and raw crash dumps.
+- Original/free-form log messages, full URLs, usernames, full local paths and raw crash dumps.
 - Browser extension IDs, tab/site identity and arbitrary source strings. Source and playback-state values are reduced to a fixed allow-list.
 - Automatic upload or sharing. The user chooses whether and where to share.
 

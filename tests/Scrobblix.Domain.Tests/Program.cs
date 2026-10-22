@@ -207,8 +207,8 @@ try
         supportLogDirectory,
         "1.2.3-test",
         "10.0.26100",
-        CancellationToken.None,
-        new SupportSourceStatus("browser", "Playing", new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero), true));
+        new SupportSourceStatus("browser", "Playing", new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero), true),
+        CancellationToken.None);
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
@@ -272,8 +272,8 @@ try
         supportLogDirectory,
         "1.2.3-test",
         "10.0.26100",
-        CancellationToken.None,
-        new SupportSourceStatus("CANARY_TRACK", "CANARY_API_SECRET", null, true));
+        new SupportSourceStatus("CANARY_TRACK", "CANARY_API_SECRET", null, true),
+        CancellationToken.None);
     using (var untrustedArchive = ZipFile.OpenRead(untrustedSnapshotPath))
     using (var reader = new StreamReader(untrustedArchive.GetEntry("manifest.json")!.Open(), Encoding.UTF8))
     using (var manifest = JsonDocument.Parse(await reader.ReadToEndAsync()))

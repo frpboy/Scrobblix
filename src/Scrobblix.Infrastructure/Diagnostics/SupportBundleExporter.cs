@@ -45,8 +45,8 @@ public static class SupportBundleExporter
         string logDirectory,
         string applicationVersion,
         string windowsVersion,
-        CancellationToken cancellationToken = default,
-        SupportSourceStatus? sourceStatus = null)
+        SupportSourceStatus? sourceStatus = null,
+        CancellationToken cancellationToken = default)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
@@ -216,10 +216,10 @@ public static class SupportBundleExporter
         summary.AppendLine(CultureInfo.InvariantCulture, $"Operational events included: {events.Count.ToString(CultureInfo.InvariantCulture)}");
         summary.AppendLine();
         summary.AppendLine("Latest playback source snapshot (normalized; no track metadata):");
-        summary.AppendLine($"Source: {safeSourceName}");
-        summary.AppendLine($"Playback state: {safePlaybackState}");
-        summary.AppendLine($"Last observation (UTC): {safeLastObservationUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "unknown"}");
-        summary.AppendLine($"Tracking enabled: {(safeTrackingEnabled.HasValue ? (safeTrackingEnabled.Value ? "yes" : "no") : "unknown")}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Source: {safeSourceName}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Playback state: {safePlaybackState}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Last observation (UTC): {safeLastObservationUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "unknown"}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Tracking enabled: {(safeTrackingEnabled.HasValue ? (safeTrackingEnabled.Value ? "yes" : "no") : "unknown")}");
         summary.AppendLine();
         summary.AppendLine("Counts by level and category (no original messages are included):");
         foreach (var group in events.GroupBy(item => (item.Level, item.Category)).OrderBy(group => group.Key.Level).ThenBy(group => group.Key.Category, StringComparer.Ordinal))
