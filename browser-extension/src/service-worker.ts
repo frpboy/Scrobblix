@@ -1,4 +1,4 @@
-const extensionApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
+const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 type PlaybackObservation = {
   artist?: string; title?: string; album?: string; albumArtist?: string; artworkUrl?: string;
@@ -9,9 +9,9 @@ type PlaybackObservation = {
 const hostName = "com.frpboy.scrobblix";
 let sequence = 0;
 
-extensionApi.runtime.onMessage.addListener((observation: PlaybackObservation, sender) => {
+scrobblixWorkerApi.runtime.onMessage.addListener((observation: PlaybackObservation, sender) => {
   if (!sender.tab?.id || (observation.title?.length ?? 0) > 1024 || (observation.artist?.length ?? 0) > 1024 || (observation.artworkUrl?.length ?? 0) > 4096) return;
-  const port = extensionApi.runtime.connectNative(hostName);
+  const port = scrobblixWorkerApi.runtime.connectNative(hostName);
   let finished = false;
   const finish = () => {
     if (!finished) {
@@ -26,7 +26,7 @@ extensionApi.runtime.onMessage.addListener((observation: PlaybackObservation, se
     messageId: crypto.randomUUID(),
     type: "playback.observation.v1",
     sentAtUtc: new Date().toISOString(),
-    browserInstanceId: extensionApi.runtime.id,
+    browserInstanceId: scrobblixWorkerApi.runtime.id,
     sequence: ++sequence,
     payload: { ...observation, tabId: sender.tab.id, siteOrigin: getOrigin(sender.url) },
   });
