@@ -40,8 +40,8 @@
         <ScrollViewer x:Name="HomeView" Grid.Column="1">
             <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Home" Style="{StaticResource TitleTextBlockStyle}" />
-                    <TextBlock Text="See what Scrobblix can confirm about playback and delivery." Style="{StaticResource BodyTextBlockStyle}" />
+                    <TextBlock Text="Listening" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="Your track and scrobble status, clearly shown." Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
 
                 <InfoBar x:Name="StartupInfo" IsOpen="True" IsClosable="False" Severity="Informational"
@@ -70,8 +70,8 @@
                                 <TextBlock x:Name="EligibilityDetailText" Text="Confirmed listening time is unavailable until a supported track is playing. Media position and confirmed listening time are tracked separately." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                                 <Button x:Name="TrackingToggleButton" Content="Pause tracking" Click="TrackingToggleButton_Click" HorizontalAlignment="Left" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <Button x:Name="CurrentTrackLoveButton" Content="Love on Last.fm" Click="CurrentTrackLoveButton_Click" IsEnabled="False" />
-                                    <Button x:Name="CurrentTrackUnloveButton" Content="Unlove on Last.fm" Click="CurrentTrackUnloveButton_Click" IsEnabled="False" />
+                                    <Button x:Name="CurrentTrackLoveButton" Content="Love" Click="CurrentTrackLoveButton_Click" IsEnabled="False" />
+                                    <Button x:Name="CurrentTrackUnloveButton" Content="Remove love" Click="CurrentTrackUnloveButton_Click" IsEnabled="False" />
                                 </StackPanel>
                                 <TextBlock x:Name="CurrentTrackLoveStatusText" Text="Connect Last.fm to manage loved tracks." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
@@ -103,7 +103,7 @@
                 </Grid>
 
                 <StackPanel Spacing="8">
-                    <TextBlock Text="Recent activity" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock Text="Recent tracks" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <Border Padding="16" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
                         <StackPanel x:Name="RecentActivityList" Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
