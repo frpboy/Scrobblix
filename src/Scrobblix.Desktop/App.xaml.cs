@@ -58,8 +58,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             var databasePath = Path.Combine(dataDirectory, "scrobblix.db");
             var connectionString = $"Data Source={databasePath}";
-            var backupService = new ScrobblixBackupService();
-            var restoreSafetySnapshot = await backupService.ApplyStagedRestoreAsync(
+            var restoreSafetySnapshot = await ScrobblixBackupService.ApplyStagedRestoreAsync(
                 dataDirectory, databasePath, CancellationToken.None);
             if (restoreSafetySnapshot is not null)
             {
@@ -73,12 +72,12 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
             _window.BackupRequested += async destinationPath =>
             {
-                await backupService.CreateBackupAsync(connectionString, destinationPath, applicationCancellation.Token);
+                await ScrobblixBackupService.CreateBackupAsync(connectionString, destinationPath, applicationCancellation.Token);
                 logger.Info("BACKUP", $"Created a validated local SQLite backup; file_name={Path.GetFileName(destinationPath)}.");
             };
             _window.RestoreRequested += async archivePath =>
             {
-                await backupService.StageRestoreAsync(archivePath, dataDirectory, applicationCancellation.Token);
+                await ScrobblixBackupService.StageRestoreAsync(archivePath, dataDirectory, applicationCancellation.Token);
                 logger.Warning("BACKUP_RESTORE", $"Validated and staged a database restore; file_name={Path.GetFileName(archivePath)}. Scrobblix will close so the next launch can safely apply it.");
                 return true;
             };
