@@ -207,6 +207,29 @@ Assert(lovedHandler.RequestBodies[0].Contains("method=track.love", StringCompari
     && lovedHandler.RequestBodies.All(body => body.Contains("api_sig=", StringComparison.Ordinal)),
     "Love and Unlove requests use signed Last.fm API methods.");
 
+var acceptedScrobbleResponse = new SequenceHttpHandler(
+    """{"scrobbles":{"@attr":{"accepted":"1","ignored":"0"},"scrobble":[{"ignoredMessage":{"#text":"","@attr":{"code":"0"}}}]}}""");
+using var acceptedScrobbleClient = new HttpClient(acceptedScrobbleResponse);
+var acceptedScrobbleProvider = new LastFmScrobbleProvider(acceptedScrobbleClient, "api-key", "shared-secret");
+var acceptedScrobbleResult = await acceptedScrobbleProvider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+Assert(acceptedScrobbleResult.Accepted && acceptedScrobbleResult.ReasonCode == ReasonCodes.Provider.Accepted,
+    "A Last.fm response with accepted=1 and ignored=0 is reported as accepted.");
+
+var ignoredScrobbleResponse = new SequenceHttpHandler(
+    """{"scrobbles":{"@attr":{"accepted":"0","ignored":"1"},"scrobble":[{"ignoredMessage":{"#text":"Artist filtered","@attr":{"code":"1"}}}]}}""");
+using var ignoredScrobbleClient = new HttpClient(ignoredScrobbleResponse);
+var ignoredScrobbleProvider = new LastFmScrobbleProvider(ignoredScrobbleClient, "api-key", "shared-secret");
+var ignoredScrobbleResult = await ignoredScrobbleProvider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+Assert(!ignoredScrobbleResult.Accepted && ignoredScrobbleResult.ReasonCode == ReasonCodes.Provider.IgnoredArtist && !ignoredScrobbleResult.IsTransient,
+    "A Last.fm filtered artist is not reported as an accepted scrobble or blindly retried.");
+
+var unknownScrobbleResponse = new SequenceHttpHandler("""{"status":"ok"}""");
+using var unknownScrobbleClient = new HttpClient(unknownScrobbleResponse);
+var unknownScrobbleProvider = new LastFmScrobbleProvider(unknownScrobbleClient, "api-key", "shared-secret");
+var unknownScrobbleResult = await unknownScrobbleProvider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown,
+    "A nominal success response without a scrobbles result does not inflate accepted totals.");
+
 
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
@@ -384,6 +407,14 @@ var unknownOutcomeProcessor = new ProviderActionProcessor(
 Assert(await unknownOutcomeProcessor.ProcessNextAsync("worker-unknown", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && unknownOutcomeStore.CompletedState == ProviderActionState.SubmissionOutcomeUnknown,
     "An ambiguous Last.fm scrobble outcome is persisted for review instead of blindly retried.");
+var ignoredActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-ignored" });
+var ignoredProcessor = new ProviderActionProcessor(
+    ignoredActionStore,
+    new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.IgnoredArtist, false)));
+Assert(await ignoredProcessor.ProcessNextAsync("worker-ignored", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && ignoredActionStore.CompletedState == ProviderActionState.ProviderIgnored,
+    "A Last.fm filtered scrobble is stored as ProviderIgnored, not a false success or an automatic retry.");
+
 
 var retryAfterStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-rate-limited" });
 var retryAfterProcessor = new ProviderActionProcessor(

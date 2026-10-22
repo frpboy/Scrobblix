@@ -9,6 +9,14 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
 {
     private const int MaximumAutomaticAttempts = 8;
     private static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromHours(24);
+    private static bool IsProviderIgnoredReason(string reasonCode) => reasonCode is
+        ReasonCodes.Provider.IgnoredArtist
+        or ReasonCodes.Provider.IgnoredTrack
+        or ReasonCodes.Provider.IgnoredTimestampOld
+        or ReasonCodes.Provider.IgnoredTimestampNew
+        or ReasonCodes.Provider.IgnoredDailyLimit
+        or ReasonCodes.Provider.IgnoredUnknown;
+
     private static TimeSpan GetRetryDelay(int attemptCount, TimeSpan? providerRetryAfter)
     {
         if (providerRetryAfter is { } hint && hint > TimeSpan.Zero)
@@ -60,7 +68,9 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
                 ? ProviderActionState.AuthBlocked
                 : result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown
                     ? ProviderActionState.SubmissionOutcomeUnknown
-                    : result.IsTransient && action.AttemptCount >= MaximumAutomaticAttempts
+                    : IsProviderIgnoredReason(result.ReasonCode)
+                        ? ProviderActionState.ProviderIgnored
+                        : result.IsTransient && action.AttemptCount >= MaximumAutomaticAttempts
                         ? ProviderActionState.RetryExhausted
                         : result.IsTransient
                             ? ProviderActionState.RetryScheduled

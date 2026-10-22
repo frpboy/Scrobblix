@@ -47,7 +47,7 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             using var json = JsonDocument.Parse(payload);
             if (json.RootElement.TryGetProperty("error", out var error))
                 return MapError(error.GetInt32());
-            return new(true, ReasonCodes.Provider.Accepted, false);
+            return ParseScrobbleOutcome(json.RootElement);
         }
         catch (HttpRequestException)
         {
@@ -88,9 +88,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
                     rateLimited ? GetRetryAfter(response) : null);
             }
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
-            return json.RootElement.TryGetProperty("error", out var error)
-                ? MapError(error.GetInt32())
-                : new(true, ReasonCodes.Provider.Accepted, false);
+            if (json.RootElement.TryGetProperty("error", out var error))
+                return MapError(error.GetInt32());
+            return ParseNowPlayingOutcome(json.RootElement);
         }
         catch (HttpRequestException) { return new(false, ReasonCodes.Provider.TemporaryUnavailable, true); }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return new(false, ReasonCodes.Provider.TemporaryUnavailable, true); }
