@@ -1138,7 +1138,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        if (decision.ThresholdMilliseconds is > 0 threshold)
+        if (decision.ThresholdMilliseconds is int threshold && threshold > 0)
         {
             var remaining = Math.Max(0L, threshold - trackingStatus.ConfirmedPlayedMilliseconds);
             if (observation.PlaybackState == PlayState.Ended)
