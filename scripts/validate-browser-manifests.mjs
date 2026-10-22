@@ -30,5 +30,10 @@ const nativeHostProgram = await readFile(resolve(root, "src/Scrobblix.NativeHost
 requireCondition(nativeHostValidator.includes("ReadAllowedFirefoxExtensionIds"), "Native host must read the Firefox add-on allow-list.");
 requireCondition(nativeHostValidator.includes("MatchesFirefoxExtensionId"), "Native host must validate Firefox add-on identity.");
 requireCondition(nativeHostProgram.includes("firefoxCallerId"), "Native host must parse Firefox native-messaging arguments.");
+const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
+const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
+requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
+requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "The installer must write the Firefox add-on allow-list.");
+requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
 
 console.log("Chromium and Firefox manifests, emitted scripts, and Firefox host identity hooks are valid.");
