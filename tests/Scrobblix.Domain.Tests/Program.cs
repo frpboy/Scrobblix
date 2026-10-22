@@ -407,9 +407,24 @@ Assert(trackingMode.IsEnabled && trackingMode.SetEnabled(false) && !trackingMode
 
 var queuedLease = new ProviderActionLease("action-2", "play-2", "lastfm", "account-1", "Artist", "Track", null, observation.ObservedAtUtc, 300_000, 1);
 var recordingStore = new RecordingProviderActionStore(queuedLease);
-var processor = new ProviderActionProcessor(recordingStore, new AcceptingScrobbleProvider());
+ProviderActionState? observedProviderOutcome = null;
+string? observedProviderReason = null;
+ProviderActionType? observedProviderActionType = null;
+var processor = new ProviderActionProcessor(
+    recordingStore,
+    new AcceptingScrobbleProvider(),
+    onCompleted: (action, outcome, reasonCode) =>
+    {
+        observedProviderActionType = action.ActionType;
+        observedProviderOutcome = outcome;
+        observedProviderReason = reasonCode;
+    });
 Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
 Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
+Assert(observedProviderActionType == ProviderActionType.Scrobble
+    && observedProviderOutcome == ProviderActionState.Accepted
+    && observedProviderReason == ReasonCodes.Provider.Accepted,
+    "The queue worker publishes the actual stored action type, outcome, and provider reason to its completion observer.");
 
 var unknownOutcomeStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-ambiguous" });
 var unknownOutcomeProcessor = new ProviderActionProcessor(
