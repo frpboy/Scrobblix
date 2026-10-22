@@ -1125,7 +1125,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         var playId = trackingStatus.PlayId;
-        logger.Info("METADATA", $"Started metadata enrichment; play_id={playId}; source={observation.SourceName}; artist={observation.Artist}; title={observation.Title}; source_artwork={(string.IsNullOrWhiteSpace(observation.ArtworkPath) ? "none" : "available")}." );
+        logger.Info("METADATA", $"Started metadata enrichment; play_id={playId}; source={observation.SourceName}; source_artwork={(string.IsNullOrWhiteSpace(observation.ArtworkPath) ? "none" : "available")}." );
         _ = Task.Run(async () =>
         {
             try
