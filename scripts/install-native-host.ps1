@@ -11,7 +11,13 @@ param(
     [string]$NativeHostPublishDirectory,
 
     [switch]$RegisterEdge = $true,
-    [switch]$RegisterChrome = $true
+    [switch]$RegisterChrome = $true,
+
+    [Parameter()]
+    [ValidateLength(1, 255)]
+    [string]$FirefoxExtensionId = "scrobblix@frpboy.in",
+
+    [switch]$RegisterFirefox
 )
 
 $ErrorActionPreference = 'Stop'
@@ -48,6 +54,26 @@ if ($RegisterEdge) {
 foreach ($registryPath in $registryPaths) {
     New-Item -Path $registryPath -Force | Out-Null
     Set-Item -LiteralPath $registryPath -Value $manifestPath
+}
+
+if ($RegisterFirefox) {
+    $firefoxManifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.firefox.json'
+    $firefoxManifest = [ordered]@{
+        name = 'com.frpboy.scrobblix'
+        description = 'Scrobblix local playback metadata bridge for Firefox'
+        path = $installedExecutable
+        type = 'stdio'
+        allowed_extensions = @($FirefoxExtensionId)
+    }
+    $firefoxManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $firefoxManifestPath -Encoding utf8
+    $firefoxRegistryPath = 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix'
+    New-Item -Path $firefoxRegistryPath -Force | Out-Null
+    Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
+
+    $trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
+    New-Item -Path $trustPath -Force | Out-Null
+    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
+    Write-Host "Firefox extension ID allow-listed: $FirefoxExtensionId"
 }
 
 $trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
