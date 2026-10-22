@@ -1,5 +1,4 @@
         // Diagnostic logs describe operational state; listening metadata remains private.
-        normalized = Regex.Replace(normalized, @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*[^;,|]+", "$1=[REDACTED]");
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
@@ -71,10 +70,11 @@ public sealed class ScrobblixFileLogger
             @"(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)\s*[=:]\s*[^&\s,;]+",
             "$1=[REDACTED]");
         normalized = Regex.Replace(normalized, @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+", "[AUTHORIZATION_URL_REDACTED]");
+        // Diagnostic logs describe operational state; listening metadata remains private.
+        normalized = Regex.Replace(normalized, @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*[^;,|]+", "$1=[REDACTED]");
         // Track metadata is private listening history; keep it out of diagnostic logs by default.
         // Logs should explain state transitions without retaining listening history or metadata.
         // Keep the common metadata values out at the logger boundary, not only in support bundles.
-        normalized = Regex.Replace(normalized, @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*[^;,|]+", "$1=[REDACTED]");
         return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
     }
 
