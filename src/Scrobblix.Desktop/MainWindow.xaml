@@ -268,7 +268,7 @@
                         <TextBlock x:Name="LastFmCredentialsStatusText" Text="API credentials are not configured." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Account connection" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
                         <TextBlock x:Name="LastFmStatusText" Text="Not connected. A user-approved Last.fm account is required before Scrobblix can submit anything remotely." TextWrapping="Wrap" />
-                        <StackPanel Orientation="Horizontal" Spacing="8" CanHorizontallyScroll="False">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
                             <Button x:Name="ConnectLastFmButton" Content="Connect Last.fm" Click="ConnectLastFmButton_Click" />
                             <Button x:Name="CompleteLastFmButton" Content="Finish approval" Click="CompleteLastFmButton_Click" IsEnabled="False" />
                             <Button x:Name="DisconnectLastFmButton" Content="Disconnect" Click="DisconnectLastFmButton_Click" IsEnabled="False" />
