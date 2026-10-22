@@ -100,6 +100,8 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | UX-06 | Use Narrator, contrast theme and 100/150/200% display scale. | Labels, status changes, controls and content remain perceivable/operable. | NOT RUN | |
 | UX-07 | Toggle tracking off while a track plays, then on. | “Tracking paused” is explicit; no listening time accrued during pause; queue worker state remains separate. | NOT RUN | |
 
+| UX-08 | Open Sources before playback, then play in Spotify desktop and a supported browser player if installed. Compare the displayed source and time with actual event delivery. | Empty state stays honest; GSMTC/browser changes only after an observed event. Presence of extension files or a listener is not reported as connected playback. | NOT RUN | |
+
 ## G. Support bundle safety and usability
 
 | ID | Scenario and steps | Expected result | Result | Evidence / defect |
