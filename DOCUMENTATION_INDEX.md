@@ -2,15 +2,14 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Generated:** 2026-08-01
+> **Reviewed:** 2026-10-22  
+> **Index scope:** file catalogue reconciled for private-beta readiness; aggregate counts below are historical.
 
 This file is the repository-wide catalogue. Section README files provide guided reading paths; this index provides a file-by-file inventory.
 
 ## Repository statistics
 
-- Total files: **233**
-- Markdown documents: **226**
-- Approximate Markdown word count: **49,042**
+The last generated aggregate counts (233 files, 226 Markdown documents and approximately 49,042 Markdown words) were calculated on 2026-08-01. They are **historical and not current metrics**; these counts were not regenerated as part of this documentation update.
 
 ## Repository root
 
@@ -29,6 +28,7 @@ This file is the repository-wide catalogue. Section README files provide guided 
 | [`GOVERNANCE.md`](GOVERNANCE.md) | **Governance.** Scrobblix is currently a maintainer-led personal open-source project. |
 | [`LICENSE`](LICENSE) | **LICENSE.** Repository configuration or non-Markdown project file. |
 | [`README.md`](README.md) | **Scrobblix.** Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history,... |
+| [`PRODUCTION_RELEASE_PREREQUISITES.md`](PRODUCTION_RELEASE_PREREQUISITES.md) | **Production Release Prerequisites.** External credentials/identities, Native Messaging threat review, live qualification, signed distribution and private-beta release gates. |
 | [`SECURITY.md`](SECURITY.md) | **Security Policy.** Only the latest stable release and the active pre-release branch receive security fixes. Older versions may be fixed when practical but are not guaranteed. |
 | [`SUPPORT.md`](SUPPORT.md) | **Support.** Before reporting a missed scrobble, capture: |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | **Third-Party Notices.** This file is a release-time registry, not a substitute for generated license review. |
@@ -41,6 +41,15 @@ This file is the repository-wide catalogue. Section README files provide guided 
 | [`config.yml`](.github/ISSUE_TEMPLATE/config.yml) | **config.yml.** Repository configuration or non-Markdown project file. |
 | [`feature_request.yml`](.github/ISSUE_TEMPLATE/feature_request.yml) | **feature_request.yml.** Repository configuration or non-Markdown project file. |
 | [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) | **Pull Request.** Documentation for pull request. |
+
+
+## docs — Continuation and Private Beta Readiness
+
+| File | Purpose |
+|---|---|
+| [`IMPLEMENTATION_RESUME.md`](docs/IMPLEMENTATION_RESUME.md) | **Implementation Resume Guide.** Current-main build/validation commands and the distinction between code inventory and real-world acceptance. |
+| [`PRIVATE_BETA_READINESS.md`](docs/PRIVATE_BETA_READINESS.md) | **Private Beta Readiness.** Ordered acceptance tracks, manual evidence requirements and private-beta go/no-go decision. |
+| [`RELEASE_GATE_STATUS_2026-10-22.md`](docs/RELEASE_GATE_STATUS_2026-10-22.md) | **Release Gate Status.** Verified CI blocker history and unresolved release qualifications. |
 
 ## 00_Project
 
@@ -243,6 +252,7 @@ This file is the repository-wide catalogue. Section README files provide guided 
 | [`PERFORMANCE_TESTS.md`](12_Testing/PERFORMANCE_TESTS.md) | **Performance Tests.** Measure idle and active CPU, private working set, wakeups/timers, disk writes, startup, UI latency, history scrolling/search, extension latency, long-run leak over 24–72 hours. |
 | [`README.md`](12_Testing/README.md) | **12 — Testing and Quality.** Documentation for 12 — testing and quality. |
 | [`RELEASE_CHECKLIST.md`](12_Testing/RELEASE_CHECKLIST.md) | **Release Checklist.** Documentation for release checklist. |
+| [`REAL_WORLD_MANUAL_TEST_MATRIX.md`](12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md) | **Real-world Manual Test Matrix.** Spotify desktop, Last.fm profile reconciliation, duplicate/restart recovery, soak, backup/restore, browser, Windows UX and support-bundle qualification; all unexecuted cases stay NOT RUN. |
 | [`SECURITY_TESTS.md`](12_Testing/SECURITY_TESTS.md) | **Security Tests.** SAST/analyzers, dependency vulnerability/license scan, secret scan, SBOM, signed artifact verification, CI permission review. |
 | [`TEST_FIXTURES.md`](12_Testing/TEST_FIXTURES.md) | **Test Fixtures and Synthetic Data.** No real user history, credentials, private URLs, copyrighted artwork/audio, or production secrets. Fixtures are deterministic, minimal, and clearly synthetic. |
 | [`TEST_STRATEGY.md`](12_Testing/TEST_STRATEGY.md) | **Test Strategy.** Scrobblix prioritizes data durability, deterministic timing, duplicate prevention, source compatibility, security/privacy, and diagnostic explainability. Test pyramid: many domain unit/property tests,... |
@@ -275,17 +285,17 @@ This file is the repository-wide catalogue. Section README files provide guided 
 | [`OBSERVABILITY.md`](14_Operations/OBSERVABILITY.md) | **Local Observability.** Observation rate/drop/coalesce, active sessions/plays, eligibility latency, queue counts/oldest age/attempts, provider latency/classification, database latency/size, adapter completeness, extension... |
 | [`README.md`](14_Operations/README.md) | **14 — Operations and Supportability.** Documentation for 14 — operations and supportability. |
 | [`RECOVERY_RUNBOOKS.md`](14_Operations/RECOVERY_RUNBOOKS.md) | **Recovery Runbooks.** Block provider queue → notify once → reconnect → verify → unblock → batch retry. |
-| [`SUPPORT_BUNDLE.md`](14_Operations/SUPPORT_BUNDLE.md) | **Support Bundle.** Manifest/app/OS/browser versions, health summary, sanitized settings/exclusions summary, recent relevant structured logs, selected correlation/play/queue diagnostic records, schema/migration status,... |
+| [`SUPPORT_BUNDLE.md`](14_Operations/SUPPORT_BUNDLE.md) | **Support Bundle.** Privacy-safe diagnostics-only ZIP allow-list, constrained operational-event fields, explicit exclusions, SHA-256 and remaining canary/Windows qualification gates. |
 
 ## 15_Roadmap
 
 | File | Purpose |
 |---|---|
 | [`FUTURE_IDEAS.md`](15_Roadmap/FUTURE_IDEAS.md) | **Future Ideas.** Potential ideas, not commitments: |
-| [`MILESTONES.md`](15_Roadmap/MILESTONES.md) | **Milestones.** Repository, docs, .NET/extension skeletons, CI, domain model, clocks, reason codes, schema/migrations, synthetic test media. |
-| [`PRIORITIZED_BACKLOG.md`](15_Roadmap/PRIORITIZED_BACKLOG.md) | **Prioritized Backlog.** State machine, monotonic timing, atomic eligibility/queue, queue leases/retry, duplicate guard, migration/backup, credential/redaction, diagnostics reasons. |
+| [`MILESTONES.md`](15_Roadmap/MILESTONES.md) | **Milestones.** Reconciles implemented surfaces with pending evidence gates; current milestone is private-beta readiness followed by signed installable release qualification. |
+| [`PRIORITIZED_BACKLOG.md`](15_Roadmap/PRIORITIZED_BACKLOG.md) | **Prioritized Backlog.** Verification-first backlog covering real playback/Last.fm reconciliation, duplicate and queue recovery, backup/restore, browser security, support bundle and signed install qualification. |
 | [`README.md`](15_Roadmap/README.md) | **15 — Roadmap.** Documentation for 15 — roadmap. |
-| [`V1_RELEASE_PLAN.md`](15_Roadmap/V1_RELEASE_PLAN.md) | **v1 Release Plan.** v1 proves trustworthy Windows/browser Last.fm tracking and diagnostics. It does not require every proposed analytics chart, player plugin, site, or cross-platform feature. |
+| [`V1_RELEASE_PLAN.md`](15_Roadmap/V1_RELEASE_PLAN.md) | **v1 Release Plan.** Private-beta-first sequence with exact-SHA CI, manual listening evidence, soak/recovery, security, accessibility and signed installer entry criteria. |
 
 ## 16_AI_Agents
 
