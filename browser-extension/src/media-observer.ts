@@ -1,4 +1,4 @@
-type PlaybackState = "playing" | "paused" | "unknown";
+type PlaybackState = "playing" | "paused" | "ended" | "unknown";
 
 type ExtendedMediaMetadata = MediaMetadata & {
   albumArtist?: string;
@@ -51,7 +51,7 @@ function attach(media: HTMLMediaElement): void {
   });
   media.addEventListener("play", () => send(media, media.paused ? "paused" : "playing"));
   media.addEventListener("pause", () => send(media, "paused"));
-  media.addEventListener("ended", () => send(media, "paused"));
+  media.addEventListener("ended", () => send(media, "ended"));
   media.addEventListener("durationchange", () => send(media, media.paused ? "paused" : "playing"));
   media.addEventListener("timeupdate", emitProgressIfDue);
   send(media, media.paused ? "paused" : "playing");

@@ -811,12 +811,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             int? durationMilliseconds = payload.TryGetProperty("durationMilliseconds", out var duration) && duration.TryGetInt32(out var parsedDuration) && parsedDuration > 0 ? parsedDuration : null;
             long? positionMilliseconds = payload.TryGetProperty("positionMilliseconds", out var position) && position.TryGetInt64(out var parsedPosition) && parsedPosition >= 0 ? parsedPosition : null;
             var state = payload.TryGetProperty("state", out var stateProperty) ? stateProperty.GetString() : null;
-            var playbackState = state switch
-            {
-                "playing" => PlayState.Playing,
-                "paused" => PlayState.Paused,
-                _ => PlayState.Unknown,
-            };
+            var playbackState = BrowserPlaybackStateMapper.Parse(state);
             var observedAtUtc = root.TryGetProperty("sentAtUtc", out var sentAt)
                 && DateTimeOffset.TryParse(sentAt.GetString(), out var parsedSentAt)
                     ? parsedSentAt

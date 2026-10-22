@@ -1,7 +1,7 @@
 type PlaybackObservation = {
   artist?: string; title?: string; album?: string; albumArtist?: string; artworkUrl?: string;
   trackNumber?: number; releaseYear?: number; recordingMusicBrainzId?: string; releaseMusicBrainzId?: string;
-  durationMilliseconds?: number; positionMilliseconds?: number; state: "playing" | "paused" | "unknown";
+  durationMilliseconds?: number; positionMilliseconds?: number; state: "playing" | "paused" | "ended" | "unknown";
 };
 
 const hostName = "com.frpboy.scrobblix";

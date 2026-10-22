@@ -21,6 +21,11 @@ using Scrobblix.Infrastructure.Providers;
 using Scrobblix.NativeHost;
 using System.Text.Json;
 
+Assert(BrowserPlaybackStateMapper.Parse("playing") == PlayState.Playing, "Browser media playing events map to Playing.");
+Assert(BrowserPlaybackStateMapper.Parse("paused") == PlayState.Paused, "Browser media pause events map to Paused.");
+Assert(BrowserPlaybackStateMapper.Parse("ended") == PlayState.Ended, "Browser media ended events stay distinct from pause events.");
+Assert(BrowserPlaybackStateMapper.Parse("unknown") == PlayState.Unknown, "Unknown browser media states remain unknown.");
+
 Assert(PlaybackArtworkPolicy.IsLikelyBrowserApplication("chrome.exe"), "Chrome GSMTC thumbnails are not treated as album cover art.");
 Assert(PlaybackArtworkPolicy.IsLikelyBrowserApplication("Microsoft.MicrosoftEdge.Stable_8wekyb3d8bbwe"), "Edge GSMTC thumbnails are not treated as album cover art.");
 Assert(!PlaybackArtworkPolicy.IsLikelyBrowserApplication("Spotify.exe"), "Native music app artwork remains eligible for GSMTC caching.");
