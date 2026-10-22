@@ -62,9 +62,13 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $bundle = 'artifacts/Scrobblix'
           New-Item -ItemType Directory -Force -Path "$bundle/browser-extension" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$bundle/browser-extension-firefox" | Out-Null
           New-Item -ItemType Directory -Force -Path "$bundle/scripts" | Out-Null
           Copy-Item -Path 'browser-extension/manifest.json' -Destination "$bundle/browser-extension/manifest.json" -Force
-          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$bundle/browser-extension/manifest.firefox.json" -Force
+          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$bundle/browser-extension-firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension-firefox/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension/README.md" -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension-firefox/README.md" -Force
           Copy-Item -Path 'browser-extension/package.json' -Destination "$bundle/browser-extension/package.json" -Force
           Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension/" -Recurse -Force
           Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$bundle/scripts/" -Force
@@ -76,7 +80,7 @@ jobs:
             ''
             '1. Install the Microsoft Windows App Runtime version required by this build.'
             '2. Launch Scrobblix.Desktop.exe from the desktop folder. The app is unpackaged and may require runtime prerequisites on a clean PC.'
-            '3. The browser companion is optional. Load the browser-extension folder unpacked, publish native-host for the host exe if needed, and register the exact extension ID using scripts/install-native-host.ps1.'
+            '3. Chromium: load browser-extension unpacked and register its ID with scripts/install-native-host.ps1 -ExtensionId <ID> -NativeHostPublishDirectory .\native-host. Firefox: load browser-extension-firefox as a temporary add-on, then register with -RegisterFirefox -NativeHostPublishDirectory .\native-host. The companion is optional for GSMTC playback.'
             '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
             '5. This is a CI verification bundle, not a signed installer or production release.'
           ) | Set-Content -Path "$bundle/README-TESTING.txt" -Encoding utf8
