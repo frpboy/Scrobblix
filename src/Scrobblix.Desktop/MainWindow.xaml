@@ -66,6 +66,7 @@
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Scrobble eligibility" Style="{StaticResource SubtitleTextBlockStyle}" />
                                 <ProgressBar x:Name="EligibilityProgressBar" Value="0" Maximum="100" />
+                                <TextBlock x:Name="ScrobbleStatusText" Text="Waiting for supported playback." Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                                 <TextBlock x:Name="EligibilityDetailText" Text="Confirmed listening time is unavailable until a supported track is playing. Media position and confirmed listening time are tracked separately." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                                 <Button x:Name="TrackingToggleButton" Content="Pause tracking" Click="TrackingToggleButton_Click" HorizontalAlignment="Left" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
