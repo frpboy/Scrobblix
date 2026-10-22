@@ -261,6 +261,9 @@ public sealed class ScrobblixBackupService
         var tempReplacement = activeDatabase + "." + Guid.NewGuid().ToString("N") + ".restore";
         try
         {
+            // Prepare a complete replacement before touching the active database or its sidecars.
+            File.Copy(stagedDatabase, tempReplacement, overwrite: false);
+
             if (File.Exists(activeDatabase))
             {
                 var backupDirectory = Path.Combine(fullDataDirectory, "backups");
@@ -274,10 +277,7 @@ public sealed class ScrobblixBackupService
                     cancellationToken);
             }
 
-            TryDelete(activeDatabase + "-wal");
-            TryDelete(activeDatabase + "-shm");
-            File.Copy(stagedDatabase, tempReplacement, overwrite: false);
-            File.Move(tempReplacement, activeDatabase, overwrite: true);
+            ReplaceActiveDatabaseFilesForRestore(activeDatabase, tempReplacement);
 
             TryDelete(stagedDatabase);
             TryDelete(stagedManifest);
@@ -290,6 +290,93 @@ public sealed class ScrobblixBackupService
         {
             TryDelete(tempReplacement);
             throw;
+        }
+    }
+
+    /// <summary>
+    /// Replaces the active SQLite database and detaches its sidecars as a recoverable file set.
+    /// If any move fails, files moved so far are restored to their original paths. Rollback
+    /// artifacts are preserved and named in the exception if restoration itself cannot complete.
+    /// </summary>
+    internal static void ReplaceActiveDatabaseFilesForRestore(string activeDatabasePath, string replacementPath)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(activeDatabasePath);
+        ArgumentException.ThrowIfNullOrWhiteSpace(replacementPath);
+        var activeDatabase = Path.GetFullPath(activeDatabasePath);
+        var replacement = Path.GetFullPath(replacementPath);
+        if (string.Equals(activeDatabase, replacement, StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException("The replacement database must be a separate file.");
+        }
+
+        if (!File.Exists(replacement))
+        {
+            throw new FileNotFoundException("The prepared restore database does not exist.", replacement);
+        }
+
+        var rollbackSuffix = ".restore-rollback-" + Guid.NewGuid().ToString("N");
+        var activePaths = new[] { activeDatabase, activeDatabase + "-wal", activeDatabase + "-shm" };
+        var moved = new List<(string ActivePath, string RollbackPath)>();
+        try
+        {
+            foreach (var activePath in activePaths)
+            {
+                if (Directory.Exists(activePath))
+                {
+                    throw new IOException($"Expected an SQLite file but found a directory at '{activePath}'. Restore was aborted before replacing the database.");
+                }
+
+                if (!File.Exists(activePath))
+                {
+                    continue;
+                }
+
+                var rollbackPath = activePath + rollbackSuffix;
+                File.Move(activePath, rollbackPath);
+                moved.Add((activePath, rollbackPath));
+            }
+
+            File.Move(replacement, activeDatabase);
+        }
+        catch (Exception swapException)
+        {
+            var rollbackErrors = new List<Exception>();
+            for (var index = moved.Count - 1; index >= 0; index--)
+            {
+                var item = moved[index];
+                try
+                {
+                    if (File.Exists(item.ActivePath) || Directory.Exists(item.ActivePath))
+                    {
+                        throw new IOException($"Cannot restore '{item.ActivePath}' because another filesystem entry now occupies that path.");
+                    }
+
+                    File.Move(item.RollbackPath, item.ActivePath);
+                }
+                catch (Exception rollbackException)
+                {
+                    rollbackErrors.Add(new IOException(
+                        $"Could not restore '{item.ActivePath}'. The previous file is preserved at '{item.RollbackPath}'.",
+                        rollbackException));
+                }
+            }
+
+            if (rollbackErrors.Count > 0)
+            {
+                throw new IOException(
+                    "Restore file replacement failed and rollback was incomplete. Preserve the reported rollback files and recover them before restarting Scrobblix.",
+                    new AggregateException(new[] { swapException }.Concat(rollbackErrors)));
+            }
+
+            throw;
+        }
+
+        // The new DB is active and the old sidecars are no longer at SQLite's active paths.
+        // Best-effort deletion is safe here because the complete pre-restore database snapshot
+        // has already been saved and is returned to the caller.
+        foreach (var item in moved)
+        {
+            TryDelete(item.RollbackPath);
         }
     }
 
