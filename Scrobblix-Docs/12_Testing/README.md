@@ -12,3 +12,4 @@
 - `TEST_FIXTURES.md`
 - `DEFINITION_OF_DONE.md`
 - `RELEASE_CHECKLIST.md`
+- `REAL_WORLD_MANUAL_TEST_MATRIX.md`: multi-day Spotify/Last.fm, recovery, soak, browser and Windows private-beta evidence.
