@@ -10,6 +10,8 @@ var output = Console.OpenStandardOutput();
 var lengthBuffer = new byte[sizeof(int)];
 var callerOrigin = args.FirstOrDefault(argument => argument.StartsWith("chrome-extension://", StringComparison.Ordinal));
 var allowedExtensionIds = NativeHostCallerValidator.ReadAllowedChromiumExtensionIds();
+var allowedFirefoxExtensionIds = NativeHostCallerValidator.ReadAllowedFirefoxExtensionIds();
+var firefoxCallerId = args.Skip(1).FirstOrDefault(allowedFirefoxExtensionIds.Contains);
 
 while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
 {
@@ -30,7 +32,7 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
     {
         using var message = JsonDocument.Parse(payload);
         var root = message.RootElement;
-        if (callerOrigin is null ||
+        if ((callerOrigin is null && firefoxCallerId is null) ||
             root.GetProperty("protocolVersion").GetInt32() != 1 ||
             root.GetProperty("messageId").GetString() is not { Length: > 0 and <= 128 } messageId ||
             root.GetProperty("type").GetString() is not { Length: > 0 and <= 128 } type)
@@ -42,8 +44,10 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
         {
             await WriteAsync(output, new { type = "pong.v1", messageId });
         }
-        else if (type != "playback.observation.v1" || callerOrigin is null
-            || !NativeHostCallerValidator.MatchesExtensionOrigin(callerOrigin, root, allowedExtensionIds))
+        else if (type != "playback.observation.v1"
+            || !(callerOrigin is not null
+                ? NativeHostCallerValidator.MatchesExtensionOrigin(callerOrigin, root, allowedExtensionIds)
+                : firefoxCallerId is not null && NativeHostCallerValidator.MatchesFirefoxExtensionId(firefoxCallerId, root, allowedFirefoxExtensionIds)))
         {
             await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.untrusted_sender" });
         }
