@@ -109,6 +109,8 @@ internal sealed class TrayIconService : IDisposable
         return DefSubclassProc(windowHandle, message, wParam, lParam);
     }
 
+    public void RestoreFromNotification() => RestoreWindow();
+
     private void RestoreWindow()
     {
         if (_disposed || _restoring) return;
