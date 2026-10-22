@@ -8,7 +8,7 @@
 
 The codebase already includes the principal everyday surfaces—Home, History, Statistics, Loved, Queue, Sources, Diagnostics and Settings—plus GSMTC tracking, Last.fm action/queue paths, local backup/restore, tray/notification code and browser companion manifests/host scripts.
 
-The current phase is proving that this implementation is correct and installable over time. Do not re-plan Loved, Statistics, basic tray behavior, notifications, backup/restore, or manifest existence as missing product features; plan their **verification and hardening** instead. Some separate reliability features (support-bundle export, source-health clarity, onboarding and signed install/update/rollback) are still work.
+The current phase is proving that this implementation is correct and installable over time. Do not re-plan Loved, Statistics, basic tray behavior, notifications, backup/restore, or manifest existence as missing product features; plan their **verification and hardening** instead. The Diagnostics-only support-bundle ZIP is now implemented on this continuation branch with a strict field allow-list and explicit confirmation. Canary-redaction CI plus Windows Save/export/accessibility qualification remain open. Source-health clarity, onboarding and signed install/update/rollback are also release tasks.
 
 ## Current-main verification discipline
 
