@@ -40,6 +40,10 @@ public sealed partial class MainWindow : Window
 
     public event Func<string, ProviderActionType, Task<bool>>? LovedTrackActionRequested;
 
+    public event Func<string, Task>? BackupRequested;
+
+    public event Func<string, Task<bool>>? RestoreRequested;
+
     private string? _logDirectory;
 
     public MainWindow()
@@ -343,6 +347,98 @@ public sealed partial class MainWindow : Window
         }
 
         Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
+    }
+
+    private async void CreateBackupButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (BackupRequested is null)
+        {
+            DataManagementStatusText.Text = "Backup service is not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"Scrobblix-Backup-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("Scrobblix backup", new List<string> { ".scrobblix-backup" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+
+            CreateBackupButton.IsEnabled = false;
+            DataManagementStatusText.Text = "Creating a consistent SQLite snapshot. Local tracking can continue.";
+            await BackupRequested.Invoke(file.Path);
+            DataManagementStatusText.Text = $"Backup created successfully: {file.Name}. Credentials, session keys, and cached artwork were excluded.";
+        }
+        catch (Exception exception)
+        {
+            DataManagementStatusText.Text = $"Backup failed ({exception.GetType().Name}). Check the destination folder and local database, then try again.";
+            DiagnosticLogRequested?.Invoke($"Database backup failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            CreateBackupButton.IsEnabled = true;
+        }
+    }
+
+    private async void RestoreBackupButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (RestoreRequested is null)
+        {
+            DataManagementStatusText.Text = "Restore service is not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileOpenPicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                ViewMode = global::Windows.Storage.Pickers.PickerViewMode.List,
+            };
+            picker.FileTypeFilter.Add(".scrobblix-backup");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSingleFileAsync();
+            if (file is null) return;
+
+            var confirmation = new ContentDialog
+            {
+                XamlRoot = Content.XamlRoot,
+                Title = "Stage this Scrobblix restore?",
+                Content = "Scrobblix will validate the backup, stage it, then close. On the next launch the database is restored after a safety snapshot of the current database. The archive does not contain Last.fm credentials or artwork.",
+                PrimaryButtonText = "Validate and restore",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+
+            RestoreBackupButton.IsEnabled = false;
+            DataManagementStatusText.Text = "Validating the backup manifest, checksum, schema, and SQLite integrity…";
+            var staged = await RestoreRequested.Invoke(file.Path);
+            if (!staged)
+            {
+                DataManagementStatusText.Text = "Restore was not staged. The active database was not changed.";
+                return;
+            }
+
+            DataManagementStatusText.Text = "Backup validated and staged. Scrobblix will close; launch it again to apply the restore.";
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            Close();
+            Microsoft.UI.Xaml.Application.Current.Exit();
+        }
+        catch (Exception exception)
+        {
+            DataManagementStatusText.Text = $"Restore failed ({exception.GetType().Name}). The active database was not deliberately replaced; review Diagnostics and try another backup.";
+            DiagnosticLogRequested?.Invoke($"Database restore staging failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            RestoreBackupButton.IsEnabled = true;
+        }
     }
 
     private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
