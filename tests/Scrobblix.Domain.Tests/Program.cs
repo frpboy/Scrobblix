@@ -184,7 +184,8 @@ try
     await File.WriteAllTextAsync(
         supportLog,
         "000001 | 2026-10-22T12:00:00.0000000+00:00 | WARN | LASTFM | request failed; api_key=CANARY_API_SECRET; artist=CANARY_TRACK; url=https://example.com/private?token=CANARY_TOKEN; path=C:\\Users\\CANARY_USER\\AppData\\Local\\Scrobblix\\scrobblix.db" + Environment.NewLine +
-        "000002 | 2026-10-22T12:00:01.0000000+00:00 | ERROR | LASTFM | response failed; exception=HttpRequestException; hresult=0x80131500; reason_code=provider.temporary_unavailable; session_key=CANARY_SESSION_KEY" + Environment.NewLine);
+        "000002 | 2026-10-22T12:00:01.0000000+00:00 | ERROR | LASTFM | response failed; exception=HttpRequestException; hresult=0x80131500; reason_code=provider.temporary_unavailable; session_key=CANARY_SESSION_KEY" + Environment.NewLine +
+        "000003 | 2026-10-22T12:00:02.0000000+00:00 | WARN | LASTFM | forged diagnostic fields; exception=CANARY_API_SECRET; reason_code=CANARY_REASON_SECRET" + Environment.NewLine);
     var supportResult = await SupportBundleExporter.CreateAsync(
         supportArchivePath,
         supportLogDirectory,
@@ -194,7 +195,7 @@ try
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
-    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 2,
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 3,
         "Support bundle reports the number of inspected logs and sanitized events.");
 
     using (var archive = ZipFile.OpenRead(supportArchivePath))
@@ -213,7 +214,8 @@ try
         var exportedText = archiveContents.ToString();
         Assert(!exportedText.Contains("CANARY_API_SECRET", StringComparison.Ordinal)
             && !exportedText.Contains("CANARY_SESSION_KEY", StringComparison.Ordinal)
-            && !exportedText.Contains("CANARY_TOKEN", StringComparison.Ordinal),
+            && !exportedText.Contains("CANARY_TOKEN", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_REASON_SECRET", StringComparison.Ordinal),
             "Support bundle excludes seeded credential/token canaries.");
         Assert(!exportedText.Contains("CANARY_TRACK", StringComparison.Ordinal)
             && !exportedText.Contains("CANARY_USER", StringComparison.Ordinal)
