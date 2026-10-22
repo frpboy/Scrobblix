@@ -250,6 +250,14 @@ public sealed partial class MainWindow : Window
         });
         StartupInfo.Message = message;
         StartupInfo.Severity = severity;
+
+        // The Home page already shows current playback and eligibility. Keep the banner
+        // out of the layout for routine/duplicate status, and reserve it for attention
+        // or an explicit tracking pause/resume action.
+        var isAttention = severity is InfoBarSeverity.Warning or InfoBarSeverity.Error;
+        var isTrackingAction = string.Equals(title, "Tracking paused", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(title, "Tracking resumed", StringComparison.OrdinalIgnoreCase);
+        StartupInfo.IsOpen = isAttention || isTrackingAction;
     }
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
