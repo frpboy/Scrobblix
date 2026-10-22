@@ -33,6 +33,12 @@ Fill before testing; do not include secrets.
 | CR-03 | Restart Scrobblix and the browser/extension after a busy-pipe period. | The listener reconnects and the failure backoff resets after a successful connection; retries do not create a duplicate play or provider action. | NOT RUN | |
 | CR-04 | If the process exits unexpectedly, capture exact app SHA/build, exit code, Windows Application event and timestamp-aligned final 100 sanitized log lines; collect a crash dump only if produced. | A fatal exception or OS-level cause is recorded before root cause is declared; secrets and listening content are redacted from shared evidence. | NOT RUN | |
 
+## A0. App-owned disposable resource lifecycle
+
+| ID | Scenario and steps | Expected result | Result | Evidence / defect |
+|---|---|---|---|---|
+| P0-OWN-01 | Launch normally, start a second instance, close the running instance, and relaunch. Exercise window-construction failure where feasible. | Second launch activates the existing window and releases its temporary event/semaphore handles; startup failure and normal close cancel the listener, dispose owned handles/tray icon, and allow a fresh launch to acquire the gate. | NOT RUN | |
+
 ## A. Spotify desktop playback — run across multiple days
 
 | ID | Scenario and steps | Expected result | Result | Evidence / defect |
