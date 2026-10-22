@@ -11,10 +11,10 @@
                 <Grid.ColumnDefinitions><ColumnDefinition Width="Auto" /><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
                 <Image x:Name="AppBrandImage" Width="38" Height="38" Stretch="Uniform" AutomationProperties.Name="Scrobblix app mark" />
                 <StackPanel x:Name="BrandCopy" Grid.Column="1" Margin="10,0,4,0" Spacing="2" VerticalAlignment="Center"><TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" /><TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
-                <Button x:Name="NavigationToggleButton" Grid.Column="2" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click" AutomationProperties.Name="Collapse navigation" AutomationProperties.HelpText="Keep this page open and reduce the navigation rail to icons." ToolTipService.ToolTip="Collapse navigation"><FontIcon Glyph="&#xE76B;" /></Button>
+                <Button x:Name="NavigationToggleButton" Grid.Column="2" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click" AutomationProperties.Name="Collapse navigation" AutomationProperties.HelpText="Keep this page open and reduce the navigation rail to icons." ToolTipService.ToolTip="Collapse navigation"><FontIcon Glyph="&#xE700;" /></Button>
             </Grid>
             <StackPanel x:Name="CompactRailHeader" Grid.Row="0" Height="88" Spacing="4" HorizontalAlignment="Center" Visibility="Collapsed">
-                <Button x:Name="CompactNavigationToggleButton" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click" AutomationProperties.Name="Expand navigation" AutomationProperties.HelpText="Restore navigation labels without leaving the current page." ToolTipService.ToolTip="Expand navigation"><FontIcon Glyph="&#xE76C;" /></Button>
+                <Button x:Name="CompactNavigationToggleButton" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click" AutomationProperties.Name="Expand navigation" AutomationProperties.HelpText="Restore navigation labels without leaving the current page." ToolTipService.ToolTip="Expand navigation"><FontIcon Glyph="&#xE700;" /></Button>
                 <Image x:Name="CompactBrandImage" Width="38" Height="38" Stretch="Uniform" AutomationProperties.Name="Scrobblix app mark" />
             </StackPanel>
             <Button x:Name="RailAttentionButton" Grid.Row="1" Margin="0,8,0,8" Padding="10,8" HorizontalAlignment="Stretch" HorizontalContentAlignment="Left" Click="RailAttentionButton_Click" Visibility="Collapsed" AutomationProperties.Name="Queue needs attention" AutomationProperties.HelpText="Open Queue to review blocked, failed, or uncertain provider actions." ToolTipService.ToolTip="Queue needs attention"><StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><FontIcon Glyph="&#xE7BA;" /><TextBlock x:Name="RailAttentionLabel" Text="Queue needs attention" TextWrapping="Wrap" /></StackPanel></Button>
@@ -30,6 +30,44 @@
                     <NavigationViewItem Content="Settings" Tag="settings" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
                 </NavigationView.MenuItems>
             </NavigationView>
+            <ScrollViewer x:Name="CompactNavigationButtons" Grid.Row="2" Visibility="Collapsed"
+                          VerticalScrollMode="Auto" VerticalScrollBarVisibility="Hidden"
+                          HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
+                <StackPanel HorizontalAlignment="Center" Spacing="4" Padding="0,4,0,4">
+                    <Button x:Name="CompactHomeButton" Tag="home" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Home" AutomationProperties.Name="Home" AutomationProperties.HelpText="Open Home">
+                        <FontIcon Glyph="&#xE80F;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactHistoryButton" Tag="history" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="History" AutomationProperties.Name="History" AutomationProperties.HelpText="Open History">
+                        <FontIcon Glyph="&#xE81C;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactStatisticsButton" Tag="statistics" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Statistics" AutomationProperties.Name="Statistics" AutomationProperties.HelpText="Open Statistics">
+                        <FontIcon Glyph="&#xE9D2;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactLovedButton" Tag="loved" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Loved tracks" AutomationProperties.Name="Loved tracks" AutomationProperties.HelpText="Open Loved tracks">
+                        <FontIcon Glyph="&#xEB51;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactQueueButton" Tag="queue" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Queue" AutomationProperties.Name="Queue" AutomationProperties.HelpText="Open Queue">
+                        <FontIcon Glyph="&#xE896;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactSourcesButton" Tag="sources" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Sources" AutomationProperties.Name="Sources" AutomationProperties.HelpText="Open Sources">
+                        <FontIcon Glyph="&#xE8D7;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactDiagnosticsButton" Tag="diagnostics" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Diagnostics" AutomationProperties.Name="Diagnostics" AutomationProperties.HelpText="Open Diagnostics">
+                        <FontIcon Glyph="&#xE946;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactSettingsButton" Tag="settings" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
+                            ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings" AutomationProperties.HelpText="Open Settings">
+                        <FontIcon Glyph="&#xE713;" FontSize="18" />
+                    </Button>
+                </StackPanel>
+            </ScrollViewer>
             <Grid x:Name="PrivacyFooterGrid" Grid.Row="3" MinHeight="40" ToolTipService.ToolTip="Local listening data stays on this device." AutomationProperties.Name="Privacy: local listening data stays on this device">
                 <TextBlock x:Name="PrivacyStatementText" Text="Local listening data stays on this device." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" VerticalAlignment="Center" />
                 <FontIcon x:Name="PrivacyIcon" Glyph="&#xE72E;" FontSize="18" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" AutomationProperties.Name="Local listening data stays on this device" />
