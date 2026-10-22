@@ -409,7 +409,7 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
 
 
 // Logger sanitizer regression: canary listening metadata must not persist in diagnostic messages.
-var sanitizedDiagnostic = Scrobblix.Desktop.ScrobblixFileLogger.SanitizeForTesting(
+var sanitizedDiagnostic = Scrobblix.Infrastructure.Diagnostics.DiagnosticMessageSanitizer.Sanitize(
     "artist=Private Artist; title=Secret Track; album=Personal Album; action_id=abc123");
 Assert(!sanitizedDiagnostic.Contains("Private Artist", StringComparison.Ordinal)
     && !sanitizedDiagnostic.Contains("Secret Track", StringComparison.Ordinal)
