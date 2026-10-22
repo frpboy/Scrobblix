@@ -104,6 +104,14 @@ public sealed partial class MainWindow : Window
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        var sourceLabel = observation.Source switch
+        {
+            "gsmtc" => "Windows media controls (GSMTC)",
+            "browser" => "Browser Companion",
+            _ => observation.Source,
+        };
+        SourceHealthSummaryText.Text = $"{sourceLabel} event received this session.";
+        SourceLastObservationText.Text = $"Last observation: {observation.ObservedAtUtc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)} · playback state: {observation.PlaybackState}.";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         var threshold = trackingStatus.Decision.ThresholdMilliseconds;
