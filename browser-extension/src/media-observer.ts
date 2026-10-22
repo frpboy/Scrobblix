@@ -1,4 +1,4 @@
-const extensionApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
+const scrobblixMediaApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 type PlaybackState = "playing" | "paused" | "ended" | "unknown";
 
@@ -18,7 +18,7 @@ function send(media: HTMLMediaElement, state: PlaybackState): void {
   const artworkUrl = metadata?.artwork
     ?.map((image) => image.src)
     .find((src) => src.startsWith("https://"));
-  extensionApi.runtime.sendMessage({
+  scrobblixMediaApi.runtime.sendMessage({
     artist: metadata?.artist,
     title: metadata?.title,
     album: metadata?.album,
