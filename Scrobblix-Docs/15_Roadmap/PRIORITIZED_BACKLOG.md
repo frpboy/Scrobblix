@@ -44,7 +44,7 @@ The following capability surfaces or implementation paths exist in the codebase.
 - [ ] Publisher identity/certificate or Store identity; sign and timestamp every distributed package.
 - [ ] Clean install on another Windows account/device; upgrade, repair, rollback and uninstall/residual-data checks.
 - [ ] Dependency/license inventory, SBOM, provenance and vulnerability review.
-- [ ] First-run onboarding, source health clarity, per-track history detail, refined notifications, startup/tray preferences and statistics polish.
+- [ ] Verify the new last-observation/source indicator on real Windows; add deeper last-contact, reconnect and error diagnostics only after the event semantics are validated. First-run onboarding, per-track history detail, notification refinement, startup/tray preferences and statistics polish remain P2.
 - [ ] Supported-environment matrix, release notes, known issues, privacy/data-removal docs, troubleshooting and beta support process.
 
 ## Out of scope for v1
