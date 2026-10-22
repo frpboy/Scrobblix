@@ -90,4 +90,4 @@ Never use production listening history or credentials in automated tests. Store 
 - Explorer restart, notification privacy/activation and accessibility qualification.
 - Native host/IPC threat review and support-bundle canary redaction on the final candidate.
 - Signed MSIX/App Installer/update channel, clean-machine install, upgrade, rollback and uninstall.
-- Actual changes to a Stitch workspace. A Git brief is only a handoff; do not report remote Stitch changes until verified.
+- Stitch project handoff has now been created and revised; see `docs/STITCH_UI_HANDOFF_2026-10-22.md`. Native WinUI visual alignment, responsive behavior, focus/accessibility, and the support/status additions still require Windows qualification.
