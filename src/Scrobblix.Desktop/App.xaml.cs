@@ -21,7 +21,7 @@ using Scrobblix.Windows;
 
 namespace Scrobblix.Desktop;
 
-public partial class App : Microsoft.UI.Xaml.Application
+public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 {
     private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
@@ -671,6 +671,16 @@ public partial class App : Microsoft.UI.Xaml.Application
                 _singleInstanceSemaphore = null;
             }
         }
+    }
+
+    public void Dispose()
+    {
+        // Application shutdown can occur before the main window is created or its
+        // Closed callback is attached. Keep this idempotent with the normal close path.
+        StopSingleInstanceActivationListener();
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        GC.SuppressFinalize(this);
     }
 
     private static void LoadLocalLastFmEnvironment()
