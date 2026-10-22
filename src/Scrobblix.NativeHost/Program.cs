@@ -11,6 +11,8 @@ var lengthBuffer = new byte[sizeof(int)];
 var callerOrigin = args.FirstOrDefault(argument => argument.StartsWith("chrome-extension://", StringComparison.Ordinal));
 var allowedExtensionIds = NativeHostCallerValidator.ReadAllowedChromiumExtensionIds();
 var allowedFirefoxExtensionIds = NativeHostCallerValidator.ReadAllowedFirefoxExtensionIds();
+// On Windows Firefox passes the manifest path first and add-on ID second; do not
+// accept an arbitrary argv value unless it is explicitly allow-listed.
 var firefoxCallerId = args.Skip(1).FirstOrDefault(allowedFirefoxExtensionIds.Contains);
 
 while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
@@ -32,24 +34,30 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
     {
         using var message = JsonDocument.Parse(payload);
         var root = message.RootElement;
-        if ((callerOrigin is null && firefoxCallerId is null) ||
-            root.GetProperty("protocolVersion").GetInt32() != 1 ||
-            root.GetProperty("messageId").GetString() is not { Length: > 0 and <= 128 } messageId ||
-            root.GetProperty("type").GetString() is not { Length: > 0 and <= 128 } type)
+        if (root.GetProperty("protocolVersion").GetInt32() != 1
+            || root.GetProperty("messageId").GetString() is not { Length: > 0 and <= 128 } messageId
+            || root.GetProperty("type").GetString() is not { Length: > 0 and <= 128 } type)
         {
             throw new JsonException();
         }
 
-        if (type == "ping.v1")
+        // Authenticate the declared extension identity before any message type is
+        // processed, including ping. A ping cannot be used as an allow-list bypass.
+        var trustedEnvelope = callerOrigin is not null
+            ? NativeHostCallerValidator.MatchesExtensionOrigin(callerOrigin, root, allowedExtensionIds)
+            : firefoxCallerId is not null
+                && NativeHostCallerValidator.MatchesFirefoxExtensionId(firefoxCallerId, root, allowedFirefoxExtensionIds);
+        if (!trustedEnvelope)
+        {
+            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.untrusted_sender" });
+        }
+        else if (type == "ping.v1")
         {
             await WriteAsync(output, new { type = "pong.v1", messageId });
         }
-        else if (type != "playback.observation.v1"
-            || !(callerOrigin is not null
-                ? NativeHostCallerValidator.MatchesExtensionOrigin(callerOrigin, root, allowedExtensionIds)
-                : firefoxCallerId is not null && NativeHostCallerValidator.MatchesFirefoxExtensionId(firefoxCallerId, root, allowedFirefoxExtensionIds)))
+        else if (type != "playback.observation.v1")
         {
-            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.untrusted_sender" });
+            await WriteAsync(output, new { type = "error.v1", messageId, code = "extension.unsupported_message" });
         }
         else if (await TryForwardToDesktopAsync(payload, CancellationToken.None))
         {

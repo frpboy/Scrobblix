@@ -20,6 +20,8 @@ using Microsoft.Data.Sqlite;
 using Scrobblix.Infrastructure.Providers;
 using Scrobblix.NativeHost;
 using System.Text.Json;
+using System.IO.Compression;
+using Scrobblix.Infrastructure.Diagnostics;
 
 Assert(BrowserPlaybackStateMapper.Parse("playing") == PlayState.Playing, "Browser media playing events map to Playing.");
 Assert(BrowserPlaybackStateMapper.Parse("paused") == PlayState.Paused, "Browser media pause events map to Paused.");
@@ -41,6 +43,16 @@ Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcd
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)), "Native host forwarding fails closed when no extension ID is registered.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope from a different extension identity.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
+using var secondNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"ponmlkjihgfedcbaponmlkjihgfedcba"}""");
+var multipleAllowedNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal)
+{
+    "abcdefghijklmnopabcdefghijklmnop",
+    "ponmlkjihgfedcbaponmlkjihgfedcba",
+};
+Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/", secondNativeHostEnvelope.RootElement, multipleAllowedNativeHostExtensions),
+    "Native host allows a separately registered second Chromium extension ID.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/", secondNativeHostEnvelope.RootElement, allowedNativeHostExtensions),
+    "Native host rejects an otherwise well-formed extension ID that is not allow-listed.");
 using var firefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"scrobblix@frpboy.in"}""");
 using var otherFirefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"other-addon@example.org"}""");
 var allowedFirefoxNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal) { "scrobblix@frpboy.in" };
@@ -127,6 +139,160 @@ var observation = new PlayObservation(
     PlayState.Playing,
     MetadataNormalizer.Normalize("Artist"),
     MetadataNormalizer.Normalize("Track"));
+
+var countdownStatus = new PlaybackTrackingStatus(
+    ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 78_000),
+    78_000,
+    false,
+    false,
+    "play-1");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(null, null, false, false, Array.Empty<QueueActionSummary>()) == "Tracking paused",
+    "Home status clearly reports tracking paused.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Listening: eligible in 1:12",
+    "Home status displays remaining eligibility time without claiming provider delivery.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Paused }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Paused: eligible in 1:12",
+    "Home status distinguishes paused playback from active listening.");
+
+var pendingStatusAction = new QueueActionSummary(
+    "action-pending",
+    "play-1",
+    "lastfm",
+    ProviderActionType.Scrobble,
+    ProviderActionState.Pending,
+    0,
+    observation.ObservedAtUtc,
+    ReasonCodes.Playback.WaitingForEligibility,
+    "Artist",
+    "Track");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction }) == "Queued safely: waiting for Last.fm",
+    "Home status shows a pending provider action as queued, not sent.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.InFlight } }) == "Sending to Last.fm…",
+    "Home status distinguishes an active submission from a queue waiting for a retry.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.RetryScheduled } }) == "Queued safely: retry scheduled",
+    "Home status explains a scheduled retry without implying a successful submission.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.Accepted } }) == "Sent to Last.fm",
+    "Home status only says sent when the matching scrobble action is provider-accepted.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Ended }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible: played too briefly",
+    "Home status explains a track that ended before eligibility.");
+var adTrackingStatus = countdownStatus with
+{
+    Decision = new EligibilityDecision(false, null, ReasonCodes.Playback.Advertisement),
+};
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible: advertisement playback is ignored",
+    "Home status explains why advertisement playback is not eligible.");
+
+var supportBundleRoot = Path.Combine(Path.GetTempPath(), $"scrobblix-support-test-{Guid.NewGuid():N}");
+var supportLogDirectory = Path.Combine(supportBundleRoot, "logs");
+Directory.CreateDirectory(supportLogDirectory);
+var supportLog = Path.Combine(supportLogDirectory, "scrobblix-20261022-000000-100.log");
+var supportArchivePath = Path.Combine(supportBundleRoot, "support.zip");
+try
+{
+    await File.WriteAllTextAsync(
+        supportLog,
+        "000001 | 2026-10-22T12:00:00.0000000+00:00 | WARN | LASTFM | request failed; api_key=CANARY_API_SECRET; artist=CANARY_TRACK; url=https://example.com/private?token=CANARY_TOKEN; path=C:\\Users\\CANARY_USER\\AppData\\Local\\Scrobblix\\scrobblix.db" + Environment.NewLine +
+        "000002 | 2026-10-22T12:00:01.0000000+00:00 | ERROR | LASTFM | response failed; exception=HttpRequestException; hresult=0x80131500; reason_code=provider.temporary_unavailable; session_key=CANARY_SESSION_KEY" + Environment.NewLine +
+        "000003 | 2026-10-22T12:00:02.0000000+00:00 | WARN | LASTFM | forged diagnostic fields; exception=CANARY_API_SECRET; reason_code=CANARY_REASON_SECRET" + Environment.NewLine);
+    var supportResult = await SupportBundleExporter.CreateAsync(
+        supportArchivePath,
+        supportLogDirectory,
+        "1.2.3-test",
+        "10.0.26100",
+        new SupportSourceStatus("browser", "Playing", new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero), true),
+        CancellationToken.None);
+
+    Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
+    Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 3,
+        "Support bundle reports the number of inspected logs and sanitized events.");
+
+    using (var archive = ZipFile.OpenRead(supportArchivePath))
+    {
+        var names = archive.Entries.Select(entry => entry.FullName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Assert(names.SequenceEqual(new[] { "README.txt", "event-summary.txt", "manifest.json", "operational-events.tsv" }),
+            "Support bundle contains only the explicit diagnostics allow-list, never a database or artwork.");
+
+        var manifestEntry = archive.GetEntry("manifest.json")!;
+        using (var manifestReader = new StreamReader(manifestEntry.Open(), Encoding.UTF8))
+        using (var manifestJson = JsonDocument.Parse(await manifestReader.ReadToEndAsync()))
+        {
+            var root = manifestJson.RootElement;
+            var sourceStatus = root.GetProperty("sourceStatus");
+            Assert(root.GetProperty("formatVersion").GetInt32() == 2,
+                "Support bundle schema version changes when the source snapshot is added.");
+            Assert(sourceStatus.GetProperty("source").GetString() == "browser-companion"
+                && sourceStatus.GetProperty("playbackState").GetString() == "playing"
+                && sourceStatus.GetProperty("trackingEnabled").GetBoolean()
+                && sourceStatus.GetProperty("lastObservationUtc").GetString() == "2026-10-22T12:00:00+00:00",
+                "Support bundle includes only the normalized source snapshot and UTC observation time.");
+
+            var summaryEntry = archive.GetEntry("event-summary.txt")!;
+            using var summaryReader = new StreamReader(summaryEntry.Open(), Encoding.UTF8);
+            var summary = await summaryReader.ReadToEndAsync();
+            Assert(summary.Contains("Source: browser-companion", StringComparison.Ordinal)
+                && summary.Contains("Playback state: playing", StringComparison.Ordinal)
+                && summary.Contains("Tracking enabled: yes", StringComparison.Ordinal),
+                "The human-readable summary includes the same privacy-reduced source status.");
+        }
+
+        var archiveContents = new StringBuilder();
+        foreach (var entry in archive.Entries)
+        {
+            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+            archiveContents.Append(await reader.ReadToEndAsync());
+        }
+
+        var exportedText = archiveContents.ToString();
+        Assert(!exportedText.Contains("CANARY_API_SECRET", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_SESSION_KEY", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_TOKEN", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_REASON_SECRET", StringComparison.Ordinal),
+            "Support bundle excludes seeded credential/token canaries.");
+        Assert(!exportedText.Contains("CANARY_TRACK", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_USER", StringComparison.Ordinal)
+            && !exportedText.Contains("example.com", StringComparison.Ordinal),
+            "Support bundle excludes track metadata, username-like path values and full URLs.");
+        Assert(exportedText.Contains("HttpRequestException", StringComparison.Ordinal)
+            && exportedText.Contains("provider.temporary_unavailable", StringComparison.Ordinal),
+            "Support bundle retains a constrained exception type and machine-readable reason code.");
+    }
+
+    var untrustedSnapshotPath = Path.Combine(supportBundleRoot, "support-untrusted-source.zip");
+    await SupportBundleExporter.CreateAsync(
+        untrustedSnapshotPath,
+        supportLogDirectory,
+        "1.2.3-test",
+        "10.0.26100",
+        new SupportSourceStatus("CANARY_TRACK", "CANARY_API_SECRET", null, true),
+        CancellationToken.None);
+    using (var untrustedArchive = ZipFile.OpenRead(untrustedSnapshotPath))
+    using (var reader = new StreamReader(untrustedArchive.GetEntry("manifest.json")!.Open(), Encoding.UTF8))
+    using (var manifest = JsonDocument.Parse(await reader.ReadToEndAsync()))
+    {
+        var sourceStatus = manifest.RootElement.GetProperty("sourceStatus");
+        Assert(sourceStatus.GetProperty("source").GetString() == "other"
+            && sourceStatus.GetProperty("playbackState").GetString() == "unknown",
+            "Unrecognized source/state input is reduced to fixed allow-list values.");
+        Assert(!manifest.RootElement.GetProperty("sourceStatus").ToString().Contains("CANARY", StringComparison.Ordinal),
+            "Untrusted source/status strings cannot leak into the support bundle.");
+    }
+}
+finally
+{
+    try { if (Directory.Exists(supportBundleRoot)) Directory.Delete(supportBundleRoot, recursive: true); }
+    catch (IOException) { }
+    catch (UnauthorizedAccessException) { }
+}
+
 var historyRecord = new LocalPlayRecord(
     "play-1",
     observation.CapturedAtUtc,

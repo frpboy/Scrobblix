@@ -11,6 +11,7 @@ using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
+using Scrobblix.Infrastructure.Diagnostics;
 
 namespace Scrobblix.Desktop;
 
@@ -22,6 +23,9 @@ public sealed partial class MainWindow : Window
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
+    private IReadOnlyList<QueueActionSummary> _queueActions = Array.Empty<QueueActionSummary>();
+    private PlayObservation? _displayedObservation;
+    private PlaybackTrackingStatus? _displayedTrackingStatus;
 
     public event Action<bool>? TrackingModeChanged;
 
@@ -85,8 +89,15 @@ public sealed partial class MainWindow : Window
         appWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 780));
     }
 
-    public void SetStartupStatus(string message, InfoBarSeverity severity)
+    public void SetStartupStatus(string message, InfoBarSeverity severity, string? title = null)
     {
+        StartupInfo.Title = title ?? (severity switch
+        {
+            InfoBarSeverity.Success => "Playback detected",
+            InfoBarSeverity.Warning => "Attention needed",
+            InfoBarSeverity.Error => "Scrobblix needs attention",
+            _ => "Listening status",
+        });
         StartupInfo.Message = message;
         StartupInfo.Severity = severity;
     }
@@ -94,12 +105,22 @@ public sealed partial class MainWindow : Window
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         _displayedPlayId = trackingStatus.PlayId;
+        _displayedObservation = observation;
+        _displayedTrackingStatus = trackingStatus;
         UpdateLovedButtons();
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
+        var sourceLabel = observation.SourceName switch
+        {
+            "gsmtc" => "Windows media controls (GSMTC)",
+            "browser" => "Browser Companion",
+            _ => observation.SourceName,
+        };
+        SourceHealthSummaryText.Text = $"{sourceLabel} event received this session.";
+        SourceLastObservationText.Text = $"Last observation: {observation.ObservedAtUtc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)} · playback state: {observation.PlaybackState}.";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
-        DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
+        DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         var threshold = trackingStatus.Decision.ThresholdMilliseconds;
         EligibilityProgressBar.Value = threshold is > 0
             ? Math.Min(100, trackingStatus.ConfirmedPlayedMilliseconds * 100d / threshold.Value)
@@ -107,13 +128,15 @@ public sealed partial class MainWindow : Window
         EligibilityDetailText.Text = threshold is > 0
             ? $"Confirmed listening time: {FormatDuration(trackingStatus.ConfirmedPlayedMilliseconds)} / {FormatDuration(threshold.Value)}."
             : "Confirmed listening time is unavailable until a supported track has a known duration.";
+        UpdateScrobbleStatus();
         SetStartupStatus(
             observation.PlaybackState == PlayState.Playing
-                ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
-                : $"Last observed {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}.",
+                ? $"Tracking {observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"}."
+                : $"Last observed {observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"}.",
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
-                : InfoBarSeverity.Informational);
+                : InfoBarSeverity.Informational,
+            observation.PlaybackState == PlayState.Playing ? "Playback detected" : "Playback updated");
     }
 
     public void SetEnrichedMetadata(string playId, PlayObservation observation, PlayMetadataEnrichment metadata)
@@ -324,7 +347,7 @@ public sealed partial class MainWindow : Window
         row.Children.Add(artFrame);
 
         var details = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
-        details.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}", FontSize = 15, TextWrapping = TextWrapping.Wrap });
+        details.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} · {play.Title ?? "Unknown title"}", FontSize = 15, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(play.Album))
             details.Children.Add(new TextBlock { Text = play.Album, FontSize = 12, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(play.AlbumArtist) && !string.Equals(play.AlbumArtist, play.Artist, StringComparison.OrdinalIgnoreCase))
@@ -342,6 +365,85 @@ public sealed partial class MainWindow : Window
     {
         _logDirectory = directory;
         LogDirectoryText.Text = directory;
+    }
+
+    private SupportSourceStatus CreateSupportSourceStatus()
+    {
+        var observation = _displayedObservation;
+        var sourceName = observation?.SourceName switch
+        {
+            "gsmtc" => "windows-media-controls",
+            "browser" => "browser-companion",
+            null => "none",
+            _ => "other",
+        };
+
+        // Deliberately pass only a small operational snapshot. Never pass track fields,
+        // site URLs, extension IDs, app IDs, or filesystem paths to the exporter.
+        return new SupportSourceStatus(
+            sourceName,
+            observation?.PlaybackState.ToString() ?? "unknown",
+            observation?.ObservedAtUtc,
+            _trackingMode.IsEnabled);
+    }
+
+    private async void ExportSupportBundleButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_logDirectory))
+        {
+            SupportBundleStatusText.Text = "The diagnostic log directory is not ready. Restart Scrobblix and try again.";
+            return;
+        }
+
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Export a privacy-safe support bundle?",
+            Content = "The ZIP contains manifest.json, event-summary.txt, operational-events.tsv and README.txt. It includes app/Windows version metadata, a normalized source snapshot (source type, playback state, last-observation time and tracking enabled/paused), and sanitized operational event fields. It does not contain artist/title/album, listening history, the SQLite database, artwork, full URLs, usernames, file paths or Last.fm credentials/session keys. Nothing is uploaded automatically; review the ZIP before sharing.",
+            PrimaryButtonText = "Choose ZIP location",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"Scrobblix-Support-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("ZIP archive", new List<string> { ".zip" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null)
+            {
+                return;
+            }
+
+            ExportSupportBundleButton.IsEnabled = false;
+            SupportBundleStatusText.Text = "Building a diagnostics-only ZIP. Listening history and raw log messages are excluded.";
+            var result = await SupportBundleExporter.CreateAsync(
+                file.Path,
+                _logDirectory,
+                typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown",
+                Environment.OSVersion.Version.ToString(),
+                sourceStatus: CreateSupportSourceStatus());
+            SupportBundleStatusText.Text =
+                $"Created {Path.GetFileName(result.ArchivePath)}. Included {result.OperationalEventsIncluded:N0} operational event row(s) from {result.SourceLogFilesInspected:N0} recent log file(s). SHA-256: {result.Sha256}. Review the ZIP before sharing.";
+        }
+        catch (Exception exception)
+        {
+            SupportBundleStatusText.Text = $"Support bundle export failed ({exception.GetType().Name}). Your local history and logs were not uploaded.";
+            DiagnosticLogRequested?.Invoke($"Support bundle export failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            ExportSupportBundleButton.IsEnabled = true;
+        }
     }
 
     private void OpenLogFolderButton_Click(object sender, RoutedEventArgs args)
@@ -594,10 +696,12 @@ public sealed partial class MainWindow : Window
 
     public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
     {
+        _queueActions = actions;
         QueuePageActionList.Children.Clear();
         if (actions.Count == 0)
         {
             QueuePageActionList.Children.Add(new TextBlock { Text = "No provider actions have been recorded yet." });
+            UpdateScrobbleStatus();
             return;
         }
 
@@ -613,7 +717,7 @@ public sealed partial class MainWindow : Window
             var content = new StackPanel { Spacing = 6 };
             var track = string.IsNullOrWhiteSpace(action.Artist) && string.IsNullOrWhiteSpace(action.Title)
                 ? "Unknown track"
-                : $"{action.Artist ?? "Unknown artist"} — {action.Title ?? "Unknown title"}";
+                : $"{action.Artist ?? "Unknown artist"} · {action.Title ?? "Unknown title"}";
             content.Children.Add(new TextBlock { Text = track, FontSize = 15, TextWrapping = TextWrapping.Wrap });
             content.Children.Add(new TextBlock
             {
@@ -680,13 +784,15 @@ public sealed partial class MainWindow : Window
             card.Child = content;
             QueuePageActionList.Children.Add(card);
         }
+
+        UpdateScrobbleStatus();
     }
 
     private static string FormatQueueState(ProviderActionState state) => state switch
     {
         ProviderActionState.RetryScheduled => "Retry scheduled",
         ProviderActionState.RetryExhausted => "Automatic retries exhausted",
-        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown — review required",
+        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown: review required",
         ProviderActionState.AuthBlocked => "Authentication blocked",
         ProviderActionState.PermanentFailure => "Failed",
         ProviderActionState.ProviderIgnored => "Ignored by provider",
@@ -845,7 +951,7 @@ public sealed partial class MainWindow : Window
             var content = new StackPanel { Spacing = 5 };
             content.Children.Add(new TextBlock
             {
-                Text = $"{track.Artist ?? "Unknown artist"} — {track.Title ?? "Unknown title"}",
+                Text = $"{track.Artist ?? "Unknown artist"} · {track.Title ?? "Unknown title"}",
                 FontSize = 15,
                 TextWrapping = TextWrapping.Wrap,
             });
@@ -988,7 +1094,6 @@ public sealed partial class MainWindow : Window
     public void SetBrowserCompanionObservation(string sourceName)
     {
         var status = $"Browser Companion received playback from {sourceName}.";
-        BrowserCompanionHomeStatusText.Text = status;
         BrowserCompanionSourceStatusText.Text = status;
     }
 
@@ -1001,6 +1106,7 @@ public sealed partial class MainWindow : Window
             ? "Your account is connected. Manage credentials and delivery settings in Settings."
             : "Add API credentials and approve your account in Settings.";
         OpenLastFmSettingsButton.Content = isConnected ? "Manage Last.fm settings" : "Configure API key / Login";
+        UpdateScrobbleStatus();
     }
 
     private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
@@ -1048,8 +1154,20 @@ public sealed partial class MainWindow : Window
             _trackingMode.IsEnabled
                 ? "Tracking resumed. Checking Windows media controls."
                 : "Tracking paused. Local history and queued actions are unchanged.",
-            InfoBarSeverity.Informational);
+            InfoBarSeverity.Informational,
+            _trackingMode.IsEnabled ? "Tracking resumed" : "Tracking paused");
+        UpdateScrobbleStatus();
         TrackingModeChanged?.Invoke(_trackingMode.IsEnabled);
+    }
+
+    private void UpdateScrobbleStatus()
+    {
+        ScrobbleStatusText.Text = PlaybackStatusPresenter.GetScrobbleStatus(
+            _displayedObservation,
+            _displayedTrackingStatus,
+            _trackingMode.IsEnabled,
+            _isLastFmConnected,
+            _queueActions);
     }
 
     private static string FormatDuration(long milliseconds) =>

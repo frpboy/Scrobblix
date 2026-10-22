@@ -1,53 +1,40 @@
 # Scope
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Development implementation underway; release gates remain open  
-> **Last updated:** 2026-08-01
-
+> **Status:** Implementation exists; private-beta acceptance in progress  
+> **Last updated:** 2026-10-22  
+> **Integration baseline:** `main`
 
 ## Current implementation snapshot
 
-The development branch now contains the Home/History/Statistics/Loved/Queue/Sources/Diagnostics/Settings surfaces, source arbitration, durable queue processing, Last.fm action flows, artwork fallback, a backup/staged-restore path, a minimize-to-tray prototype, opt-in local Windows notifications with a separate track-detail privacy toggle, Chromium/Firefox companion manifests and an additional named-pipe peer check. See `docs/IMPLEMENTATION_RESUME.md` for the exact branch, last green CI baseline, and remaining manual release gates. These are development implementations; not all have been validated against a live Windows shell, real browser installation, or signed distribution.
+A code inspection of the current `main` snapshot confirms that Home, History/search/export, Statistics, Loved, Queue, Sources, Diagnostics and Settings surfaces exist. GSMTC tracking, Last.fm connection/actions, durable queue processing, metadata/artwork fallback, backup/restore logic, tray behavior, opt-in notifications and browser-companion development files are also present.
+
+This is an implementation inventory, **not release certification**. Real Spotify/Last.fm reconciliation, repeat and restart correctness, sleep/wake, 8–24 hour soak, actual Chrome/Edge/Firefox delivery, Windows shell/accessibility, backup recovery, support bundle and signed install/update/rollback remain release gates. Check the exact commit and corresponding Actions run before treating a candidate as validated.
 
 ## v1 in scope
 
-- Windows 11 desktop application with background/tray operation.
-- GSMTC session discovery and event-driven playback tracking.
-- Optional Chromium and Firefox browser companion extensions.
-- Native Messaging bridge installed with the desktop app.
-- Last.fm desktop authentication, now-playing updates, scrobbling, love, and unlove.
-- Persistent offline queue with bounded retry and batch submission.
+- Windows desktop companion with background/tray behavior.
+- GSMTC event/poll source discovery and playback eligibility.
+- Optional Chromium and Firefox Browser Companion.
+- Native Messaging bridge, allow-lists and per-user registration/uninstall.
+- Last.fm desktop authentication, Now Playing, scrobbling, Love and Unlove.
+- Persistent offline queue with bounded retry and transparent provider outcomes.
 - Source arbitration and duplicate prevention across GSMTC and extension events.
-- Local listening history, timeline, search, filters, status, and export.
-- Dashboard and local statistics derived from detected listening events.
-- Queue management and full diagnostics.
-- Startup configuration, settings, notifications, backup/restore, logs, and support bundles.
-- Signed packaging and update verification.
+- Local history, search/filters/export, dashboard, statistics and queue diagnostics.
+- Onboarding, source health, support bundle, settings, notifications and local backup/restore.
+- Signed packaging, update verification, rollback and uninstall documentation.
 
 ## v1 explicitly out of scope
 
-- Capturing or recording system audio.
-- Acoustic fingerprinting or Shazam-like recognition.
-- Streaming or downloading music.
-- Modifying playback files or media libraries.
+- System audio recording or acoustic fingerprinting.
+- Streaming/downloading music or changing local media files.
 - Cloud synchronization of local history.
-- Social network, messaging, or public profile hosting.
-- Mobile, Linux, or macOS clients.
-- AI-generated music recommendations.
-- Automatic metadata correction that silently changes scrobble payloads.
-- Bypassing website DRM, browser security, or Last.fm rate limits.
-- Scrobbling video content merely because it contains an audio track.
-
-## Later candidates
-
-- ListenBrainz and Libre.fm providers.
-- User-defined metadata transformation rules with previews and audit history.
-- Plugin SDK for source adapters.
-- Discord Rich Presence.
-- Portable build with restricted extension integration.
-- Cross-device encrypted sync designed as an independent opt-in service.
+- Social network, messaging, plugins or user scripting/rules.
+- Mobile, Linux or macOS clients.
+- Spotify Web API dependency.
+- Automatic metadata changes that silently alter scrobble payloads.
+- DRM/security bypass or bypassing Last.fm limits.
 
 ## Boundary rule
 
-A feature enters scope only when its user value, privacy implications, failure behavior, storage impact, testing plan, and maintenance ownership are documented.
+A feature enters scope only when its user value, privacy implications, failure behavior, storage impact, test plan and maintenance owner are explicit.

@@ -1,45 +1,59 @@
 # Prioritized Backlog
 
-> **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (\`frpboy\`)  
-> **Status:** Active implementation; release gates remain open  
-> **Last updated:** 2026-10-21
+> **Updated:** 2026-10-22  
+> **Integration baseline:** `main`  
+> **Current milestone:** Private beta readiness
 
-## Implemented and CI-verified baseline
+## Code inventory — present in the current mainline snapshot
 
-- GSMTC polling and local playback observation ingestion.
-- Canonical playback tracker, eligibility decisions, durable SQLite history, queue leasing and restart recovery.
-- Last.fm signature/authentication/submission code and Credential Locker boundary.
-- Home, History (recent session page), Queue summary, Sources, Diagnostics and Settings.
-- Chromium Browser Companion and Native Messaging registration helpers.
-- Source arbitration, local metadata/artwork enrichment, SVG fallback and sequential UTC logs.
-- Desktop publish and test-bundle assembly in GitHub Actions.
-- This continuation adds search/export and local Statistics; leave them unverified until its CI run passes.
+The following capability surfaces or implementation paths exist in the codebase. This list is an inventory, **not a claim that every path has passed real-world qualification**:
 
-## Remaining P0 — Correctness, security and recovery
+- Home / current playback, eligibility progress, tracking pause/resume and Last.fm connection state.
+- SQLite-backed local history, History search and CSV export.
+- Statistics, Loved tracks, Queue, Sources, Diagnostics and Settings.
+- GSMTC playback observation and source arbitration/canonical tracking.
+- Last.fm authentication and provider actions (scrobble, Now Playing, Love and Unlove), with Credential Locker integration.
+- Persistent queue, action leases/retries/recovery code and provider outcome states.
+- Backup/restore logic with archive/checksum/schema/integrity validation and a pre-restore safety snapshot.
+- Minimize-to-tray behavior and opt-in Windows notifications with separate track-detail privacy preference.
+- Chromium / Firefox development manifests and Native Messaging installation helpers.
+- Windows CI for .NET, assertion checks, browser extension build, manifest validation, publishing and development artifacts.
 
-- Exponential bounded retry/backoff, Retry-After handling and circuit-breaker policy.
-- Reconcile ambiguous Last.fm POST outcomes; never blindly resend a possibly accepted scrobble.
-- Harden and test the native-host-to-desktop peer identity boundary.
-- Backup/restore, migration rollback and crash-recovery qualification.
-- Queue item details/actions with a clear retry/cancel policy.
-- Retention controls and sanitized support bundles.
+## P0 — Crash and launch stability
 
-## Remaining P1 — Required v1 experience
+- [ ] Validate the process exit against the exact candidate build: capture exit code, Windows Application event and timestamp-aligned sanitized log tail. Supplied logs do not prove an unhandled exception; leave root cause unresolved until evidence exists.
+- [ ] Prevent Browser Companion pipe-busy retry storms with bounded exponential backoff, one warning per interval plus suppressed count, and backoff reset after successful connection.
+- [ ] Use the current `feat/private-beta-readiness` launcher target and refuse builds while `Scrobblix.Desktop` owns output DLLs. Never terminate processes automatically.
+- [ ] Run CR-01 to CR-04 in the real-world manual test matrix and verify history/queue continuity through shutdown and restart.
 
-- Loved-track list and durable love/unlove commands.
-- Firefox extension, manifest/installer registration and lifecycle validation.
-- Tray/minimize-to-tray, notifications and activation handling.
-- Full history pagination, play details, advanced filters and larger-range export.
-- Onboarding, application-specific source controls and accessibility qualification.
-- Signed installer/update/repair/uninstall and clean-machine tests.
+## P0 — Stabilize the working version
 
-## Remaining P2 — Strong v1 / beta polish
+- [ ] Fetch `main` and check the exact HEAD SHA and latest Actions run before citing CI status.
+- [ ] Execute and record `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md` over multiple Spotify listening sessions.
+- [ ] Verify qualifying submissions against the dedicated Last.fm test account; capture redacted correlation/action IDs and accepted provider evidence.
+- [ ] Confirm repeat-after-intervening-track, pause/resume, seeking, ads, network loss, Last.fm outage, sleep/wake and restart produce neither lost nor duplicate scrobbles.
+- [ ] Make Home explain current playback, eligibility countdown, queue status, provider acceptance and tracking-paused state without equating eligibility with delivery.
+- [ ] Run a documented 8–24 hour soak.
 
-- Statistics timeline, date ranges, listening reports and provider reliability.
-- Backup/restore UX and configuration export with secrets excluded.
-- Performance/soak checks, compatibility matrix, About/licenses/attribution and release docs.
+## P1 — Reliability and security qualification
+
+- [ ] Qualify queue recovery after process termination, lease expiry, network timeout after send, authentication loss and provider throttling.
+- [ ] Test backup/restore against a disposable copy of non-production data, including corrupt archive, wrong schema, checksum mismatch and safety-snapshot restore.
+- [ ] Review Native Messaging sender identity, framed message size/rate limits, message schema, allow-list fail-closed behavior, per-user registry/manifest ACLs, executable path trust and uninstall cleanup.
+- [ ] Verify Chrome, Edge and Firefox event delivery, restart/reload/reconnect and source arbitration. Browser integration remains optional for desktop Spotify if GSMTC supplies sufficient metadata.
+- [ ] Qualify the diagnostics export with seeded canary secrets and path/track metadata; verify the ZIP contains only the four allow-listed entries and no raw log messages. Test Save-dialog cancellation, filesystem failure, archive integrity/hash and accessibility.
+- [ ] Verify Explorer restart/tray recovery, notification privacy/activation, lock-screen behavior, clean shutdown and crash/restart.
+- [ ] Run keyboard, Narrator, contrast, DPI/scaling and responsive-layout checks on real Windows.
+
+## P2 — Installable and maintainable release
+
+- [ ] MSIX/App Installer packaging and update strategy.
+- [ ] Publisher identity/certificate or Store identity; sign and timestamp every distributed package.
+- [ ] Clean install on another Windows account/device; upgrade, repair, rollback and uninstall/residual-data checks.
+- [ ] Dependency/license inventory, SBOM, provenance and vulnerability review.
+- [ ] Verify the new last-observation/source indicator on real Windows; add deeper last-contact, reconnect and error diagnostics only after the event semantics are validated. First-run onboarding, per-track history detail, notification refinement, startup/tray preferences and statistics polish remain P2.
+- [ ] Supported-environment matrix, release notes, known issues, privacy/data-removal docs, troubleshooting and beta support process.
 
 ## Out of scope for v1
 
-- User metadata rule editor, plugins, third-party providers, Discord, cloud sync and non-Windows clients.
+Cloud sync, Discord, multiple providers, plugin system, user scripting/rules, mobile/macOS/Linux clients and a Spotify Web API dependency.

@@ -34,7 +34,7 @@ try {
         throw 'The .NET 10 SDK is required. Install it from https://dotnet.microsoft.com/download/dotnet/10.0 and rerun this script.'
     }
 
-    $branch = 'feat/scrobblix-v1-complete'
+    $branch = 'feat/private-beta-readiness'
     git fetch origin
     if ($LASTEXITCODE -ne 0) { throw 'git fetch failed.' }
 
@@ -52,6 +52,12 @@ try {
 
     git pull --ff-only origin $branch
     if ($LASTEXITCODE -ne 0) { throw "Could not fast-forward $branch." }
+
+    $runningApps = @(Get-Process -Name 'Scrobblix.Desktop' -ErrorAction SilentlyContinue)
+    if ($runningApps.Count -gt 0) {
+        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ', '
+        throw "Scrobblix.Desktop is still running (PID(s): $processIds). Close the app, including its tray instance, before rebuilding; its loaded DLLs lock the build output. No process was terminated automatically."
+    }
 
     dotnet restore Scrobblix.slnx
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed.' }

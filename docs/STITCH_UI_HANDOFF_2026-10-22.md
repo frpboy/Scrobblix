@@ -38,7 +38,7 @@ The generated HTML and screenshot remain attached to the private Stitch project.
 
 The owner requested a simpler, lighter UI. Stitch was updated to reduce the Home screen to a compact tracking status strip, one Now listening card, one Last.fm delivery line, a concise Today summary, and three recent tracks. Sources was reduced to a plain list of source names, states, short explanations, and only relevant actions.
 
-The native Home copy now follows that language: **Listening**, one concise explanation, **Love** / **Remove love**, and **Recent tracks**. Existing History, Statistics, Queue, Sources, Diagnostics, and Settings pages remain available rather than duplicating their controls or dense metrics on Home.
+The native Home now follows that hierarchy: a prominent current-track surface, a dedicated eligibility inset, a single Last.fm delivery section that contains the current queue state, a plain Today summary, and three recent tracks. The separate History, Statistics, Queue, Sources, Diagnostics, and Settings pages remain the home for deeper data and controls.
 
 ## Implementation guidance for later UI work
 
@@ -53,4 +53,16 @@ The native Home copy now follows that language: **Listening**, one concise expla
 
 - Stitch generation completed for screen `39ba08667751486282f9c8a87b038bd4` using the existing project design system.
 - The design system is the existing Scrobblix light Fluent system: Public Sans, 8px roundness, tonal lavender accent, and explicit accessibility/truth rules.
-- The workspace implementation change is copy-only and does not affect playback observations, eligibility calculation, queue persistence, credentials, or provider delivery.
+- The Home hierarchy is implemented in native XAML, not by shipping Stitch HTML. Home loads three recent rows; the History page still loads up to 500 sessions. The layout change does not add player controls or change playback observations, eligibility calculation, queue persistence, credentials, or provider delivery.
+
+
+## Anti-Slop Design Read and native implementation
+
+- **Mode:** during, selected explicitly for this session. The rules were applied while editing the native UI.
+- **Purpose:** answer the listener's immediate questions in order: what is playing, how much confirmed listening is needed, whether Last.fm delivery is connected/queued/accepted, and what happened recently.
+- **Direction:** use the existing Scrobblix Fluent direction and Stitch handoff. Let Windows theme resources own surfaces and semantic colors. The tonal lavender accent remains a restrained system accent; no new gradients, glows, decorative assets, or motion were introduced.
+- **Dials:** ENERGY 2 / RHYTHM 2 / MOTION 1. Low visual energy supports a utility dashboard; rhythm comes from the primary listening surface, a quieter delivery surface, and unboxed Today summary; motion remains system-default and minimal.
+- **Identity motif:** album artwork anchors the current track, while the inset progress area separates confirmed listening from provider delivery. This is a functional distinction, not decoration.
+- **Simplification:** duplicate Home tiles for Sources and Queue were removed. Queue state remains visible inside Last.fm delivery, and the dedicated Queue and Sources pages retain detailed views. Home requests only three recent tracks.
+- **Status labels:** the live InfoBar title now follows the current state instead of continuing to say “Starting Scrobblix” after startup. User-facing separators use punctuation that reads clearly with assistive technology.
+- **Verification boundary:** build/XAML checks and automated state assertions are required on the exact commit. Windows visual review at 100%, 150% and 200% scaling, keyboard-only traversal, Narrator and live states remain manual gates, marked NOT RUN until exercised on Windows.

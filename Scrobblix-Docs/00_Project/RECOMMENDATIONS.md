@@ -2,10 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Recommended baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Recommended product/architecture baseline; delivery priority is now private-beta readiness  
+> **Last updated:** 2026-10-22
 
 This document collects the principal product and engineering recommendations that are otherwise distributed across the repository. Each recommendation should be converted into an Architecture Decision Record when implementation changes its status from proposed to accepted.
+
+**Current delivery note (2026-10-22):** The initial implementation-order below is historical architecture guidance, not a claim that Home/History/Queue/Diagnostics or secondary surfaces are still missing. Core product flows exist in code. The current milestone is proving correctness over real listening sessions, recovery, browser/Windows behavior, privacy-safe supportability, accessibility and signed install/update/rollback. Use [Private Beta Readiness](../../docs/PRIVATE_BETA_READINESS.md) and the [Real-world Manual Test Matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md) as the active delivery plan.
 
 ## Product positioning
 

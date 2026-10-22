@@ -1,12 +1,8 @@
+import { isPlaybackObservation, isSupportedSender, type PlaybackObservation } from "./message-validation.js";
+
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
-
-type PlaybackObservation = {
-  artist?: string; title?: string; album?: string; albumArtist?: string; artworkUrl?: string;
-  trackNumber?: number; releaseYear?: number; recordingMusicBrainzId?: string; releaseMusicBrainzId?: string;
-  durationMilliseconds?: number; positionMilliseconds?: number; state: "playing" | "paused" | "ended" | "unknown";
-};
 
 type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" };
 type CompanionSettings = { paused: boolean };
@@ -15,19 +11,33 @@ type NativeHostStatus = { state: "connected" | "unavailable"; detail: string };
 const hostName = "com.frpboy.scrobblix";
 let sequence = 0;
 
-scrobblixWorkerApi.runtime.onMessage.addListener((message: PlaybackObservation | PopupMessage, sender, sendResponse) => {
+scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (isPopupMessage(message)) {
     void handlePopupMessage(message).then(sendResponse);
     return true;
   }
 
-  void forwardObservation(message, sender);
+  if (isPlaybackObservation(message)) void forwardObservation(message, sender);
 });
 
 async function forwardObservation(observation: PlaybackObservation, sender: chrome.runtime.MessageSender): Promise<void> {
-  if (!sender.tab?.id || (observation.title?.length ?? 0) > 1024 || (observation.artist?.length ?? 0) > 1024 || (observation.artworkUrl?.length ?? 0) > 4096) return;
+  if (!sender.tab?.id || !sender.url) return;
+
+  let sourceUrl: URL;
+  try {
+    sourceUrl = new URL(sender.url);
+  } catch {
+    return;
+  }
+
+  if (sourceUrl.protocol !== "https:" && sourceUrl.protocol !== "http:") return;
+  const hasGrantedOrigin = isSupportedSender(sender)
+    || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
+  if (!hasGrantedOrigin) return;
+
   const settings = await scrobblixWorkerApi.storage.local.get({ paused: false } satisfies CompanionSettings);
   if (settings.paused) return;
+
   const port = scrobblixWorkerApi.runtime.connectNative(hostName);
   let finished = false;
   const finish = () => {
@@ -36,21 +46,36 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
       port.disconnect();
     }
   };
-  port.onMessage.addListener(finish);
+  port.onMessage.addListener((response: unknown) => {
+    if (typeof response === "object" && response !== null
+        && "messageId" in response
+        && (response as { messageId?: unknown }).messageId === messageId) {
+      finish();
+    } else {
+      finish();
+    }
+  });
   port.onDisconnect.addListener(() => { finished = true; });
+  const messageId = crypto.randomUUID();
   port.postMessage({
     protocolVersion: 1,
-    messageId: crypto.randomUUID(),
+    messageId,
     type: "playback.observation.v1",
     sentAtUtc: new Date().toISOString(),
     browserInstanceId: scrobblixWorkerApi.runtime.id,
     sequence: ++sequence,
-    payload: { ...observation, tabId: sender.tab.id, siteOrigin: getOrigin(sender.url) },
+    payload: {
+      ...observation,
+      tabId: sender.tab.id,
+      siteOrigin: sourceUrl.origin,
+    },
   });
 }
 
-function isPopupMessage(message: PlaybackObservation | PopupMessage): message is PopupMessage {
-  return "type" in message && (message.type === "companion.get-state" || message.type === "companion.test-native-host");
+function isPopupMessage(message: unknown): message is PopupMessage {
+  return typeof message === "object" && message !== null && "type" in message
+    && ((message as { type?: unknown }).type === "companion.get-state"
+      || (message as { type?: unknown }).type === "companion.test-native-host");
 }
 
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus> {
@@ -89,8 +114,4 @@ function testNativeHost(): Promise<NativeHostStatus> {
     port.onDisconnect.addListener(() => finish({ state: "unavailable", detail: scrobblixWorkerApi.runtime.lastError?.message ?? "Native host is unavailable." }));
     port.postMessage({ protocolVersion: 1, messageId: crypto.randomUUID(), type: "ping.v1", browserInstanceId: scrobblixWorkerApi.runtime.id });
   });
-}
-
-function getOrigin(url: string | undefined): string | undefined {
-  try { return url ? new URL(url).origin : undefined; } catch { return undefined; }
 }

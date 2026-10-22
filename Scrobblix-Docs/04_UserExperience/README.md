@@ -1,5 +1,7 @@
 # 04 — User Experience
 
+The current lightweight Home design was generated and revised in the private Stitch workspace; see [Stitch UI handoff](../../docs/STITCH_UI_HANDOFF_2026-10-22.md) for artifact identifiers and implementation boundaries. Stitch exports are design references; the shipped app uses native WinUI controls and live data.
+
 This section defines the full desktop and companion experience.
 
 - `UX_VISION.md`
