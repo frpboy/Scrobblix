@@ -68,7 +68,7 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
         var persistedReason = outcome == ProviderActionState.RetryExhausted
             ? ReasonCodes.Provider.RetryExhausted
             : result.ReasonCode;
-        var retryAfter = outcome == ProviderActionState.RetryScheduled
+        TimeSpan? retryAfter = outcome == ProviderActionState.RetryScheduled
             ? GetRetryDelay(action.AttemptCount, result.RetryAfter)
             : null;
         await actionStore.CompleteAsync(action.ActionId, outcome, persistedReason, nowUtc, cancellationToken, retryAfter);
