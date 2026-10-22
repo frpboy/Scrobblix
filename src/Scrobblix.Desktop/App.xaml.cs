@@ -29,7 +29,6 @@ public partial class App : Microsoft.UI.Xaml.Application
     private Semaphore? _singleInstanceSemaphore;
     private EventWaitHandle? _singleInstanceActivationEvent;
     private CancellationTokenSource? _singleInstanceListenerCancellation;
-    private Task? _singleInstanceListener;
     private TrayIconService? _trayIcon;
 
     public App()
@@ -599,7 +598,7 @@ public partial class App : Microsoft.UI.Xaml.Application
 
         _singleInstanceListenerCancellation = new CancellationTokenSource();
         var cancellationToken = _singleInstanceListenerCancellation.Token;
-        _singleInstanceListener = Task.Run(() =>
+        _ = Task.Run(() =>
         {
             while (!cancellationToken.IsCancellationRequested)
             {
