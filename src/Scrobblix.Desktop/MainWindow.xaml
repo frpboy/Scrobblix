@@ -243,6 +243,8 @@
                         <TextBlock Text="Desktop notifications" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <CheckBox x:Name="DesktopNotificationsCheckBox" Content="Notify me when Last.fm accepts a scrobble or delivery needs attention" IsChecked="False" Checked="DesktopNotificationsCheckBox_Changed" Unchecked="DesktopNotificationsCheckBox_Changed" />
                         <TextBlock x:Name="DesktopNotificationsStatusText" Text="Windows notifications are off. Enable this option to receive delivery updates." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <CheckBox x:Name="NotificationTrackDetailsCheckBox" Content="Show artist and track title in notifications (off by default)" IsChecked="False" Checked="NotificationTrackDetailsCheckBox_Changed" Unchecked="NotificationTrackDetailsCheckBox_Changed" />
+                        <TextBlock x:Name="NotificationPrivacyStatusText" Text="Notification track details are hidden. This preference applies to the lock screen and notification banners." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                     </StackPanel>
                 </Border>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
