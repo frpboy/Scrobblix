@@ -540,17 +540,18 @@ var nowPlayingDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-nowpla
 var nowPlayingConnectionString = $"Data Source={nowPlayingDatabasePath};Pooling=False";
 await new SqliteDatabase(nowPlayingConnectionString).InitializeAsync(CancellationToken.None);
 var nowPlayingPlayStore = new SqliteLocalPlayStore(nowPlayingConnectionString);
+var nowPlayingTime = DateTimeOffset.Now;
 var nowPlayingWriter = new SqliteNowPlayingActionWriter(nowPlayingConnectionString);
 var firstNowPlayingPlay = historyRecord with
 {
     PlayId = "nowplaying-first",
-    FirstObservedUtc = observation.ObservedAtUtc,
-    LastObservedUtc = observation.ObservedAtUtc,
+    FirstObservedUtc = nowPlayingTime.AddMinutes(-2),
+    LastObservedUtc = nowPlayingTime.AddMinutes(-2),
 };
 await nowPlayingPlayStore.UpsertAsync(firstNowPlayingPlay, CancellationToken.None);
-Assert(await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
+Assert(await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", nowPlayingTime, CancellationToken.None),
     "The first confirmed playing track is durably queued for Last.fm now-playing.");
-Assert(!await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+Assert(!await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", nowPlayingTime.AddSeconds(1), CancellationToken.None),
     "Repeated polls for the same play do not create duplicate now-playing actions.");
 
 var incompleteNowPlayingPlay = firstNowPlayingPlay with
@@ -559,18 +560,18 @@ var incompleteNowPlayingPlay = firstNowPlayingPlay with
     Artist = null,
 };
 await nowPlayingPlayStore.UpsertAsync(incompleteNowPlayingPlay, CancellationToken.None);
-Assert(!await nowPlayingWriter.TryQueueAsync(incompleteNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None),
+Assert(!await nowPlayingWriter.TryQueueAsync(incompleteNowPlayingPlay.PlayId, "lastfm", "account-1", nowPlayingTime.AddSeconds(2), CancellationToken.None),
     "Now-playing is not sent when track metadata is missing.");
 
 var secondNowPlayingPlay = firstNowPlayingPlay with
 {
     PlayId = "nowplaying-second",
     Title = "Next Track",
-    FirstObservedUtc = observation.ObservedAtUtc.AddMinutes(1),
-    LastObservedUtc = observation.ObservedAtUtc.AddMinutes(1),
+    FirstObservedUtc = nowPlayingTime.AddMinutes(-1),
+    LastObservedUtc = nowPlayingTime.AddMinutes(-1),
 };
 await nowPlayingPlayStore.UpsertAsync(secondNowPlayingPlay, CancellationToken.None);
-Assert(await nowPlayingWriter.TryQueueAsync(secondNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None),
+Assert(await nowPlayingWriter.TryQueueAsync(secondNowPlayingPlay.PlayId, "lastfm", "account-1", nowPlayingTime.AddMinutes(-1), CancellationToken.None),
     "A newly started track can replace a stale pending now-playing update.");
 var nowPlayingActions = await new SqliteQueueReader(nowPlayingConnectionString).GetRecentActionsAsync(20, CancellationToken.None);
 Assert(nowPlayingActions.Any(action => action.PlayId == firstNowPlayingPlay.PlayId
@@ -581,6 +582,18 @@ Assert(nowPlayingActions.Any(action => action.PlayId == firstNowPlayingPlay.Play
         && action.ActionType == ProviderActionType.NowPlaying
         && action.State == ProviderActionState.Pending),
     "A track change cancels the older unsent now-playing action and leaves the newest one pending.");
+var nowPlayingActionStore = new SqliteProviderActionStore(nowPlayingConnectionString);
+var acceptedNowPlayingLease = await nowPlayingActionStore.ClaimNextDueAsync(
+    "nowplaying-worker", nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(acceptedNowPlayingLease is { ActionType: ProviderActionType.NowPlaying, PlayId: "nowplaying-second" },
+    "The durable worker leases the newest current-track update, not the superseded one.");
+await nowPlayingActionStore.CompleteAsync(
+    acceptedNowPlayingLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
+    nowPlayingTime, CancellationToken.None);
+var nowPlayingOnlyToday = await new SqliteHistoryReader(nowPlayingConnectionString)
+    .GetTodaySummaryAsync(nowPlayingTime, CancellationToken.None);
+Assert(nowPlayingOnlyToday.AcceptedScrobbleCount == 0,
+    "Accepted now-playing updates are not reported as accepted Last.fm scrobbles.");
 File.Delete(nowPlayingDatabasePath);
 File.Delete(databasePath);
 
