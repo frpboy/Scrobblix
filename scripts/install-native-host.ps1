@@ -21,8 +21,8 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
-# An unpacked extension can have different IDs in Chrome and Edge. Accept a list so one
-# native-host manifest and trust allow-list can safely represent both browser installations.
+# An unpacked extension can have different IDs in Chrome and Edge. Support multiple IDs
+# so the native-host manifest and the desktop allow-list remain consistent.
 $extensionIds = @(
     $ExtensionId |
         ForEach-Object { if ($null -ne $_) { $_.Trim() } } |
@@ -30,11 +30,11 @@ $extensionIds = @(
         Select-Object -Unique
 )
 
-# Backwards-compatible convenience: one or more IDs with no explicit browser switches registers Chrome + Edge.
-# Firefox-only mode does not require a Chromium extension ID.
+# Backwards-compatible convenience: supplied Chromium IDs with no explicit browser
+# switches register Chrome and Edge. Firefox-only mode needs no Chromium ID.
 $registerChromium = $RegisterChrome.IsPresent -or $RegisterEdge.IsPresent
-if (-not $RegisterChrome.IsPresent -and -not $RegisterEdge.IsPresent -and -not $RegisterFirefox.IsPresent -and
-    $extensionIds.Count -gt 0) {
+if (-not $RegisterChrome.IsPresent -and -not $RegisterEdge.IsPresent -and
+    -not $RegisterFirefox.IsPresent -and $extensionIds.Count -gt 0) {
     $RegisterChrome = $true
     $RegisterEdge = $true
     $registerChromium = $true
@@ -89,204 +89,6 @@ if ($registerChromium) {
     New-Item -Path $trustPath -Force | Out-Null
     Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value ($extensionIds -join ';') -Type String
     Write-Host ("Chromium extension ID(s) allow-listed: " + ($extensionIds -join ', '))
-}
-
-if ($RegisterFirefox) {
-    $firefoxManifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.firefox.json'
-    $firefoxManifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge for Firefox'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_extensions = @($FirefoxExtensionId)
-    }
-    $firefoxManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $firefoxManifestPath -Encoding utf8
-    $firefoxRegistryPath = 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix'
-    New-Item -Path $firefoxRegistryPath -Force | Out-Null
-    Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
-    Write-Host "Firefox extension ID allow-listed: $FirefoxExtensionId"
-}
-
-Write-Host 'Scrobblix native messaging host registration updated.'
-Write-Host "Native host: $installedExecutable"
-Write-Host 'Restart any registered browser completely before testing the companion.'
-) {
-        throw "Invalid Chromium extension ID '$id'. IDs must be exactly 32 lowercase characters from a through p."
-    }
-}
-
-$sourceDirectory = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
-$sourceExecutable = Join-Path $sourceDirectory 'Scrobblix.NativeHost.exe'
-if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-    throw "Scrobblix.NativeHost.exe was not found in '$sourceDirectory'. Publish the native host first."
-}
-
-$destinationDirectory = Join-Path $env:LOCALAPPDATA 'Scrobblix\NativeHost'
-New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
-Copy-Item -Path (Join-Path $sourceDirectory '*') -Destination $destinationDirectory -Recurse -Force
-$installedExecutable = Join-Path $destinationDirectory 'Scrobblix.NativeHost.exe'
-$trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
-
-if ($registerChromium) {
-    $manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
-    $manifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_origins = @("chrome-extension://$ExtensionId/")
-    }
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
-
-    if ($RegisterChrome) {
-        $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-    if ($RegisterEdge) {
-        $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value $ExtensionId -Type String
-    Write-Host "Chromium extension ID allow-listed: $ExtensionId"
-}
-
-if ($RegisterFirefox) {
-    $firefoxManifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.firefox.json'
-    $firefoxManifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge for Firefox'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_extensions = @($FirefoxExtensionId)
-    }
-    $firefoxManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $firefoxManifestPath -Encoding utf8
-    $firefoxRegistryPath = 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix'
-    New-Item -Path $firefoxRegistryPath -Force | Out-Null
-    Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
-    Write-Host "Firefox extension ID allow-listed: $FirefoxExtensionId"
-}
-
-Write-Host 'Scrobblix native messaging host registration updated.'
-Write-Host "Native host: $installedExecutable"
-Write-Host 'Restart any registered browser completely before testing the companion.'
-) {
-        throw "Invalid Chromium extension ID '$id'. IDs must be exactly 32 lowercase characters from a through p."
-    }
-}
-
-$sourceDirectory = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
-$sourceExecutable = Join-Path $sourceDirectory 'Scrobblix.NativeHost.exe'
-if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-    throw "Scrobblix.NativeHost.exe was not found in '$sourceDirectory'. Publish the native host first."
-}
-
-$destinationDirectory = Join-Path $env:LOCALAPPDATA 'Scrobblix\NativeHost'
-New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
-Copy-Item -Path (Join-Path $sourceDirectory '*') -Destination $destinationDirectory -Recurse -Force
-$installedExecutable = Join-Path $destinationDirectory 'Scrobblix.NativeHost.exe'
-$trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
-
-if ($registerChromium) {
-    $manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
-    $manifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_origins = @($extensionIds | ForEach-Object { "chrome-extension://$_/" })
-    }
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
-
-    if ($RegisterChrome) {
-        $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-    if ($RegisterEdge) {
-        $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value ($extensionIds -join ';') -Type String
-    Write-Host ("Chromium extension ID(s) allow-listed: " + ($extensionIds -join ', '))
-}
-
-if ($RegisterFirefox) {
-    $firefoxManifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.firefox.json'
-    $firefoxManifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge for Firefox'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_extensions = @($FirefoxExtensionId)
-    }
-    $firefoxManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $firefoxManifestPath -Encoding utf8
-    $firefoxRegistryPath = 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix'
-    New-Item -Path $firefoxRegistryPath -Force | Out-Null
-    Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
-    Write-Host "Firefox extension ID allow-listed: $FirefoxExtensionId"
-}
-
-Write-Host 'Scrobblix native messaging host registration updated.'
-Write-Host "Native host: $installedExecutable"
-Write-Host 'Restart any registered browser completely before testing the companion.'
-) {
-        throw "Invalid Chromium extension ID '$id'. IDs must be exactly 32 lowercase characters from a through p."
-    }
-}
-
-$sourceDirectory = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
-$sourceExecutable = Join-Path $sourceDirectory 'Scrobblix.NativeHost.exe'
-if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
-    throw "Scrobblix.NativeHost.exe was not found in '$sourceDirectory'. Publish the native host first."
-}
-
-$destinationDirectory = Join-Path $env:LOCALAPPDATA 'Scrobblix\NativeHost'
-New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
-Copy-Item -Path (Join-Path $sourceDirectory '*') -Destination $destinationDirectory -Recurse -Force
-$installedExecutable = Join-Path $destinationDirectory 'Scrobblix.NativeHost.exe'
-$trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
-
-if ($registerChromium) {
-    $manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
-    $manifest = [ordered]@{
-        name = 'com.frpboy.scrobblix'
-        description = 'Scrobblix local playback metadata bridge'
-        path = $installedExecutable
-        type = 'stdio'
-        allowed_origins = @("chrome-extension://$ExtensionId/")
-    }
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
-
-    if ($RegisterChrome) {
-        $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-    if ($RegisterEdge) {
-        $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-    }
-
-    New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value $ExtensionId -Type String
-    Write-Host "Chromium extension ID allow-listed: $ExtensionId"
 }
 
 if ($RegisterFirefox) {
