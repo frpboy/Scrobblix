@@ -5,7 +5,17 @@ Integration baseline: `main`
 
 ## Decision
 
-Scrobblix has the main product flows implemented. The next milestone is **private beta readiness**, not feature expansion. The beta decision depends on real listening evidence and distribution safety.
+Scrobblix has the main product flows implemented. Recent local evidence shows a Browser Companion named-pipe `IOException` storm and a separate rebuild collision with a still-running desktop process. The supplied logs do not establish that the pipe failure is the actual cause of the unexpected process exit; crash diagnosis stays open until the exact fixed candidate is retested with Windows exit/event evidence.
+
+## Track 0 — crash and startup stability (P0)
+
+- [ ] Build and launch from the exact `feat/private-beta-readiness` candidate SHA and matching Windows Actions run.
+- [ ] Verify the launcher refuses to rebuild while `Scrobblix.Desktop` is open, including a minimized-to-tray instance, and never terminates a user process.
+- [ ] Reproduce Browser Companion/native-host pipe contention; verify bounded exponential retry, warning throttling, suppressed counts, and successful reconnect.
+- [ ] Repeat startup, normal exit, close-to-tray, restart, and browser restart. Reconcile history and queue/action IDs to prove no track loss or duplicate acceptance.
+- [ ] If the process still exits unexpectedly, capture exact exit code, Windows Application event and timestamp-aligned sanitized log tail; collect a dump only if Windows produces one. Do not mark the crash fixed merely because CI passes.
+
+ The next milestone is **private beta readiness**, not feature expansion. The beta decision depends on real listening evidence and distribution safety.
 
 ## Track A — prove basic listening correctness
 

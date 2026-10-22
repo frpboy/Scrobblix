@@ -64,10 +64,10 @@ dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configurat
 
 ### Existing clone
 
-Make sure any local changes are committed or stashed first. Use the same mainline
-commands above for a reproducible build. Close Scrobblix before rebuilding to avoid
-MSBuild assembly-lock errors. The `update-and-run.ps1` helper belongs to the
-continuation workflow and should only be used when intentionally working on that branch.
+Make sure any local changes are committed or stashed first. The continuation
+launcher targets `feat/private-beta-readiness`; it refuses to build while any
+`Scrobblix.Desktop` process is open. Close the main window and any minimized-to-tray
+instance before rebuilding. It will not kill processes automatically.
 
 For automated validation without launching the app:
 
@@ -111,6 +111,10 @@ This is a **development build, not a signed production release**. Remaining rele
 - Privacy-safe support-bundle export is implemented on the private-beta readiness branch, including a versioned, normalized source-status snapshot plus canary-redaction assertions; real Windows Save/export/accessibility qualification remains pending, alongside the soak, backup-migration and formal release/security review.
 
 See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
+
+## Anti-Slop UI work
+
+The repository includes the [Anti-Slop core](skills/antislop/SKILL.md) and [UI skill](skills/antislop-ui/SKILL.md). Any visual audit/edit must follow the existing design direction in `Scrobblix-Docs/04_UserExperience/DESIGN_SYSTEM.md` and `docs/STITCH_UI_HANDOFF_2026-10-22.md`, resolve the documented DURING/AFTER mode, and pass the Anti-Slop Delivery Gate. Visual redesign has not started in the current crash/reliability change.
 
 ## Documentation map
 

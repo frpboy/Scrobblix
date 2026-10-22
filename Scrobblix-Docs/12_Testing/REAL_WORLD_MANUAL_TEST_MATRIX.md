@@ -2,7 +2,7 @@
 
 > **Purpose:** Produce auditable evidence for private beta readiness.  
 > **Manual status:** All real-machine, provider, installed-browser, UX and installer scenarios remain `NOT RUN`; repository CI does not set these rows to PASS.  
-> **Candidate code CI:** SHA `23bc40a9e7a959145d3494fb7e6382d079020710` passed Windows workflow [run 39732158406](https://github.com/frpboy/Scrobblix/actions/runs/39732158406) on 2026-10-22. PR #7 is still a draft and the candidate is not merged into `main`.  
+> **Prior code candidate CI:** SHA `23bc40a9e7a959145d3494fb7e6382d079020710` passed Windows workflow [run 39732158406](https://github.com/frpboy/Scrobblix/actions/runs/39732158406) on 2026-10-22. The pipe-backoff/launcher fix is being tested in PR #7; use only the exact updated candidate after its matching CI and real Windows retest. PR #7 is still a draft and the candidate is not merged into `main`.  
 > **Baseline rule:** Fill the run header using the exact app build installed for the manual test; do not carry the CI success into manual results.  
 > **Last updated:** 2026-10-22
 
@@ -23,6 +23,15 @@ Fill before testing; do not include secrets.
 | Result log / sanitized evidence location | Not run |
 
 **Result vocabulary:** `PASS`, `FAIL`, `BLOCKED`, `NOT RUN`. Leave tests as `NOT RUN` until performed. A planned test is not a pass.
+
+## A0. Crash, launch and logging stability
+
+| ID | Scenario and steps | Expected result | Result | Evidence / defect |
+|---|---|---|---|---|
+| CR-01 | Close Scrobblix normally, including the tray instance, then use `scripts/update-and-run.ps1` to rebuild and launch. Repeat once with the app deliberately left open. | Closed-app run builds and launches. Open-app run stops before restore/build, lists the PID, and never kills the process automatically. | NOT RUN | |
+| CR-02 | Enable the Browser Companion and reproduce native-host connect attempts while Scrobblix is starting, stopping, or busy processing a message. | No hot loop; I/O retry uses bounded backoff; same-category warnings are throttled and include the suppressed count. Browser support remains optional for desktop Spotify. | NOT RUN | |
+| CR-03 | Restart Scrobblix and the browser/extension after a busy-pipe period. | The listener reconnects and the failure backoff resets after a successful connection; retries do not create a duplicate play or provider action. | NOT RUN | |
+| CR-04 | If the process exits unexpectedly, capture exact app SHA/build, exit code, Windows Application event and timestamp-aligned final 100 sanitized log lines; collect a crash dump only if produced. | A fatal exception or OS-level cause is recorded before root cause is declared; secrets and listening content are redacted from shared evidence. | NOT RUN | |
 
 ## A. Spotify desktop playback — run across multiple days
 

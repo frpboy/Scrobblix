@@ -8,11 +8,23 @@
 
 The codebase already includes the principal everyday surfaces—Home, History, Statistics, Loved, Queue, Sources, Diagnostics and Settings—plus GSMTC tracking, Last.fm action/queue paths, local backup/restore, tray/notification code and browser companion manifests/host scripts.
 
-The current phase is proving that this implementation is correct and installable over time. Do not re-plan Loved, Statistics, basic tray behavior, notifications, backup/restore, or manifest existence as missing product features; plan their **verification and hardening** instead. The Diagnostics-only support-bundle ZIP is now implemented on this continuation branch with a strict field allow-list and explicit confirmation. Canary-redaction CI plus Windows Save/export/accessibility qualification remain open. Source-health clarity, onboarding and signed install/update/rollback are also release tasks.
+The current phase is proving that this implementation is correct and installable over time. Uploaded logs show a large burst of `All pipe instances are busy` Browser Companion warnings and a separate local rebuild colliding with a live `Scrobblix.Desktop` process. Targeted fixes for retry/log amplification and the branch/lock guard are in this continuation. The logs do not contain a fatal exception that conclusively proves why the application exits, so retest and capture Windows exit evidence before closing the crash investigation. Do not re-plan Loved, Statistics, basic tray behavior, notifications, backup/restore, or manifest existence as missing product features; plan their **verification and hardening** instead. The Diagnostics-only support-bundle ZIP is now implemented on this continuation branch with a strict field allow-list and explicit confirmation. Canary-redaction CI plus Windows Save/export/accessibility qualification remain open. Source-health clarity, onboarding and signed install/update/rollback are also release tasks.
 
 ## Current-main verification discipline
 
 The latest `main` head verified during this pass was `1aab53b6e3871e4d53c6f27b3a496087a8cc29ae`, with the matching Windows CI workflow [run 39730929297](https://github.com/frpboy/Scrobblix/actions/runs/39730929297) completing successfully on that exact SHA. PR #7 (`feat/private-beta-readiness`) remains an unmerged draft; validate its own current head and matching run before relying on any continuation-branch change. Always fetch current `main` and its latest relevant Actions run rather than relying on historical statuses.
+
+## Continue from the private-beta readiness branch
+
+The `scripts/update-and-run.ps1` helper targets `feat/private-beta-readiness`, not the stale `feat/scrobblix-v1-complete` branch. It refuses to build while any `Scrobblix.Desktop` process is running. Close the main window and the minimized-to-tray instance before rebuilding; the helper will not terminate processes automatically.
+
+```powershell
+git status --short
+git fetch origin --prune
+git switch feat/private-beta-readiness
+git pull --ff-only origin feat/private-beta-readiness
+.\scripts\update-and-run.ps1
+```
 
 ## Continue from main
 
@@ -36,6 +48,8 @@ dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configurat
 The browser companion is optional for Spotify desktop when GSMTC yields sufficient metadata. Do not require browser install for every desktop Spotify acceptance case, but test browser integration before advertising the companion as qualified.
 
 ## Required results
+
+After the pipe-backoff change, run CR-01 through CR-04 in the manual matrix. Backoff mitigates retry pressure and log growth; it is not proof that every unexpected exit is fixed.
 
 Record outcomes in `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`. Keep result fields as Not run until executed on the specified Windows/browser/Last.fm environment. Attach only sanitized evidence. Never commit credentials, session keys, raw listening database or artwork cache.
 
