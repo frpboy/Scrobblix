@@ -48,6 +48,7 @@ The last generated aggregate counts (233 files, 226 Markdown documents and appro
 | File | Purpose |
 |---|---|
 | [`IMPLEMENTATION_RESUME.md`](docs/IMPLEMENTATION_RESUME.md) | **Implementation Resume Guide.** Current-main build/validation commands and the distinction between code inventory and real-world acceptance. |
+| [`MASTER_COMPLETION_PLAN_2026-10-22.md`](docs/MASTER_COMPLETION_PLAN_2026-10-22.md) | **Master Completion Plan.** Ordered P0/P1/P2 completion path, exact-SHA evidence rules, exit criteria, and continuation commands. |
 | [`STITCH_UI_HANDOFF_2026-10-22.md`](docs/STITCH_UI_HANDOFF_2026-10-22.md) | **Stitch UI Handoff.** Recorded Stitch project/design identifiers, lightweight Home artifacts, and native WinUI implementation boundaries. |
 | [`PRIVATE_BETA_READINESS.md`](docs/PRIVATE_BETA_READINESS.md) | **Private Beta Readiness.** Ordered acceptance tracks, manual evidence requirements and private-beta go/no-go decision. |
 
