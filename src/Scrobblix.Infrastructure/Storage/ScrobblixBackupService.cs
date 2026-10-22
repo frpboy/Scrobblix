@@ -34,7 +34,7 @@ public sealed class ScrobblixBackupService
         WriteIndented = true,
     };
 
-    public async Task CreateBackupAsync(
+    public static async Task CreateBackupAsync(
         string databaseConnectionString,
         string destinationArchivePath,
         CancellationToken cancellationToken)
@@ -120,7 +120,7 @@ public sealed class ScrobblixBackupService
     /// Validates a selected backup completely and stages it. The live database is not
     /// modified by this method. The caller should close the app after a successful stage.
     /// </summary>
-    public async Task StageRestoreAsync(
+    public static async Task StageRestoreAsync(
         string archivePath,
         string dataDirectory,
         CancellationToken cancellationToken)
@@ -224,7 +224,7 @@ public sealed class ScrobblixBackupService
     /// Returns null when there is no staged restore, otherwise returns the safety snapshot
     /// path (or an empty string if the installation did not yet have a database).
     /// </summary>
-    public async Task<string?> ApplyStagedRestoreAsync(
+    public static async Task<string?> ApplyStagedRestoreAsync(
         string dataDirectory,
         string activeDatabasePath,
         CancellationToken cancellationToken)
@@ -280,7 +280,9 @@ public sealed class ScrobblixBackupService
 
             TryDelete(stagedDatabase);
             TryDelete(stagedManifest);
-            try { Directory.Delete(stageDirectory, recursive: false); } catch (IOException) { }
+            try { Directory.Delete(stageDirectory, recursive: false); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
             return safetySnapshotPath;
         }
         catch
@@ -305,6 +307,7 @@ public sealed class ScrobblixBackupService
 
         if (!string.Equals(manifest.DatabaseEntry, DatabaseEntryName, StringComparison.Ordinal)
             || manifest.DatabaseBytes is <= 0 or > MaximumDatabaseBytes
+            || string.IsNullOrWhiteSpace(manifest.Sha256)
             || manifest.Sha256.Length != 64
             || manifest.Sha256.Any(character => !Uri.IsHexDigit(character)))
         {
