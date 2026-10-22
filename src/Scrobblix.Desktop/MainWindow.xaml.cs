@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
+    private ProviderActionType? _currentTrackLoveIntent;
     private bool _isLastFmConnected;
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
@@ -89,6 +90,8 @@ public sealed partial class MainWindow : Window
         }
         CurrentTrackArtwork.Tag = CurrentTrackArtworkFallback;
         CurrentTrackArtwork.ImageFailed += ArtworkImageFailed;
+        CurrentTrackArtworkFallback.ImageFailed += ArtworkFallbackImageFailed;
+        CurrentTrackArtworkFallback.ImageOpened += ArtworkFallbackImageOpened;
     }
 
     private void ConfigureInitialWindowSize()
@@ -162,6 +165,15 @@ public sealed partial class MainWindow : Window
         CompactNavigationToggleButton.IsEnabled = !_isWidthConstrained;
         AppNavigationView.CompactPaneLength = 64;
         AppNavigationView.OpenPaneLength = 216;
+        foreach (var item in AppNavigationView.MenuItems.OfType<NavigationViewItem>())
+        {
+            item.IsTabStop = true;
+            if (item.Icon is FrameworkElement icon)
+                icon.Visibility = Visibility.Visible;
+            var label = item.Content?.ToString() ?? item.Tag?.ToString() ?? "Navigation";
+            ToolTipService.SetToolTip(item, label);
+            AutomationProperties.SetName(item, label);
+        }
         AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
         AppNavigationView.IsPaneOpen = !compact;
         NavigationPreferenceStatusText.Text = _isWidthConstrained
@@ -262,6 +274,10 @@ public sealed partial class MainWindow : Window
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
+        if (!string.Equals(_displayedPlayId, trackingStatus.PlayId, StringComparison.Ordinal))
+        {
+            _currentTrackLoveIntent = null;
+        }
         _displayedPlayId = trackingStatus.PlayId;
         _displayedObservation = observation;
         _displayedTrackingStatus = trackingStatus;
@@ -340,11 +356,14 @@ public sealed partial class MainWindow : Window
 
     private void SetArtwork(Image image, Image fallback, string? artworkPath)
     {
+        // Clear stale artwork and leave the fallback visible until the bitmap has decoded.
+        image.Tag = fallback;
+        image.Source = null;
+        image.Visibility = Visibility.Collapsed;
+        fallback.Visibility = Visibility.Visible;
+
         if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
         {
-            image.Source = null;
-            image.Visibility = Visibility.Collapsed;
-            fallback.Visibility = Visibility.Visible;
             if (!string.IsNullOrWhiteSpace(artworkPath))
             {
                 DiagnosticLogRequested?.Invoke($"Artwork cache path was missing: {Path.GetFileName(artworkPath)}");
@@ -354,7 +373,6 @@ public sealed partial class MainWindow : Window
 
         try
         {
-            image.Tag = fallback;
             image.ImageFailed -= ArtworkImageFailed;
             image.ImageOpened -= ArtworkImageOpened;
             image.ImageFailed += ArtworkImageFailed;
@@ -365,8 +383,7 @@ public sealed partial class MainWindow : Window
                 UriSource = new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute),
             };
             image.Source = bitmap;
-            image.Visibility = Visibility.Visible;
-            fallback.Visibility = Visibility.Collapsed;
+            // ArtworkImageOpened hides the fallback after a successful decode.
         }
         catch (Exception exception) when (exception is UriFormatException or ArgumentException or IOException or UnauthorizedAccessException)
         {
@@ -374,6 +391,33 @@ public sealed partial class MainWindow : Window
             image.Visibility = Visibility.Collapsed;
             fallback.Visibility = Visibility.Visible;
             DiagnosticLogRequested?.Invoke($"Artwork path could not be opened: {exception.GetType().Name}");
+        }
+    }
+
+    private void ArtworkFallbackImageFailed(object sender, ExceptionRoutedEventArgs args)
+    {
+        // Keep the artwork surface non-empty even if the SVG placeholder cannot render.
+        if (sender is not Image image || image.Parent is not Grid frame) return;
+        foreach (var child in frame.Children)
+        {
+            if (child is FontIcon fallbackIcon && string.Equals(fallbackIcon.Tag as string, "artwork-fallback", StringComparison.Ordinal))
+            {
+                fallbackIcon.Visibility = Visibility.Visible;
+                return;
+            }
+        }
+    }
+
+    private void ArtworkFallbackImageOpened(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Image image || image.Parent is not Grid frame) return;
+        foreach (var child in frame.Children)
+        {
+            if (child is FontIcon fallbackIcon && string.Equals(fallbackIcon.Tag as string, "artwork-fallback", StringComparison.Ordinal))
+            {
+                fallbackIcon.Visibility = Visibility.Collapsed;
+                return;
+            }
         }
     }
 
@@ -1147,20 +1191,38 @@ public sealed partial class MainWindow : Window
     {
         var canAct = _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
         if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
-        if (CurrentTrackUnloveButton is not null) CurrentTrackUnloveButton.IsEnabled = canAct;
+        if (CurrentTrackLoveIcon is not null)
+        {
+            CurrentTrackLoveIcon.Foreground = _currentTrackLoveIntent == ProviderActionType.Love
+                ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red)
+                : (Brush)Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorSecondaryBrush"];
+        }
+        if (CurrentTrackLoveButton is not null)
+        {
+            var loved = _currentTrackLoveIntent == ProviderActionType.Love;
+            AutomationProperties.SetName(CurrentTrackLoveButton, loved ? "Unlove this track" : "Love this track");
+            ToolTipService.SetToolTip(CurrentTrackLoveButton, loved ? "Unlove track" : "Love track");
+            AutomationProperties.SetHelpText(CurrentTrackLoveButton, "Toggles the locally queued Love/Unlove intent. Last.fm delivery status appears on the Loved page.");
+        }
         if (CurrentTrackLoveStatusText is null) return;
         CurrentTrackLoveStatusText.Text = !_isLastFmConnected
             ? "Connect Last.fm in Settings to manage loved tracks."
             : string.IsNullOrWhiteSpace(_displayedPlayId)
                 ? "Start a supported track to love or unlove it."
-                : "Requests are saved locally first; provider status appears on the Loved page.";
+                : _currentTrackLoveIntent == ProviderActionType.Love
+                    ? "Love request saved locally; delivery status appears on the Loved page."
+                    : _currentTrackLoveIntent == ProviderActionType.Unlove
+                        ? "Unlove request saved locally; delivery status appears on the Loved page."
+                        : "Requests are saved locally first; provider status appears on the Loved page.";
     }
 
-    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args) =>
-        await RequestLovedTrackActionAsync(ProviderActionType.Love);
-
-    private async void CurrentTrackUnloveButton_Click(object sender, RoutedEventArgs args) =>
-        await RequestLovedTrackActionAsync(ProviderActionType.Unlove);
+    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args)
+    {
+        var nextAction = _currentTrackLoveIntent == ProviderActionType.Love
+            ? ProviderActionType.Unlove
+            : ProviderActionType.Love;
+        await RequestLovedTrackActionAsync(nextAction);
+    }
 
     private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
     {
@@ -1171,19 +1233,23 @@ public sealed partial class MainWindow : Window
         }
         if (LovedTrackActionRequested is null)
         {
-            SetLovedActionFeedback("Loved-track actions are not initialized. Restart Scrobblix and try again.");
+            SetLovedActionFeedback("Loved-track actions are not initialized. Restart the app and try again.");
             return;
         }
 
         CurrentTrackLoveButton.IsEnabled = false;
-        CurrentTrackUnloveButton.IsEnabled = false;
         try
         {
             var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
             if (!queued)
+            {
                 SetLovedActionFeedback("No duplicate request was created. Check Loved and Queue for the current state.");
+            }
             else
-                SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; delivery status appears on Loved.");
+            {
+                _currentTrackLoveIntent = actionType;
+                SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; provider acceptance is shown on the Loved page.");
+            }
         }
         finally
         {
