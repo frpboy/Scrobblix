@@ -1,4 +1,3 @@
-using Scrobblix.Desktop;
 using Scrobblix.Domain.Eligibility;
 using Scrobblix.Domain.Diagnostics;
 using Scrobblix.Domain.History;
