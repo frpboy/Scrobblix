@@ -157,14 +157,17 @@ See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANU
 - User credentials, Last.fm session keys, and release secrets never belong in plaintext configuration or Git.
 - Documentation, tests, and implementation must change together.
 
-## Suggested build sequence
+## Recommended delivery sequence — private beta readiness
 
-1. Domain model, SQLite schema, and deterministic playback state machine.
-2. GSMTC source adapter and diagnostic event stream.
-3. Last.fm authentication, now-playing, queue, and scrobble synchronization.
-4. Tray-first WinUI shell with Home, History, Queue, and Diagnostics.
-5. Browser extension and Native Messaging host.
-6. Statistics, loved tracks, export, backup, updater, and release hardening.
+1. Validate CI on the exact current main/candidate SHA and keep the manual matrix evidence-based.
+2. Run multi-day Spotify sessions and reconcile qualifying local plays with a dedicated Last.fm test profile; cover pause/seek/repeats/ads, network/provider outages, sleep/wake and restart.
+3. Qualify queue recovery, duplicate prevention, backup/restore and an 8–24 hour soak.
+4. Test the optional Browser Companion in Chrome/Edge/Firefox and finish Native Messaging security review.
+5. Qualify the privacy-safe support bundle, Home delivery states, source health, tray/notifications and Windows accessibility.
+6. Package, sign and test clean install, upgrade, repair, rollback, update and uninstall on a clean Windows account/device.
+7. Start private beta only after P0 evidence and security-critical gates are accepted; proceed to public beta/v1 after feedback and release review.
+
+The principal feature surfaces already exist. This order prioritizes evidence and installability over additional features.
 
 ## Repository naming
 
