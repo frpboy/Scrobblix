@@ -49,6 +49,12 @@ The native Home now follows that hierarchy: a prominent current-track surface, a
 - Keep empty, degraded, retry, and error states visible rather than substituting zero values.
 - Use Fluent semantic colors with text labels, visible keyboard focus, accessible contrast, and 40px-or-larger interactive targets.
 
+## Lightweight navigation evolution (2026-10-22)
+
+The native rail follows the existing Scrobblix Fluent direction. Expanded mode is 240 logical pixels; compact mode is 64. The saved preference is distinct from the temporary narrow-window constraint, and changing layout does not reselect the active destination or touch playback, eligibility, provider delivery or the durable queue. The local-data privacy statement remains a sentence or becomes a tooltip-bearing accessible privacy icon. Queue attention is reserved for actionable blocked, failed or outcome-unknown actions.
+
+Source identity is based on real observation metadata only: exact known GSMTC application IDs or exact HTTPS browser origins. Source names remain visible even when no approved logo is available. Optional logos must be local assets with a recorded provenance/usage review. No Last.fm mark is bundled without the required documented written permission. The new native controls follow system theme resources and do not introduce decorative animation or browser-extension changes.
+
 ## Verification
 
 - Stitch generation completed for screen `39ba08667751486282f9c8a87b038bd4` using the existing project design system.

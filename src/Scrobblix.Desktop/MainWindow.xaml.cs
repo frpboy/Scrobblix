@@ -22,6 +22,10 @@ public sealed partial class MainWindow : Window
     private bool _isLastFmConnected;
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
+    private bool _updatingNavigationPreference;
+    private bool _preferredNavigationCompact;
+    private bool _isWidthConstrained;
+    private global::Windows.UI.ViewManagement.AccessibilitySettings? _accessibilitySettings;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
     private IReadOnlyList<QueueActionSummary> _queueActions = Array.Empty<QueueActionSummary>();
     private PlayObservation? _displayedObservation;
@@ -53,6 +57,7 @@ public sealed partial class MainWindow : Window
     public event Func<bool, Task>? DesktopNotificationsPreferenceChanged;
 
     public event Func<bool, Task>? NotificationTrackDetailsPreferenceChanged;
+    public event Func<bool, Task>? NavigationCompactPreferenceChanged;
 
     private string? _logDirectory;
 
@@ -60,11 +65,22 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         ConfigureInitialWindowSize();
-        var logoPath = Path.Combine(AppContext.BaseDirectory, "Assets", "scrobblix-mark.svg");
-        if (File.Exists(logoPath))
+        ApplyBrandAsset();
+        RootLayout.ActualThemeChanged += (_, _) => ApplyBrandAsset();
+        try
         {
-            AppBrandImage.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
+            _accessibilitySettings = new global::Windows.UI.ViewManagement.AccessibilitySettings();
+            _accessibilitySettings.HighContrastChanged += AccessibilitySettings_HighContrastChanged;
         }
+        catch (Exception exception) when (exception is InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            Debug.WriteLine($"Scrobblix high-contrast listener unavailable: {exception.GetType().Name}");
+        }
+        Closed += (_, _) =>
+        {
+            if (_accessibilitySettings is not null)
+                _accessibilitySettings.HighContrastChanged -= AccessibilitySettings_HighContrastChanged;
+        };
         var placeholderPath = Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg");
         if (File.Exists(placeholderPath))
         {
@@ -86,7 +102,132 @@ public sealed partial class MainWindow : Window
             presenter.IsMinimizable = true;
         }
 
+        var appIconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "scrobblix.ico");
+        if (File.Exists(appIconPath))
+        {
+            try { appWindow.SetIcon(appIconPath); }
+            catch (Exception exception) when (exception is ArgumentException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+            {
+                Debug.WriteLine($"Scrobblix title-bar icon unavailable: {exception.GetType().Name}");
+            }
+        }
         appWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 780));
+    }
+
+    private void ApplyBrandAsset()
+    {
+        var assetName = _accessibilitySettings?.HighContrast == true
+            ? "scrobblix-mark-high-contrast.svg"
+            : RootLayout.ActualTheme == ElementTheme.Dark ? "scrobblix-mark-dark.svg" : "scrobblix-mark-light.svg";
+        var path = Path.Combine(AppContext.BaseDirectory, "Assets", assetName);
+        if (!File.Exists(path)) path = Path.Combine(AppContext.BaseDirectory, "Assets", "scrobblix-mark.svg");
+        if (!File.Exists(path)) return;
+        AppBrandImage.Source = new SvgImageSource { UriSource = new Uri(path, UriKind.Absolute) };
+        CompactBrandImage.Source = new SvgImageSource { UriSource = new Uri(path, UriKind.Absolute) };
+    }
+
+    private void AccessibilitySettings_HighContrastChanged(global::Windows.UI.ViewManagement.AccessibilitySettings sender, object args) =>
+        DispatcherQueue.TryEnqueue(ApplyBrandAsset);
+
+    private void RootLayout_SizeChanged(object sender, SizeChangedEventArgs args)
+    {
+        var width = args.NewSize.Width;
+        if (!_isWidthConstrained && width > 0 && width < 960) _isWidthConstrained = true;
+        else if (_isWidthConstrained && width >= 1000) _isWidthConstrained = false;
+        ApplyNavigationLayout();
+    }
+
+    public void SetNavigationCompact(bool compact)
+    {
+        _preferredNavigationCompact = compact;
+        _updatingNavigationPreference = true;
+        try { CompactNavigationCheckBox.IsChecked = compact; }
+        finally { _updatingNavigationPreference = false; }
+        ApplyNavigationLayout();
+    }
+
+    private void ApplyNavigationLayout()
+    {
+        if (NavigationRailColumn is null || AppNavigationView is null) return;
+        var compact = _preferredNavigationCompact || _isWidthConstrained;
+        NavigationRailColumn.Width = new GridLength(compact ? 64 : 240);
+        NavigationRailGrid.Padding = compact ? new Thickness(0, 12, 0, 12) : new Thickness(12, 16, 12, 12);
+        ExpandedRailHeader.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        CompactRailHeader.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        PrivacyStatementText.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        PrivacyIcon.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
+        RailAttentionLabel.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        NavigationToggleButton.IsEnabled = !_isWidthConstrained;
+        CompactNavigationToggleButton.IsEnabled = !_isWidthConstrained;
+        AppNavigationView.CompactPaneLength = 64;
+        AppNavigationView.ExpandedPaneLength = 216;
+        AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
+        AppNavigationView.IsPaneOpen = !compact;
+        NavigationPreferenceStatusText.Text = _isWidthConstrained
+            ? "The window is narrow, so compact navigation is temporary. Your saved preference returns when space permits."
+            : _preferredNavigationCompact ? "Compact navigation is saved for wide windows." : "Expanded navigation is saved for wide windows.";
+        AutomationProperties.SetName(NavigationToggleButton, _isWidthConstrained ? "Navigation is compact while the window is narrow" : "Collapse navigation");
+        AutomationProperties.SetName(CompactNavigationToggleButton, _isWidthConstrained ? "Navigation is compact while the window is narrow" : "Expand navigation");
+        ToolTipService.SetToolTip(NavigationToggleButton, _isWidthConstrained ? "Widen the window to change rail layout." : "Collapse navigation");
+        ToolTipService.SetToolTip(CompactNavigationToggleButton, _isWidthConstrained ? "Widen the window to change rail layout." : "Expand navigation");
+    }
+
+    private async void NavigationToggleButton_Click(object sender, RoutedEventArgs args) => await ChangeNavigationPreferenceAsync(!_preferredNavigationCompact);
+
+    private async void CompactNavigationCheckBox_Changed(object sender, RoutedEventArgs args)
+    {
+        if (_updatingNavigationPreference) return;
+        await ChangeNavigationPreferenceAsync(CompactNavigationCheckBox.IsChecked == true);
+    }
+
+    private async Task ChangeNavigationPreferenceAsync(bool compact)
+    {
+        if (compact == _preferredNavigationCompact) { ApplyNavigationLayout(); return; }
+        var handler = NavigationCompactPreferenceChanged;
+        if (handler is null)
+        {
+            SetNavigationCompact(_preferredNavigationCompact);
+            NavigationPreferenceStatusText.Text = "Navigation preferences are not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+        NavigationToggleButton.IsEnabled = false;
+        CompactNavigationToggleButton.IsEnabled = false;
+        CompactNavigationCheckBox.IsEnabled = false;
+        try
+        {
+            await handler(compact);
+            SetNavigationCompact(compact);
+        }
+        catch (Exception exception)
+        {
+            SetNavigationCompact(_preferredNavigationCompact);
+            NavigationPreferenceStatusText.Text = $"Navigation preference could not be saved ({exception.GetType().Name}).";
+            DiagnosticLogRequested?.Invoke($"Navigation preference update failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            CompactNavigationCheckBox.IsEnabled = true;
+            ApplyNavigationLayout();
+        }
+    }
+
+    private void RailAttentionButton_Click(object sender, RoutedEventArgs args) => SelectDestination("queue");
+    private void OpenSourcesButton_Click(object sender, RoutedEventArgs args) => SelectDestination("sources");
+    private void OpenDiagnosticsButton_Click(object sender, RoutedEventArgs args) => SelectDestination("diagnostics");
+    private void SelectDestination(string destination)
+    {
+        var selected = AppNavigationView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => string.Equals(item.Tag as string, destination, StringComparison.Ordinal));
+        if (selected is not null) AppNavigationView.SelectedItem = selected;
+    }
+
+    private void UpdateRailAttention()
+    {
+        var needsAttention = _queueActions.Any(action => action.State is ProviderActionState.AuthBlocked or ProviderActionState.RetryExhausted or ProviderActionState.SubmissionOutcomeUnknown or ProviderActionState.PermanentFailure);
+        RailAttentionButton.Visibility = needsAttention ? Visibility.Visible : Visibility.Collapsed;
+        if (!needsAttention) return;
+        RailAttentionLabel.Text = "Queue needs attention";
+        AutomationProperties.SetName(RailAttentionButton, "Queue needs attention");
+        ToolTipService.SetToolTip(RailAttentionButton, "Open Queue to review blocked, failed or uncertain provider actions.");
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity, string? title = null)
@@ -110,14 +251,11 @@ public sealed partial class MainWindow : Window
         UpdateLovedButtons();
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
-        CurrentTrackSource.Text = $"Source: {observation.SourceName}";
-        var sourceLabel = observation.SourceName switch
-        {
-            "gsmtc" => "Windows media controls (GSMTC)",
-            "browser" => "Browser Companion",
-            _ => observation.SourceName,
-        };
-        SourceHealthSummaryText.Text = $"{sourceLabel} event received this session.";
+        var sourceIdentity = SourceIdentityRegistry.Resolve(observation);
+        ApplySourceIdentity(sourceIdentity);
+        SourceHealthSummaryText.Text = $"{sourceIdentity.DisplayName} event received this session.";
+        SourceIdentityNameText.Text = sourceIdentity.DisplayName;
+        SourceIdentityStateText.Text = $"Observed this session; playback is {observation.PlaybackState}.";
         SourceLastObservationText.Text = $"Last observation: {observation.ObservedAtUtc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)} · playback state: {observation.PlaybackState}.";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
@@ -684,6 +822,7 @@ public sealed partial class MainWindow : Window
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
+        Title = destination switch { "home" => "Scrobblix · Listening", "history" => "Scrobblix · History", "statistics" => "Scrobblix · Statistics", "loved" => "Scrobblix · Loved", "queue" => "Scrobblix · Queue", "sources" => "Scrobblix · Sources", "diagnostics" => "Scrobblix · Diagnostics", "settings" => "Scrobblix · Settings", _ => "Scrobblix" };
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
         StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
@@ -697,6 +836,7 @@ public sealed partial class MainWindow : Window
     public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
     {
         _queueActions = actions;
+        UpdateRailAttention();
         QueuePageActionList.Children.Clear();
         if (actions.Count == 0)
         {
@@ -1093,8 +1233,33 @@ public sealed partial class MainWindow : Window
 
     public void SetBrowserCompanionObservation(string sourceName)
     {
-        var status = $"Browser Companion received playback from {sourceName}.";
-        BrowserCompanionSourceStatusText.Text = status;
+        var identity = SourceIdentityRegistry.ResolveBrowserOrigin(sourceName);
+        BrowserCompanionSourceStatusText.Text = $"Browser Companion received playback from {identity.DisplayName}.";
+    }
+
+    private void ApplySourceIdentity(SourceIdentity identity)
+    {
+        CurrentTrackSource.Text = $"Source: {identity.DisplayName}";
+        CurrentTrackSourceIcon.Glyph = identity.IconGlyph;
+        SourceIdentityNameText.Text = identity.DisplayName;
+        SourceIdentityIcon.Glyph = identity.IconGlyph;
+        var logoPath = string.IsNullOrWhiteSpace(identity.LogoAssetPath) ? null : Path.Combine(AppContext.BaseDirectory, identity.LogoAssetPath.Replace('/', Path.DirectorySeparatorChar));
+        if (logoPath is not null && File.Exists(logoPath))
+        {
+            CurrentTrackSourceLogo.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
+            CurrentTrackSourceLogo.Visibility = Visibility.Visible;
+            CurrentTrackSourceIcon.Visibility = Visibility.Collapsed;
+            SourceIdentityLogo.Source = new SvgImageSource { UriSource = new Uri(logoPath, UriKind.Absolute) };
+            SourceIdentityLogo.Visibility = Visibility.Visible;
+            SourceIdentityIcon.Visibility = Visibility.Collapsed;
+            return;
+        }
+        CurrentTrackSourceLogo.Source = null;
+        CurrentTrackSourceLogo.Visibility = Visibility.Collapsed;
+        CurrentTrackSourceIcon.Visibility = Visibility.Visible;
+        SourceIdentityLogo.Source = null;
+        SourceIdentityLogo.Visibility = Visibility.Collapsed;
+        SourceIdentityIcon.Visibility = Visibility.Visible;
     }
 
     private void SetLastFmStatus(string status)

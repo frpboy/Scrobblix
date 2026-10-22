@@ -32,6 +32,9 @@ jobs:
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
+      - name: Validate desktop UI contracts
+        run: node scripts/test-desktop-ui-contracts.mjs
+
       - name: Run domain and infrastructure assertions
         run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
 

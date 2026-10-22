@@ -79,3 +79,8 @@
 ## Search and policy
 
 Settings search indexes labels, descriptions, aliases, and actions. Managed policies are out of scope for v1 but the settings model should distinguish user values from future policy-enforced values.
+
+
+## Grouping for lightweight navigation
+
+Settings are grouped into General, Last.fm, Detection, Notifications, Privacy and Storage. Advanced details are collapsed by default and link to Diagnostics rather than duplicating its content. The General group stores the user's preferred rail density in the existing non-secret local preferences file. Narrow-window compaction is temporary and does not overwrite the preference. Existing notification track-detail privacy defaults, credential storage and backup/restore actions are preserved.

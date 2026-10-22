@@ -65,3 +65,10 @@ Show the latest 5–10 plays with compact outcomes. A failed/ignored item with a
 - Incomplete metadata: show exact missing fields and Diagnostics action.
 - Multiple active sessions: show selected source plus switch/inspect action.
 - Offline: “Eligible plays will be saved and retried.”
+
+
+## Lightweight UI evolution
+
+- Current playback, confirmed listening, eligibility and Last.fm delivery remain separate facts. Navigation layout must never reset or suspend tracking.
+- The current track/source remains the Home focal point; provider/source marks are optional, local-only and always accompanied by visible text. Unknown sources stay neutral.
+- The Today summary and three recent tracks remain concise. Queue, History and Statistics retain their detailed surfaces rather than being duplicated as decorative Home tiles.

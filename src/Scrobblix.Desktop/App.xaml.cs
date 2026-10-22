@@ -91,6 +91,14 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             _window.SetDesktopNotificationsEnabled(_userPreferences.DesktopNotificationsEnabled);
             _window.SetNotificationTrackDetailsEnabled(_userPreferences.IncludeTrackDetailsInNotifications);
+            _window.SetNavigationCompact(_userPreferences.PreferCompactNavigation);
+            _window.NavigationCompactPreferenceChanged += async preferCompact =>
+            {
+                var updatedPreferences = _userPreferences with { PreferCompactNavigation = preferCompact };
+                await ScrobblixUserPreferences.SaveAsync(dataDirectory, updatedPreferences, applicationCancellation.Token);
+                _userPreferences = updatedPreferences;
+                logger.Info("PREFERENCES", $"Updated navigation density preference; compact={preferCompact}.");
+            };
             try
             {
                 notificationService = new ScrobblixNotificationService(

@@ -8,7 +8,8 @@ namespace Scrobblix.Desktop;
 /// </summary>
 internal sealed record ScrobblixUserPreferences(
     bool DesktopNotificationsEnabled,
-    bool IncludeTrackDetailsInNotifications = false)
+    bool IncludeTrackDetailsInNotifications = false,
+    bool PreferCompactNavigation = false)
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {

@@ -24,6 +24,9 @@ internal sealed class TrayIconService : IDisposable
     private const uint NifIcon = 0x00000002;
     private const uint NifTip = 0x00000004;
     private const uint NifGuid = 0x00000020;
+    private const uint ImageIcon = 1;
+    private const uint LoadImageFromFile = 0x0010;
+    private const uint LoadImageDefaultSize = 0x0040;
     private const uint MfString = 0x00000000;
     private const uint MfSeparator = 0x00000800;
     private const uint TpmRightButton = 0x0002;
@@ -39,6 +42,7 @@ internal sealed class TrayIconService : IDisposable
     private readonly IntPtr _windowHandle;
     private readonly SubclassProcedure _subclassProcedure;
     private readonly NotifyIconData _iconData;
+    private readonly IntPtr _ownedIcon;
     private bool _iconInstalled;
     private bool _disposed;
     private bool _restoring;
@@ -53,7 +57,12 @@ internal sealed class TrayIconService : IDisposable
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Could not attach the Scrobblix tray window handler.");
         }
 
-        var systemIcon = LoadIcon(IntPtr.Zero, new IntPtr(32512));
+        var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "scrobblix.ico");
+        var ownedIcon = File.Exists(iconPath)
+            ? LoadImage(IntPtr.Zero, iconPath, ImageIcon, 0, 0, LoadImageFromFile | LoadImageDefaultSize)
+            : IntPtr.Zero;
+        _ownedIcon = ownedIcon;
+        var systemIcon = ownedIcon != IntPtr.Zero ? ownedIcon : LoadIcon(IntPtr.Zero, new IntPtr(32512));
         _iconData = new NotifyIconData
         {
             Size = (uint)Marshal.SizeOf<NotifyIconData>(),
@@ -72,6 +81,7 @@ internal sealed class TrayIconService : IDisposable
         if (!Shell_NotifyIcon(NimAdd, ref iconData))
         {
             RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
+            if (_ownedIcon != IntPtr.Zero) _ = DestroyIcon(_ownedIcon);
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not add the Scrobblix notification-area icon.");
         }
 
@@ -177,6 +187,7 @@ internal sealed class TrayIconService : IDisposable
         }
 
         _ = RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
+        if (_ownedIcon != IntPtr.Zero) _ = DestroyIcon(_ownedIcon);
         GC.KeepAlive(_subclassProcedure);
     }
 
@@ -221,6 +232,13 @@ internal sealed class TrayIconService : IDisposable
 
     [DllImport("user32.dll", EntryPoint = "LoadIconW", SetLastError = true)]
     private static extern IntPtr LoadIcon(IntPtr instance, IntPtr iconName);
+
+    [DllImport("user32.dll", EntryPoint = "LoadImageW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern IntPtr LoadImage(IntPtr instance, string name, uint imageType, int width, int height, uint flags);
+
+    [DllImport("user32.dll", EntryPoint = "DestroyIcon", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool DestroyIcon(IntPtr icon);
 
     [DllImport("comctl32.dll", EntryPoint = "SetWindowSubclass", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]

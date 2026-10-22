@@ -43,6 +43,14 @@ The last generated aggregate counts (233 files, 226 Markdown documents and appro
 | [`PULL_REQUEST_TEMPLATE.md`](.github/PULL_REQUEST_TEMPLATE.md) | **Pull Request.** Documentation for pull request. |
 
 
+## Desktop UI evolution
+
+| File | Purpose |
+|---|---|
+| [`Assets/providers/README.md`](src/Scrobblix.Desktop/Assets/providers/README.md) | Provenance and review ledger for optional local source/provider logos. No third-party marks are shipped without recorded usage approval. |
+| [`SourceIdentityRegistry.cs`](src/Scrobblix.Desktop/SourceIdentityRegistry.cs) | Exact observed application-ID/HTTPS-origin identity resolution, with optional local assets and neutral fallback. |
+| [`test-desktop-ui-contracts.mjs`](scripts/test-desktop-ui-contracts.mjs) | Source-level desktop UI contract tests in CI; does not replace Windows runtime/accessibility validation. |
+
 ## docs — Continuation and Private Beta Readiness
 
 | File | Purpose |

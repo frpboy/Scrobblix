@@ -79,3 +79,14 @@ States what is absent, why that may be normal, and the next relevant action. Avo
 - Status change: restrained fade/scale; no celebration animation for every scrobble.
 - Progress: smooth but truth-preserving; do not animate beyond measured played time.
 - Respect reduced-motion setting by disabling non-essential transitions.
+
+## Lightweight navigation and source identity (2026-10-22)
+
+- Expanded rail: 240 logical pixels. Compact rail: 64 logical pixels. The saved preference is stored in per-user preferences and switching modes never changes the selected destination or invokes the tracking engine.
+- Windows below 960 logical pixels use temporary compact mode; once width returns to 1000 or wider, the saved preference applies again to avoid breakpoint flicker.
+- Navigation toggles are 40×40 logical-pixel controls. All eight destinations retain visible tooltips and accessible names in icon-only mode.
+- The local-data privacy statement remains a sentence in expanded mode and a tooltip-bearing privacy icon in compact mode.
+- Queue attention appears only for blocked, permanently failed, retry-exhausted or outcome-unknown provider actions and opens the existing Queue page.
+- Source labels are resolved from actual accepted GSMTC application IDs or HTTPS browser origins. No source is inferred from track metadata, window titles, or cover art. Optional logo files must exist locally and have a usage-review record.
+- No external provider logos are currently bundled. The source asset ledger records current review links and restrictions. Last.fm API Terms require prior written approval for its marks in each case, so the current connection/status surfaces remain text-first.
+- The ICO is used for desktop title-bar/tray identity where supported; in-app scalable marks vary with the system theme and high-contrast mode. Windows owns notification-banner app identity for the unpackaged app, so no unsupported toast-icon behavior is claimed.
