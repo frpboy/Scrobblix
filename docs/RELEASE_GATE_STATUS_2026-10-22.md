@@ -1,72 +1,88 @@
-# Scrobblix checkpoint and release gate status — 2026-10-22
+# Scrobblix v1 — implementation and release status
 
-## Verified repository state
+Updated: 2026-10-22  
+Repository: https://github.com/frpboy/Scrobblix  
+Default branch: `main`  
+Continuation branch: `feat/scrobblix-v1-complete`  
+Open implementation PR: https://github.com/frpboy/Scrobblix/pull/5
 
-- Repository: https://github.com/frpboy/Scrobblix
-- Default branch: `main`
-- Current main head observed during this review: `ae5fadb4c42e0738d80e842dbb91bd76aa08da4f` (`fix: clarify connected Last.fm state`)
-- Continuation branch: `feat/scrobblix-v1-complete`
-- Open follow-up: [PR #5](https://github.com/frpboy/Scrobblix/pull/5)
-- Main is not validated green merely because an earlier commit passed.
-- Latest observed PR #5 check: [Actions run 39726924128](https://github.com/frpboy/Scrobblix/actions/runs/39726924128), failed during `Build .NET solution`.
+## Verified checkpoint
 
-## Current confirmed CI blocker
+The `main` branch head observed during this review was `ae5fadb4c42e0738d80e842dbb91bd76aa08da4f` (`fix: clarify connected Last.fm state`). No statuses were returned for that exact SHA by the status endpoint. Treat it as **not validated**, not green.
 
-Windows CI restores successfully, then fails building `src/Scrobblix.Desktop/App.xaml.cs`:
+The latest observed PR #5 Actions run was [39726924128](https://github.com/frpboy/Scrobblix/actions/runs/39726924128) (2026-10-22). It failed at **Build .NET solution**, so every later test/build/package stage in that workflow was skipped. The log identifies the blocker precisely:
 
 ```
-error CA1001: Type 'App' owns disposable field(s)
-'_singleInstanceActivationEvent', '_singleInstanceListenerCancellation',
-'_singleInstanceSemaphore', '_trayIcon' but is not disposable.
+src/Scrobblix.Desktop/App.xaml.cs(24,22): error CA1001:
+Type 'App' owns disposable field(s) '_singleInstanceActivationEvent',
+'_singleInstanceListenerCancellation', '_singleInstanceSemaphore', '_trayIcon'
+but is not disposable.
 ```
 
-Because the build fails, assertion tests, browser type-check/build, manifest validation, PowerShell validation, publishing, and artifacts are skipped in that run. Fix ownership/disposal correctly, then rerun the complete workflow on the newest PR head.
+This happens after restore succeeded and several library/test projects compiled. It is a real build failure, not a Last.fm or browser-runtime failure. Fix lifetime/disposal ownership correctly instead of blindly disabling CA1001.
 
-## Ordered acceptance gates
+## Priority 0 — unblock and revalidate CI
 
-### P0 — build and automated behavior
-- [ ] Fix CA1001 by making App lifecycle cleanup explicit and correct (do not suppress the analyzer without a reviewed lifecycle argument).
-- [ ] Get a fresh green Windows CI run on the exact newest commit.
-- [ ] Add/verify deterministic tests for qualifying Last.fm submission, provider rejection, duplicate event/idempotency, same-track pause/resume, track repeats, seeking, overlapping GSMTC/browser sources, queue leasing and crash/restart recovery.
-- [ ] Ensure provider-accepted state is only written after Last.fm accepted the action, and ambiguous network failures retry idempotently without silently dropping a play.
-- [ ] Inspect build and assertion results before considering the CI gate passed.
+- [ ] Resolve CA1001 in `src/Scrobblix.Desktop/App.xaml.cs`; make event, cancellation source, semaphore and tray cleanup deterministic across normal close, startup failure and duplicate-instance exit.
+- [ ] Commit the fix to `feat/scrobblix-v1-complete`.
+- [ ] Re-run the workflow on the exact newest PR head and verify the full job succeeds, including test assertions, browser type-check/build, manifest validation, PowerShell parsing, publish and artifact upload.
+- [ ] Update this status file only with evidence tied to the actual SHA/run.
 
-### P1 — real environment integrations
-- [ ] Last.fm: use a dedicated test account and test application; verify auth/session creation, now-playing, an accepted scrobble visible in the account, rejected action behavior, offline recovery, and duplicate-free repeated-track soak.
-- [ ] Chrome and Edge: install the unpacked generated extension separately, record each real extension ID, register both IDs as needed, restart browser/app, then verify events reach desktop ingress and create local history.
-- [ ] Firefox: load temporary add-on, register the matching add-on identity, restart, verify events and reconnect/snapshot behavior. Do not claim persistent distribution until signing/store identity is resolved.
-- [ ] Exercise disconnect/reconnect, sleep/resume, lock/unlock, browser tab changes, seeking, missing metadata and overlapping GSMTC/browser reports.
+## Priority 0 — Last.fm, identity and queue correctness
 
-### P1 — Windows desktop release
-- [ ] Explorer restart restores tray icon; restore/open/exit paths work after minimize and notification activation.
-- [ ] Notification opt-in and track-detail privacy persist; no details are displayed when disabled.
-- [ ] Keyboard-only operation, Narrator, focus order, contrast, scaling and reduced-motion expectations are checked on a real Windows session.
-- [ ] Review same-user named-pipe and single-instance event/handle security, process identity assumptions and malformed/oversized message behavior.
-- [ ] Test backup/restore across supported schema versions, clean install, upgrade, rollback, uninstall and residual-data behavior.
-- [ ] Prepare signed MSIX/App Installer or Store distribution; verify publisher identity, signature/timestamp, update path, dependency/SBOM and license review.
+- [ ] Use a dedicated Last.fm test application/account and prove a qualifying scrobble appears in the profile.
+- [ ] Reconcile each submitted action with the provider result. Mark delivered only after provider acceptance; keep ambiguous failures retryable and explain their status.
+- [ ] Exercise duplicate event delivery, identical metadata reported from two sources, repeat of the same song after a different track, pause/resume, seeking, late metadata, track duration changes, and restart mid-queue.
+- [ ] Verify queue lease expiration, bounded retry/backoff, crash recovery and no silently discarded qualifying track.
+- [ ] Run a duplicate-free soak test and keep redacted event/action correlation IDs as evidence. Never automate against production listening history.
 
-### P2 — Stitch design completion
-- [ ] Import `Scrobblix-Docs/04_UserExperience/STITCH_IMPORT_BRIEF.md` into the actual Stitch workspace using the Stitch integration when available.
-- [ ] Review generated Home, History, Queue, Sources, Diagnostics and Settings layouts against design tokens, accessibility and current WinUI controls.
-- [ ] Record actual Stitch workspace/project link and exported artifacts in Git. A saved brief is not evidence of a Stitch workspace change.
+## Priority 1 — browser integration
 
-## Evidence policy
+- [ ] Build the companion and load the unpacked Chromium extension in Chrome and Edge separately.
+- [ ] Record the actual extension ID from each browser; register matching allowed IDs for the native host and desktop policy.
+- [ ] Restart browsers and desktop app, play/pause/seek/skip in supported web players, close/reopen tabs, suspend/resume, and verify events reach local history and the canonical playback pipeline.
+- [ ] Load the Firefox development add-on through `about:debugging`, register the matching add-on identity, and verify equivalent event/reconnect behavior.
+- [ ] Validate disconnect/reconnect snapshots, malformed/oversized messages, native-host stdout discipline, allow-list rejection and uninstall cleanup.
+- [ ] Do not describe a temporary Firefox add-on as a persistent signed release.
 
-A source-code assertion or passing CI build is not proof of actual Last.fm delivery, installed browser event delivery, tray recovery in Explorer, accessibility qualification, or signed installer upgrade/rollback. Only mark those gates after capturing test evidence for the relevant environment.
+## Priority 1 — Windows qualification and release
 
-## Resume commands (Windows PowerShell)
+- [ ] Test tray restore, Open/Exit, minimize/hide and icon recovery after Windows Explorer restarts.
+- [ ] Test notification opt-in, activation, persistence and track-detail privacy; notifications remain off by default and metadata stays hidden unless enabled.
+- [ ] Test keyboard navigation, Narrator, focus order, contrast, DPI/scaling and window resize on real Windows hardware/session.
+- [ ] Review per-user named-pipe access, process-identity assumptions, single-instance synchronization handles and malformed/rate-limited inbound messages.
+- [ ] Test clean install, upgrade, failed update recovery, rollback, uninstall and retained-data choices.
+- [ ] Produce a signed MSIX/App Installer or complete Store distribution identity. Verify signature and timestamp, publisher identity, update path, dependency/license review and SBOM before release.
+- [ ] Test backup and restore across supported SQLite schema versions, including corrupt archive, checksum mismatch and interrupted restore.
+
+## Priority 2 — UI / Stitch completion
+
+The handoff brief is stored in `Scrobblix-Docs/04_UserExperience/STITCH_IMPORT_BRIEF.md`. The Stitch MCP integration was unavailable during this session. A Git brief is not evidence that the remote Stitch workspace changed.
+
+- [ ] Import the brief into the real Stitch workspace when its integration is available.
+- [ ] Generate/review Home, History, Queue, Sources, Diagnostics and Settings screens against the existing WinUI controls and design tokens.
+- [ ] Validate loading, empty, error, connected, queued and provider-rejected states; keyboard/focus, contrast, screen scaling and reduced-motion requirements.
+- [ ] Commit exported assets/specs and add a workspace/project link after the external changes have actually happened.
+
+## Evidence rules
+
+A clean build proves compilability for that commit and runner only. A passing unit/assertion suite does not prove live Last.fm acceptance, real browser event delivery, GUI tray recovery, accessibility qualification, signing, upgrade or rollback. Mark those gates complete only when their specific environment was tested and the evidence is recorded.
+
+## Resume / validation commands
+
+Run in Windows PowerShell with the desktop app closed:
 
 ```powershell
-git fetch origin
+git fetch origin --prune
 git switch feat/scrobblix-v1-complete
 git pull --ff-only origin feat/scrobblix-v1-complete
 dotnet restore Scrobblix.slnx
-dotnet build Scrobblix.slnx --configuration Release
-dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release
+dotnet build Scrobblix.slnx --no-restore --configuration Release
+dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
 npm --prefix browser-extension ci
 npm --prefix browser-extension run check
 npm --prefix browser-extension run build
 node scripts/validate-browser-manifests.mjs
 ```
 
-If the desktop app is running, close it before rebuild to avoid locked assemblies. Do not put Last.fm secrets in Git, logs, screenshots, or issue comments.
+Do not put Last.fm API secrets or session keys in source control, logs, screenshots or issue comments.
