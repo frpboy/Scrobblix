@@ -5,7 +5,11 @@ using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Application.Queue;
 
-public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IScrobbleProvider provider, Action<string>? log = null)
+public sealed class ProviderActionProcessor(
+    IProviderActionStore actionStore,
+    IScrobbleProvider provider,
+    Action<string>? log = null,
+    Action<ProviderActionLease, ProviderActionState, string>? onCompleted = null)
 {
     private const int MaximumAutomaticAttempts = 8;
     private static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromHours(24);
@@ -45,7 +49,8 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
         {
             var metadataReason = string.IsNullOrWhiteSpace(action.Artist) ? ReasonCodes.Metadata.MissingArtist : ReasonCodes.Metadata.MissingTitle;
             await actionStore.CompleteAsync(action.ActionId, ProviderActionState.PermanentFailure, metadataReason, nowUtc, cancellationToken);
-            log?.Invoke($"Provider action was not sent because metadata is incomplete; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; attempt={action.AttemptCount}; outcome=PermanentFailure; reason={metadataReason}.");
+            log?.Invoke($"Provider action was not sent because metadata is incomplete; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; action_type={action.ActionType}; attempt={action.AttemptCount}; outcome=PermanentFailure; reason={metadataReason}.");
+            PublishCompletion(action, ProviderActionState.PermanentFailure, metadataReason);
             return true;
         }
 
@@ -82,7 +87,20 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
             ? GetRetryDelay(action.AttemptCount, result.RetryAfter)
             : null;
         await actionStore.CompleteAsync(action.ActionId, outcome, persistedReason, nowUtc, cancellationToken, retryAfter);
-        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={persistedReason}; provider_reason={result.ReasonCode}; retry_after_seconds={retryAfter?.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)"}; response_utc={nowUtc:O}.");
+        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; action_type={action.ActionType}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={persistedReason}; provider_reason={result.ReasonCode}; retry_after_seconds={retryAfter?.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)"}; response_utc={nowUtc:O}.");
+        PublishCompletion(action, outcome, persistedReason);
         return true;
+    }
+
+    private void PublishCompletion(ProviderActionLease action, ProviderActionState outcome, string reasonCode)
+    {
+        try
+        {
+            onCompleted?.Invoke(action, outcome, reasonCode);
+        }
+        catch (Exception exception)
+        {
+            log?.Invoke($"Provider completion observer failed; action_id={action.ActionId}; action_type={action.ActionType}; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
     }
 }
