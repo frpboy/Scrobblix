@@ -211,6 +211,10 @@
                         <TextBlock x:Name="LogDirectoryText" Text="Log directory is being prepared." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <Button Content="Open log folder" Click="OpenLogFolderButton_Click" HorizontalAlignment="Left" />
                         <TextBlock Text="Each entry has a sequential number and UTC timestamp. Credentials, authorization tokens and session keys are excluded from diagnostics." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Privacy-safe support bundle" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock Text="Export a small ZIP with version details and operational event timestamps/categories. Free-form log messages, track history, artwork, full URLs and credentials are not included. Nothing is uploaded automatically." TextWrapping="Wrap" />
+                        <Button x:Name="ExportSupportBundleButton" Content="Export support bundle…" Click="ExportSupportBundleButton_Click" HorizontalAlignment="Left" />
+                        <TextBlock x:Name="SupportBundleStatusText" Text="No support bundle has been created this session." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Recommendation" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <TextBlock Text="Start a track in a Windows media-control-enabled app. If metadata stays incomplete, install the optional Browser Companion for that supported site." TextWrapping="Wrap" />
                     </StackPanel>
