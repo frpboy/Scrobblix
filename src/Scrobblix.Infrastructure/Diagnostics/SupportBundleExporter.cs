@@ -26,9 +26,9 @@ public static class SupportBundleExporter
     private const long MaximumBytesPerLogFile = 8 * 1024 * 1024;
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
     private static readonly Regex SafeCategory = new("^[A-Z0-9_]{1,32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex ExceptionTypePattern = new(@"(?i)\bexception\s*=\s*([A-Za-z_][A-Za-z0-9_.+]{0,100})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex HResultPattern = new(@"(?i)\bhresult\s*=\s*(-?(?:0x)?[0-9a-f]{1,16})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
-    private static readonly Regex ReasonCodePattern = new(@"(?i)\breason(?:_code)?\s*=\s*([a-z][a-z0-9_.-]{0,79})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ExceptionTypePattern = new(@"(?i)\bexception\s*=\s*([A-Za-z_][A-Za-z0-9_.+]{0,80}(?:Exception|Error))(?=[;\s,]|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex HResultPattern = new(@"(?i)\bhresult\s*=\s*(-?[0-9]{1,11}|0x[0-9a-f]{8})\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly Regex ReasonCodePattern = new(@"(?i)\breason(?:_code)?\s*=\s*([a-z][a-z0-9_-]{0,31}(?:\.[a-z0-9_-]{1,32}){1,6})(?=[;\s,]|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     public static async Task<SupportBundleExportResult> CreateAsync(
         string destinationPath,
