@@ -165,17 +165,22 @@ public sealed partial class MainWindow : Window
         CompactNavigationToggleButton.IsEnabled = !_isWidthConstrained;
         AppNavigationView.CompactPaneLength = 64;
         AppNavigationView.OpenPaneLength = 216;
+        // LeftMinimal renders only each navigation glyph, avoiding a collapsed pane
+        // that reserves space for labels but leaves the icons visually absent.
+        AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.Left;
+        AppNavigationView.IsPaneOpen = !compact;
         foreach (var item in AppNavigationView.MenuItems.OfType<NavigationViewItem>())
         {
             item.IsTabStop = true;
-            if (item.Icon is FrameworkElement icon)
-                icon.Visibility = Visibility.Visible;
             var label = item.Content?.ToString() ?? item.Tag?.ToString() ?? "Navigation";
             ToolTipService.SetToolTip(item, label);
             AutomationProperties.SetName(item, label);
+            if (item.Icon is FrameworkElement icon)
+            {
+                icon.Visibility = Visibility.Visible;
+                AutomationProperties.SetName(icon, label);
+            }
         }
-        AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
-        AppNavigationView.IsPaneOpen = !compact;
         NavigationPreferenceStatusText.Text = _isWidthConstrained
             ? "The window is narrow, so compact navigation is temporary. Your saved preference returns when space permits."
             : _preferredNavigationCompact ? "Compact navigation is saved for wide windows." : "Expanded navigation is saved for wide windows.";
