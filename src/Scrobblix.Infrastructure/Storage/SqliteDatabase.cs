@@ -21,10 +21,43 @@ public sealed class SqliteDatabase(string connectionString)
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await EnsureMigrationTableAsync(connection, cancellationToken);
+        await ValidateAppliedMigrationsAsync(connection, cancellationToken);
         var assembly = typeof(SqliteDatabase).Assembly;
         foreach (var migration in Migrations)
         {
             await ApplyMigrationAsync(connection, assembly, migration, cancellationToken);
+        }
+    }
+
+    private static async Task ValidateAppliedMigrationsAsync(SqliteConnection connection, CancellationToken cancellationToken)
+    {
+        var appliedMigrations = new List<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "SELECT migration_id FROM schema_migrations ORDER BY migration_id;";
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                appliedMigrations.Add(reader.GetString(0));
+            }
+        }
+
+        var knownMigrationIds = Migrations.Select(migration => migration.Id).ToArray();
+        var unknownMigration = appliedMigrations.FirstOrDefault(
+            migrationId => !knownMigrationIds.Contains(migrationId, StringComparer.Ordinal));
+        if (unknownMigration is not null)
+        {
+            throw new InvalidOperationException(
+                $"Database migration '{unknownMigration}' is not recognized by this Scrobblix build. The database may be newer than this application; do not continue with a downgrade.");
+        }
+
+        if (appliedMigrations.Count > knownMigrationIds.Length
+            || !appliedMigrations.SequenceEqual(
+                knownMigrationIds.Take(appliedMigrations.Count),
+                StringComparer.Ordinal))
+        {
+            throw new InvalidOperationException(
+                "The database migration history is not a valid prefix of this Scrobblix build. Restore a valid backup or use the matching application version.");
         }
     }
 
