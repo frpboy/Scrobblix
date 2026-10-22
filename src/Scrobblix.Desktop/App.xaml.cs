@@ -55,6 +55,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
+            StopSingleInstanceActivationListener();
             _trayIcon?.Dispose();
             _trayIcon = null;
             notificationService?.Dispose();
