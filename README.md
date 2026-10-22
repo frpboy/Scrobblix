@@ -129,6 +129,7 @@ See `Scrobblix-Docs/00_Project/SCOPE.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHE
 - [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): latest branch state, validation links, and exact continue/build/run commands.
 - [Master implementation plan and recommendations](docs/MASTER_IMPLEMENTATION_PLAN.md): capability status, recommendations, acceptance tests and release gates.
 - [Local development and troubleshooting](docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md): DLL-lock recovery, build/test/run commands and credential safety.
+- [Browser companion setup](browser-extension/README.md): one-command build/package and Chrome, Edge, Firefox registration instructions.
 - [`05_Architecture`](Scrobblix-Docs/05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
 - [`06_Data`](Scrobblix-Docs/06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
 - [`07_Interfaces`](Scrobblix-Docs/07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.
