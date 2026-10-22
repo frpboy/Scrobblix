@@ -18,6 +18,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 ### Changed
 
 - Reframed Scrobblix from a basic Last.fm utility into a local-first Windows listening companion with transparent diagnostics.
+- Windows notifications now expire automatically: 5 seconds for accepted-scrobble confirmations and 10 seconds for delivery warnings that need attention.
 
 ### Security
 
