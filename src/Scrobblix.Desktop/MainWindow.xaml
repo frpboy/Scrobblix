@@ -36,7 +36,7 @@
             </Grid>
         </Grid>
 
-        <ScrollViewer x:Name="HomeView" Grid.Column="1">
+        <ScrollViewer x:Name="HomeView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1000" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Listening" Style="{StaticResource TitleTextBlockStyle}" />
@@ -116,7 +116,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="HistoryView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="HistoryView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="History" Style="{StaticResource TitleTextBlockStyle}" />
@@ -134,7 +134,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="StatisticsView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="StatisticsView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4"><TextBlock Text="Statistics" Style="{StaticResource TitleTextBlockStyle}" /><TextBlock Text="Listening patterns calculated from local history and confirmed provider responses." Style="{StaticResource BodyTextBlockStyle}" /></StackPanel>
                 <Grid ColumnSpacing="12" RowSpacing="12">
@@ -151,7 +151,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="LovedView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="LovedView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Loved tracks" Style="{StaticResource TitleTextBlockStyle}" />
@@ -164,7 +164,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="QueueView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="QueueView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Queue" Style="{StaticResource TitleTextBlockStyle}" />
@@ -185,7 +185,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="SourcesView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="SourcesView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Sources" Style="{StaticResource TitleTextBlockStyle}" />
@@ -206,7 +206,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="DiagnosticsView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="DiagnosticsView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1200" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Diagnostics" Style="{StaticResource TitleTextBlockStyle}" />
@@ -231,7 +231,7 @@
             </StackPanel>
         </ScrollViewer>
 
-        <ScrollViewer x:Name="SettingsView" Grid.Column="1" Visibility="Collapsed">
+        <ScrollViewer x:Name="SettingsView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
             <StackPanel Padding="24" Spacing="16" MaxWidth="1000" HorizontalAlignment="Stretch">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" />
