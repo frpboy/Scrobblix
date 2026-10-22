@@ -1,53 +1,64 @@
 # Scrobblix implementation resume guide
 
-> **Repository:** `frpboy/Scrobblix`  
-> **Working branch:** `feat/scrobblix-v1-complete`  
-> **Review:** [PR #4](https://github.com/frpboy/Scrobblix/pull/4)  
-> **Last green integrated code baseline before this status-document refresh:** [CI run 39717582856](https://github.com/frpboy/Scrobblix/actions/runs/39717582856), commit `f6dffd5cf95e6266c4b7aa58cdf4576077dbd6ab`
+Repository: frpboy/Scrobblix  
+Working branch: feat/scrobblix-v1-complete  
+Review: https://github.com/frpboy/Scrobblix/pull/4  
+Last green baseline before docs/tooling hardening: [CI run 39718022389](https://github.com/frpboy/Scrobblix/actions/runs/39718022389), commit 4f0ab63ebccdc445caed5d0ea5410c14f89a9cba.
 
-## What is currently present
+## Current verified position
 
-- Live desktop foundation seen in the owner's screenshots: GSMTC playback, source identity, confirmed-listening eligibility, local history, Today's persisted totals, queue status and Last.fm account state.
-- Durable queue with idempotency, leasing/retry/recovery and provider-accepted state; Last.fm scrobble/Now Playing/Love/Unlove provider action paths.
-- Late-metadata-tolerant tracking, cross-source arbitration, local artwork and metadata fallback, numbered local logs and UI error states.
-- SQLite consistent backup, fixed-format ZIP validation, SHA-256/schema/integrity validation, staged restore and a pre-restore safety snapshot.
-- Minimize-to-tray prototype with restore and explicit Exit. Tray icon recovery after Explorer restart is not yet implemented.
-- Opt-in Windows App SDK notifications; notification text hides artist/title by default and requires a separate explicit setting to reveal track details. Queue worker outcomes are used so only an accepted scrobble creates a success notification.
-- Separate Firefox Manifest V3 development manifest, add-on-ID allow-list/installer path, Chromium/Firefox static-manifest validation, and desktop-side native-host client-image/parent-browser-name checks.
-- Windows CI builds and runs .NET assertions, checks/builds the TypeScript browser companion, publishes the desktop/native host and assembles a test bundle.
+Owner screenshots/video show playback detection, Last.fm connected status, local Today/Queue counts, Settings, Sources, Queue, Diagnostics and some fetched artwork. A Last.fm profile screenshot shows scrobbles appearing. This is useful end-to-end evidence, but accepted-action/profile reconciliation, repeated-track dedup, real browser-native installation, tray/notification lifecycle and signed release testing remain open.
 
-## Continue from the last local implementation
+The last green CI baseline built the .NET solution with analyzers, ran domain/SQLite assertions, checked and built the browser companion, validated Chromium/Firefox manifests and native-host hooks, published the unpackaged app/native host, and assembled a Windows test bundle. CI validates only the steps it executed—not a production release or live Windows/browser certification.
 
-Open PowerShell in your existing repository clone and make sure there are no local changes you need to keep:
+## Current implementation snapshot
 
-```powershell
-git status --short
-git fetch origin --prune
-git switch feat/scrobblix-v1-complete
-git pull --ff-only origin feat/scrobblix-v1-complete
-.\scripts\update-and-run.ps1
-```
+- GSMTC playback, canonical tracking, confirmed-listening eligibility, source arbitration, late-metadata-tolerant identity, local history and Today summary.
+- SQLite queue idempotency, leases, bounded retry/backoff, restart recovery, provider states, Last.fm scrobble/Now Playing/Love/Unlove.
+- Last.fm desktop auth, Credential Locker integration, API signatures and account status.
+- MusicBrainz/Cover Art Archive/Last.fm metadata and art fallback, local cache and no-art placeholder.
+- Home, History, Statistics, Loved, Queue, Sources, Diagnostics and Settings; numbered UTC logs.
+- SQLite backup validation, staged restore and pre-restore safety snapshot.
+- Tray/minimize prototype and opt-in notifications with track details hidden by default.
+- Chromium/Firefox development manifests and Native Messaging registration.
+- Windows CI, lock-aware run helper, Chromium MV3 validator and bundle relative-path checks.
 
-If you want a manual development build instead of the helper:
+## Continue from the current branch
 
-```powershell
-dotnet restore Scrobblix.slnx
-dotnet build Scrobblix.slnx --configuration Release
-dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release
-npm --prefix browser-extension ci
-npm --prefix browser-extension run check
-npm --prefix browser-extension run build
-node scripts/validate-browser-manifests.mjs
-dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
-```
+At the existing clone path (the owner uses E:\K4NN4N\Scrobblix), close the running app before rebuilding. Then run:
 
-The branch is intentionally separate from `main`; do not force-push or reset `main`. Push any further work to this branch and use PR #4 for review. Latest branch HEAD and latest CI result may have moved beyond the baseline SHA above; use GitHub to verify before distributing an artifact.
+    git status --short
+    git fetch origin --prune
+    git switch feat/scrobblix-v1-complete
+    git pull --ff-only origin feat/scrobblix-v1-complete
+    .\scripts\update-and-run.ps1
 
-## Still requires real-machine or production credentials
+To explicitly let the helper request shutdown before rebuilding:
 
-- Validate tray behavior and notifications interactively in Windows, including Explorer restart, lock-screen privacy and notification activation after exit.
-- Test the Firefox companion in a real Firefox installation, and Chrome/Edge with actual extension IDs and native-host registration.
-- Verify Last.fm authorization and each provider action against the real account/API, not only mock assertion handlers.
-- Complete installer signing/MSIX/App Installer/updater, rollback/upgrade/uninstall and clean-machine runtime tests.
-- Complete accessibility, performance/long-run, privacy/security and release checklist reviews. The current process-path/parent-name check is defence-in-depth, not cryptographic publisher identity.
-- Stitch MCP was not available in the authoring session. The checked-in Stitch brief is a reusable handoff; it is not evidence that the external Stitch workspace has been updated.
+    .\scripts\update-and-run.ps1 -StopRunningApp
+
+That option is opt-in. The helper requests a normal close first and force-stops only leftover processes. By default, a running app results in a clear error before build.
+
+For validation without launching:
+
+    dotnet restore Scrobblix.slnx
+    dotnet build Scrobblix.slnx --no-restore --configuration Release
+    dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
+    npm --prefix browser-extension ci
+    npm --prefix browser-extension run check
+    npm --prefix browser-extension run build
+    node scripts/validate-browser-manifests.mjs
+
+See docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md for the observed lock error.
+
+## Remaining work
+
+1. P0 — replace any exposed credentials, save replacements in Credential Locker, reconcile accepted actions with Last.fm history and repeat same-track/restart testing without duplicates.
+2. P0 — install browser companion in Chrome/Edge and temporary Firefox, register actual IDs, verify events and uninstaller.
+3. P0 — test Windows tray minimize/restore/Exit, Explorer restart recovery, notification privacy/activation, DPI/high contrast and clean shutdown.
+4. P1 — signed MSIX/App Installer, upgrade/rollback/uninstall, clean-machine prerequisites, signature/provenance/SBOM/license review.
+5. P1 — same-user IPC review, retention/delete/export, backup migrations, log rotation and support-bundle redaction.
+6. P1 — long-run tests, repeated tracks, pause/seek/ad transitions, late/missing metadata, network loss, revoked sessions, throttling, time-zone edges and accessibility.
+7. Stitch — a detailed Git handoff exists, but Stitch MCP was unavailable. Do not claim the external workspace was updated until the connector and project are verified.
+
+Continue on feat/scrobblix-v1-complete and PR #4; do not reset main or merge only because CI is green. Check the latest SHA and CI before distributing.
