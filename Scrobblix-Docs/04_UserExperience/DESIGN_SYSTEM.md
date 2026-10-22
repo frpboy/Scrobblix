@@ -90,3 +90,13 @@ States what is absent, why that may be normal, and the next relevant action. Avo
 - Source labels are resolved from actual accepted GSMTC application IDs or HTTPS browser origins. No source is inferred from track metadata, window titles, or cover art. Optional logo files must exist locally and have a usage-review record.
 - No external provider logos are currently bundled. The source asset ledger records current review links and restrictions. Last.fm API Terms require prior written approval for its marks in each case, so the current connection/status surfaces remain text-first.
 - The ICO is used for desktop title-bar/tray identity where supported; in-app scalable marks vary with the system theme and high-contrast mode. Windows owns notification-banner app identity for the unpackaged app, so no unsupported toast-icon behavior is claimed.
+
+
+## Space-efficient desktop layout (2026-10-22)
+
+- Keep the same WinUI/Fluent appearance, existing icon-and-label navigation, subdued borders, and tonal-lavender mark. Density changes should not introduce a different visual language.
+- Core page content uses a 24 px outer inset and 16 px rhythm between major sections. Secondary bordered groups use 16 px padding; the primary Now Playing card keeps slightly more breathing room.
+- The eligibility inset and repeated controls use tighter internal spacing. Tracking, Love, and Unlove share one row when the available content width permits.
+- Routine playback/startup status does not keep a green InfoBar row open when the Now Playing surface already communicates it. The banner is reserved for warning/error attention and explicit tracking pause/resume feedback.
+- Do not fill empty pages with decorative tiles or charts. Empty states can remain quiet; space efficiency means removing redundant gaps and duplicate status, not adding content for its own sake.
+- Keep the compact/expanded rail state, selected destination, playback observation, confirmed listening, eligibility, and durable queue independent.
