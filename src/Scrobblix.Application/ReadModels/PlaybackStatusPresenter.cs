@@ -49,8 +49,12 @@ public static class PlaybackStatusPresenter
             return action.State switch
             {
                 ProviderActionState.Accepted => "Sent to Last.fm",
-                ProviderActionState.Pending or ProviderActionState.InFlight or ProviderActionState.RetryScheduled
+                ProviderActionState.Pending
                     => "Queued safely — waiting for Last.fm",
+                ProviderActionState.InFlight
+                    => "Sending to Last.fm…",
+                ProviderActionState.RetryScheduled
+                    => "Queued safely — retry scheduled",
                 ProviderActionState.AuthBlocked
                     => "Queued safely — reconnect Last.fm to resume delivery",
                 ProviderActionState.ProviderIgnored
