@@ -1,6 +1,7 @@
 [CmdletBinding()]
 param(
-    [switch]$SkipBrowserChecks
+    [switch]$SkipBrowserChecks,
+    [switch]$StopRunningApp
 )
 
 $ErrorActionPreference = 'Stop'
@@ -53,6 +54,31 @@ try {
     git pull --ff-only origin $branch
     if ($LASTEXITCODE -ne 0) { throw "Could not fast-forward $branch." }
 
+    $runningApps = @(Get-Process -Name 'Scrobblix.Desktop' -ErrorAction SilentlyContinue)
+    if ($runningApps.Count -gt 0) {
+        $processIds = ($runningApps | ForEach-Object { $_.Id }) -join ', '
+        if (-not $StopRunningApp) {
+            throw "Scrobblix.Desktop is already running (PID(s): $processIds). Close the app normally before rebuilding to avoid MSB3021/MSB3027 DLL file-lock errors. No process was stopped. To let this helper close it, rerun with -StopRunningApp."
+        }
+
+        Write-Warning "StopRunningApp was specified. Requesting normal shutdown for Scrobblix.Desktop PID(s): $processIds."
+        foreach ($runningApp in $runningApps) {
+            try {
+                if ($runningApp.MainWindowHandle -ne 0) { [void]$runningApp.CloseMainWindow() }
+            }
+            catch {
+                Write-Verbose "Could not request normal close for PID $($runningApp.Id): $($_.Exception.Message)"
+            }
+        }
+        Start-Sleep -Seconds 2
+        $remainingApps = @(Get-Process -Name 'Scrobblix.Desktop' -ErrorAction SilentlyContinue)
+        foreach ($remainingApp in $remainingApps) {
+            Write-Warning "Scrobblix.Desktop PID $($remainingApp.Id) did not close normally; stopping it so the build can replace locked assemblies."
+            Stop-Process -Id $remainingApp.Id -Force -ErrorAction Stop
+        }
+        Start-Sleep -Milliseconds 300
+    }
+
     dotnet restore Scrobblix.slnx
     if ($LASTEXITCODE -ne 0) { throw 'dotnet restore failed.' }
 
@@ -76,7 +102,7 @@ try {
     Write-Host ''
     Write-Host 'Build and test checks passed. Launching the Scrobblix Windows desktop app...'
     Write-Host 'Close the app window to return to this terminal.'
-    dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore
+    dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --no-build
     if ($LASTEXITCODE -ne 0) {
         throw 'Scrobblix exited with a non-zero code. Check %LOCALAPPDATA%\Scrobblix\logs for the numbered diagnostic log.'
     }
