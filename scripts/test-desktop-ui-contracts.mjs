@@ -44,7 +44,7 @@ for (const [label, destination] of [
   ["Home", "home"], ["History", "history"], ["Statistics", "statistics"], ["Loved", "loved"],
   ["Queue", "queue"], ["Sources", "sources"], ["Diagnostics", "diagnostics"], ["Settings", "settings"],
 ]) {
-  const escaped = destination.replace(/[.*+?^${}()|[\]\\]/g, "\\console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");");
+  const escaped = destination;
   const item = navigationMarkup.match(new RegExp(`<NavigationViewItem\\b[^>]*Tag="${escaped}"[^>]*/?>`))?.[0];
   assert.ok(item, `Navigation item markup missing: ${label}`);
   assert.ok(item.includes(`AutomationProperties.Name="${label}"`) || (label === "Loved" && item.includes('AutomationProperties.Name="Loved tracks"')), `${label} needs an accessible name.`);
