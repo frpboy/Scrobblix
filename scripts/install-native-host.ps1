@@ -47,7 +47,12 @@ if ($registerChromium -and $extensionIds.Count -eq 0) {
     throw 'A valid Chromium extension ID is required. Load the unpacked extension first and copy its actual ID from the browser.'
 }
 foreach ($id in $extensionIds) {
-    if ($id -cnotmatch '^[a-p]{32} = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
+    if ($id -cnotmatch '^[a-p]{32}\z') {
+        throw "Invalid Chromium extension ID '$id'. IDs must be exactly 32 lowercase characters from a through p."
+    }
+}
+
+$sourceDirectory = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
 $sourceExecutable = Join-Path $sourceDirectory 'Scrobblix.NativeHost.exe'
 if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
     throw "Scrobblix.NativeHost.exe was not found in '$sourceDirectory'. Publish the native host first."
