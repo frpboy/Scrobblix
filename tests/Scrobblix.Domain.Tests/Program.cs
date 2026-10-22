@@ -429,6 +429,27 @@ var fallBounds = GetLocalDayUtcBounds(fallBackNow, easternTimeZone);
 Assert((fallBounds.EndUtc - fallBounds.StartUtc) == TimeSpan.FromHours(25),
     "Today summary bounds cover a 25-hour local day across fall-back.");
 
+// Verify local calendar-day boundaries around daylight-saving transitions independently of the CI machine's time zone.
+static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) GetLocalDayUtcBounds(DateTimeOffset now, TimeZoneInfo timeZone)
+{
+    var localDate = TimeZoneInfo.ConvertTime(now, timeZone).Date;
+    var nextLocalDate = localDate.AddDays(1);
+    return (
+        new DateTimeOffset(localDate, timeZone.GetUtcOffset(localDate)).ToUniversalTime(),
+        new DateTimeOffset(nextLocalDate, timeZone.GetUtcOffset(nextLocalDate)).ToUniversalTime());
+}
+
+var easternTimeZone = TimeZoneInfo.FindSystemTimeZoneById(
+    OperatingSystem.IsWindows() ? "Eastern Standard Time" : "America/New_York");
+var springForwardNow = new DateTimeOffset(2026, 3, 8, 12, 0, 0, TimeSpan.FromHours(-4));
+var springBounds = GetLocalDayUtcBounds(springForwardNow, easternTimeZone);
+Assert((springBounds.EndUtc - springBounds.StartUtc) == TimeSpan.FromHours(23),
+    "Today summary bounds cover a 23-hour local day across spring-forward.");
+var fallBackNow = new DateTimeOffset(2026, 11, 1, 12, 0, 0, TimeSpan.FromHours(-5));
+var fallBounds = GetLocalDayUtcBounds(fallBackNow, easternTimeZone);
+Assert((fallBounds.EndUtc - fallBounds.StartUtc) == TimeSpan.FromHours(25),
+    "Today summary bounds cover a 25-hour local day across fall-back.");
+
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
