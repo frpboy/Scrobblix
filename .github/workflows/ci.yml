@@ -32,6 +32,19 @@ jobs:
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
+      - name: Dump WinUI XAML compiler diagnostics on build failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $searchRoot = 'src/Scrobblix.Desktop/obj/Release'
+          if (Test-Path $searchRoot) {
+            $files = Get-ChildItem -Path $searchRoot -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -in @('input.json', 'output.json', 'XamlCompiler.log', 'XamlCompiler.err') -and $_.Length -lt 250000 }
+            foreach ($file in $files) {
+              Write-Output "----- $($file.Name) -----"
+              Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+            }
+          }
       - name: Validate desktop UI contracts
         run: node scripts/test-desktop-ui-contracts.mjs
 
