@@ -96,6 +96,38 @@ reporting an issue; remove credentials from screenshots.
 
 ## 6. Browser companion and native host
 
+The browser companion is optional for players that expose Windows media controls, but it can improve metadata precision for supported pages in YouTube Music and Spotify Web Player. It forwards browser metadata to the local app over Native Messaging; it does not capture audio or receive Last.fm credentials.
+
+### Build it with one command
+
+From the Scrobblix source repository, run:
+
+```powershell
+.\scripts\setup-browser-companion.ps1
+```
+
+The helper installs the locked npm dependencies, type-checks/builds the extension, validates both browser manifests, publishes the native host, stages the Chrome/Edge and Firefox extension folders, validates required outputs, and creates `artifacts\Scrobblix\Scrobblix-BrowserCompanion.zip`.
+
+For Chrome or Edge, next load `artifacts\Scrobblix\BrowserCompanion\chromium` from `chrome://extensions` or `edge://extensions` with Developer mode enabled. Copy the ID actually displayed by that browser, then register the host:
+
+```powershell
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Chrome -ExtensionId "ACTUAL_CHROME_ID"
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Edge -ExtensionId "ACTUAL_EDGE_ID"
+```
+
+If both browsers are used, load the extension in both and register their IDs together in one call:
+
+```powershell
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser ChromeAndEdge -ExtensionId @("CHROME_ID","EDGE_ID")
+```
+
+For Firefox, run `.\scripts\setup-browser-companion.ps1 -Browser Firefox`, then load `artifacts\Scrobblix\BrowserCompanion\firefox\manifest.json` as a temporary add-on from `about:debugging#/runtime/this-firefox`. Temporary add-ons are development-only and may need to be loaded again after browser restart.
+
+Browser policies require the user to load/approve the extension; the builder does not silently sideload it. Restart the browser and Scrobblix after registration. CI also publishes a separate `Scrobblix-BrowserCompanion` development artifact.
+
+For the detailed manual steps, package layout, and uninstall process see [Browser Companion README](../browser-extension/README.md) and [Local Development and Troubleshooting](LOCAL_DEVELOPMENT_TROUBLESHOOTING.md).
+
+
 The browser companion is optional; desktop playback continues through Windows
 media controls without it. The current extension targets Chromium (Chrome and
 Edge) and the supported sites declared in browser-extension/manifest.json.
