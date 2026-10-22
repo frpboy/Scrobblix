@@ -108,7 +108,7 @@ public sealed partial class MainWindow : Window
         {
             "gsmtc" => "Windows media controls (GSMTC)",
             "browser" => "Browser Companion",
-            _ => observation.Source,
+            _ => observation.SourceName,
         };
         SourceHealthSummaryText.Text = $"{sourceLabel} event received this session.";
         SourceLastObservationText.Text = $"Last observation: {observation.ObservedAtUtc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)} · playback state: {observation.PlaybackState}.";
