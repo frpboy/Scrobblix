@@ -26,6 +26,11 @@ public partial class App : Microsoft.UI.Xaml.Application
     private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
     private ScrobblixUserPreferences _userPreferences = new(false);
+    private Semaphore? _singleInstanceSemaphore;
+    private EventWaitHandle? _singleInstanceActivationEvent;
+    private CancellationTokenSource? _singleInstanceListenerCancellation;
+    private Task? _singleInstanceListener;
+    private TrayIconService? _trayIcon;
 
     public App()
     {
@@ -34,19 +39,24 @@ public partial class App : Microsoft.UI.Xaml.Application
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+        if (!TryAcquireSingleInstance())
+        {
+            Exit();
+            return;
+        }
+
         LoadLocalLastFmEnvironment();
         _window = new MainWindow();
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
         ScrobblixFileLogger? fileLogger = null;
-        TrayIconService? trayIcon = null;
         ScrobblixNotificationService? notificationService = null;
         _window.Closed += (_, _) =>
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
-            trayIcon?.Dispose();
-            trayIcon = null;
+            _trayIcon?.Dispose();
+            _trayIcon = null;
             notificationService?.Dispose();
             notificationService = null;
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
@@ -66,14 +76,16 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             try
             {
-                trayIcon = new TrayIconService(_window, message => logger.Warning("TRAY", message));
+                _trayIcon = new TrayIconService(_window, message => logger.Warning("TRAY", message));
                 logger.Info("TRAY", "Notification-area icon installed. Minimizing hides the window; double-click the icon to restore it, or right-click to exit.");
             }
             catch (Exception exception)
             {
-                trayIcon = null;
+                _trayIcon = null;
                 logger.Warning("TRAY", $"Notification-area icon could not be installed; exception={exception.GetType().Name}; hresult={exception.HResult}. Normal window operation remains available.");
             }
+
+            StartSingleInstanceActivationListener();
 
             try
             {
@@ -96,7 +108,7 @@ public partial class App : Microsoft.UI.Xaml.Application
                         var window = _window;
                         if (window is not null)
                         {
-                            _ = window.DispatcherQueue.TryEnqueue(() => trayIcon?.RestoreFromNotification());
+                            _ = window.DispatcherQueue.TryEnqueue(() => _trayIcon?.RestoreFromNotification());
                         }
                     });
                 notificationService.SetIncludeTrackDetails(_userPreferences.IncludeTrackDetailsInNotifications);
@@ -539,6 +551,126 @@ public partial class App : Microsoft.UI.Xaml.Application
             logger,
             cancellationToken);
         _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
+    }
+
+    private bool TryAcquireSingleInstance()
+    {
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var identity = string.IsNullOrWhiteSpace(userProfile) ? Environment.UserName : userProfile;
+        var suffix = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
+        var semaphoreName = $@"Local\Scrobblix.{suffix}";
+        var activationName = $@"Local\Scrobblix.{suffix}.Activate";
+
+        // Create the activation event first so a second launch can signal us even while
+        // the main window, database, or tray icon is still being initialized.
+        _singleInstanceActivationEvent = new EventWaitHandle(false, EventResetMode.AutoReset, activationName);
+        _singleInstanceSemaphore = new Semaphore(1, 1, semaphoreName);
+        if (_singleInstanceSemaphore.WaitOne(0))
+        {
+            return true;
+        }
+
+        try
+        {
+            _singleInstanceActivationEvent.Set();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+        finally
+        {
+            _singleInstanceActivationEvent.Dispose();
+            _singleInstanceActivationEvent = null;
+            _singleInstanceSemaphore.Dispose();
+            _singleInstanceSemaphore = null;
+        }
+
+        return false;
+    }
+
+    private void StartSingleInstanceActivationListener()
+    {
+        var activationEvent = _singleInstanceActivationEvent;
+        if (activationEvent is null)
+        {
+            return;
+        }
+
+        _singleInstanceListenerCancellation = new CancellationTokenSource();
+        var cancellationToken = _singleInstanceListenerCancellation.Token;
+        _singleInstanceListener = Task.Run(() =>
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                bool signaled;
+                try
+                {
+                    signaled = activationEvent.WaitOne(TimeSpan.FromMilliseconds(500));
+                }
+                catch (ObjectDisposedException)
+                {
+                    return;
+                }
+
+                if (!signaled || cancellationToken.IsCancellationRequested)
+                {
+                    continue;
+                }
+
+                var window = _window;
+                if (window is null)
+                {
+                    continue;
+                }
+
+                _ = window.DispatcherQueue.TryEnqueue(() =>
+                {
+                    var currentTrayIcon = _trayIcon;
+                    if (currentTrayIcon is not null)
+                    {
+                        currentTrayIcon.RestoreFromNotification();
+                    }
+                    else
+                    {
+                        window.Activate();
+                    }
+                });
+            }
+        });
+    }
+
+    private void StopSingleInstanceActivationListener()
+    {
+        _singleInstanceListenerCancellation?.Cancel();
+        try
+        {
+            _singleInstanceActivationEvent?.Set();
+        }
+        catch (ObjectDisposedException)
+        {
+        }
+
+        _singleInstanceActivationEvent?.Dispose();
+        _singleInstanceActivationEvent = null;
+        _singleInstanceListenerCancellation?.Dispose();
+        _singleInstanceListenerCancellation = null;
+
+        // Semaphores are not thread-owned, so the UI-thread close handler can safely release it.
+        if (_singleInstanceSemaphore is not null)
+        {
+            try
+            {
+                _singleInstanceSemaphore.Release();
+            }
+            catch (SemaphoreFullException)
+            {
+            }
+            finally
+            {
+                _singleInstanceSemaphore.Dispose();
+                _singleInstanceSemaphore = null;
+            }
+        }
     }
 
     private static void LoadLocalLastFmEnvironment()
