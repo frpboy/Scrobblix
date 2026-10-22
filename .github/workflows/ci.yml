@@ -55,6 +55,7 @@ jobs:
         run: |
           $scriptFiles = @(
             'scripts/update-and-run.ps1',
+            'scripts/setup-browser-companion.ps1',
             'scripts/install-native-host.ps1',
             'scripts/uninstall-native-host.ps1'
           )
@@ -121,10 +122,65 @@ jobs:
           }
           Compress-Archive -Path "$bundle/*" -DestinationPath 'artifacts/Scrobblix-Windows-TestBundle.zip' -Force
 
+          # Publish the browser companion as a separate, smaller development artifact too.
+          $companion = 'artifacts/Scrobblix-BrowserCompanion'
+          New-Item -ItemType Directory -Force -Path "$companion/chromium/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/firefox/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/native-host" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/scripts" | Out-Null
+          Copy-Item -Path 'browser-extension/manifest.json' -Destination "$companion/chromium/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$companion/firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/chromium/dist/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/firefox/dist/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$companion/chromium/README.md" -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$companion/firefox/README.md" -Force
+          Copy-Item -Path 'artifacts/Scrobblix/native-host/*' -Destination "$companion/native-host/" -Recurse -Force
+          Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$companion/scripts/" -Force
+          Copy-Item -Path 'scripts/uninstall-native-host.ps1' -Destination "$companion/scripts/" -Force
+          @(
+            'Scrobblix Browser Companion - Windows development package'
+            ''
+            'Chrome / Edge: load the chromium folder using chrome://extensions or edge://extensions with Developer mode enabled. Copy the actual extension ID, then register the native host:'
+            '.\scripts\install-native-host.ps1 -ExtensionId "CHROME_EXTENSION_ID" -NativeHostPublishDirectory ".\native-host" -RegisterChrome'
+            'Edge: use -RegisterEdge. Both: pass -ExtensionId @("CHROME_ID","EDGE_ID") -RegisterChrome -RegisterEdge in one command.'
+            ''
+            'Firefox: load firefox\manifest.json temporarily from about:debugging#/runtime/this-firefox, then run .\scripts\install-native-host.ps1 -NativeHostPublishDirectory ".\native-host" -RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in".'
+            ''
+            'Restart the browser and Scrobblix after registration. Firefox temporary add-ons are not persistent release installations.'
+            'This is an unsigned development bundle, not a production/store release. No Last.fm credentials are included.'
+            'To unregister the native host, run .\scripts\uninstall-native-host.ps1. Remove the browser extension separately in the browser UI.'
+          ) | Set-Content -Path "$companion/INSTALL.txt" -Encoding utf8
+          $requiredCompanionFiles = @(
+            "$companion/chromium/manifest.json",
+            "$companion/chromium/dist/service-worker.js",
+            "$companion/chromium/dist/media-observer.js",
+            "$companion/firefox/manifest.json",
+            "$companion/firefox/dist/service-worker.js",
+            "$companion/firefox/dist/media-observer.js",
+            "$companion/native-host/Scrobblix.NativeHost.exe",
+            "$companion/scripts/install-native-host.ps1",
+            "$companion/scripts/uninstall-native-host.ps1",
+            "$companion/INSTALL.txt"
+          )
+          foreach ($requiredFile in $requiredCompanionFiles) {
+            if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
+              throw "Browser companion artifact is missing required file: $requiredFile"
+            }
+          }
+          Compress-Archive -Path "$companion/*" -DestinationPath 'artifacts/Scrobblix-BrowserCompanion.zip' -Force
+
       - name: Upload Windows test bundle
         uses: actions/upload-artifact@v4
         with:
           name: Scrobblix-Windows-TestBundle
           path: artifacts/Scrobblix-Windows-TestBundle.zip
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload browser companion package
+        uses: actions/upload-artifact@v4
+        with:
+          name: Scrobblix-BrowserCompanion
+          path: artifacts/Scrobblix-BrowserCompanion.zip
           if-no-files-found: error
           retention-days: 14
