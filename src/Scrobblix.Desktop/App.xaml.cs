@@ -21,28 +21,15 @@ using Scrobblix.Windows;
 
 namespace Scrobblix.Desktop;
 
-public partial class App : Microsoft.UI.Xaml.Application, IDisposable
+public partial class App : Microsoft.UI.Xaml.Application
 {
     private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
-    private TrayIconService? _trayIcon;
-    private ScrobblixNotificationService? _notificationService;
     private ScrobblixUserPreferences _userPreferences = new(false);
 
     public App()
     {
         InitializeComponent();
-    }
-
-    public void Dispose()
-    {
-        var tray = _trayIcon;
-        _trayIcon = null;
-        tray?.Dispose();
-
-        var notifications = _notificationService;
-        _notificationService = null;
-        notifications?.Dispose();
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -52,11 +39,16 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
         ScrobblixFileLogger? fileLogger = null;
+        TrayIconService? trayIcon = null;
+        ScrobblixNotificationService? notificationService = null;
         _window.Closed += (_, _) =>
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
-            Dispose();
+            trayIcon?.Dispose();
+            trayIcon = null;
+            notificationService?.Dispose();
+            notificationService = null;
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
@@ -74,12 +66,12 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             try
             {
-                _trayIcon = new TrayIconService(_window);
+                trayIcon = new TrayIconService(_window);
                 logger.Info("TRAY", "Notification-area icon installed. Minimizing hides the window; double-click the icon to restore it, or right-click to exit.");
             }
             catch (Exception exception)
             {
-                _trayIcon = null;
+                trayIcon = null;
                 logger.Warning("TRAY", $"Notification-area icon could not be installed; exception={exception.GetType().Name}; hresult={exception.HResult}. Normal window operation remains available.");
             }
 
@@ -97,16 +89,23 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             _window.SetNotificationTrackDetailsEnabled(_userPreferences.IncludeTrackDetailsInNotifications);
             try
             {
-                _notificationService = new ScrobblixNotificationService(
+                notificationService = new ScrobblixNotificationService(
                     message => logger.Info("NOTIFICATIONS", message),
-                    RestoreWindowFromNotification);
-                _notificationService.SetIncludeTrackDetails(_userPreferences.IncludeTrackDetailsInNotifications);
-                _notificationService.SetEnabled(_userPreferences.DesktopNotificationsEnabled);
+                    () =>
+                    {
+                        var window = _window;
+                        if (window is not null)
+                        {
+                            _ = window.DispatcherQueue.TryEnqueue(() => trayIcon?.RestoreFromNotification());
+                        }
+                    });
+                notificationService.SetIncludeTrackDetails(_userPreferences.IncludeTrackDetailsInNotifications);
+                notificationService.SetEnabled(_userPreferences.DesktopNotificationsEnabled);
             }
             catch (Exception exception)
             {
-                _notificationService?.Dispose();
-                _notificationService = null;
+                notificationService?.Dispose();
+                notificationService = null;
                 _userPreferences = _userPreferences with { DesktopNotificationsEnabled = false };
                 _window.SetDesktopNotificationsEnabled(false);
                 _window.SetDesktopNotificationsStatus("Windows notifications could not be registered on this PC. Tracking and scrobbling still work.");
@@ -117,14 +116,14 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             {
                 try
                 {
-                    if (_notificationService is null)
+                    if (notificationService is null)
                     {
                         throw new InvalidOperationException("The Windows notification service is unavailable.");
                     }
 
                     var updatedPreferences = _userPreferences with { DesktopNotificationsEnabled = enabled };
                     await ScrobblixUserPreferences.SaveAsync(dataDirectory, updatedPreferences, applicationCancellation.Token);
-                    _notificationService.SetEnabled(enabled);
+                    notificationService.SetEnabled(enabled);
                     _userPreferences = updatedPreferences;
                     _window.SetDesktopNotificationsEnabled(enabled);
                     _window.SetDesktopNotificationsStatus(enabled
@@ -134,7 +133,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 }
                 catch (Exception exception)
                 {
-                    try { _notificationService?.SetEnabled(false); }
+                    try { notificationService?.SetEnabled(false); }
                     catch (Exception disableException)
                     {
                         logger.Warning("NOTIFICATIONS", $"Could not roll back a failed notification setting; exception={disableException.GetType().Name}.");
@@ -162,7 +161,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 try
                 {
                     await ScrobblixUserPreferences.SaveAsync(dataDirectory, updatedPreferences, applicationCancellation.Token);
-                    _notificationService?.SetIncludeTrackDetails(includeDetails);
+                    notificationService?.SetIncludeTrackDetails(includeDetails);
                     _userPreferences = updatedPreferences;
                     _window.SetNotificationTrackDetailsEnabled(includeDetails);
                     logger.Info("PREFERENCES", $"Updated notification track-detail privacy; include_details={includeDetails}.");
@@ -330,24 +329,13 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             };
             StartTracking();
 
-            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, applicationCancellation.Token);
+            ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, () => notificationService, applicationCancellation.Token);
         }
         catch (Exception exception)
         {
             fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
             _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
         }
-    }
-
-    private void RestoreWindowFromNotification()
-    {
-        var window = _window;
-        if (window is null)
-        {
-            return;
-        }
-
-        _ = window.DispatcherQueue.TryEnqueue(() => _trayIcon?.RestoreFromNotification());
     }
 
     private void ConfigureLastFm(
@@ -359,6 +347,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         bool credentialsFromCredentialLocker,
         TrackMetadataEnricher metadataEnricher,
         ScrobblixFileLogger logger,
+        Func<ScrobblixNotificationService?> getNotificationService,
         CancellationToken cancellationToken)
     {
         const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
@@ -394,11 +383,11 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
                     if (outcome == ProviderActionState.Accepted)
                     {
-                        _notificationService?.NotifyScrobbleAccepted(action.Artist, action.Title);
+                        getNotificationService()?.NotifyScrobbleAccepted(action.Artist, action.Title);
                     }
                     else
                     {
-                        _notificationService?.NotifyDeliveryNeedsAttention(action.Artist, action.Title, outcome, reasonCode);
+                        getNotificationService()?.NotifyDeliveryNeedsAttention(action.Artist, action.Title, outcome, reasonCode);
                     }
                 });
             metadataEnricher.UpdateLastFmApiKey(configuration.ApiKey);
