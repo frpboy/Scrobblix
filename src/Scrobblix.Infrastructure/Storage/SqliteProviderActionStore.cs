@@ -193,25 +193,54 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         var retryDue = completedUtc.Add(effectiveRetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
-        await using var command = connection.CreateCommand();
-        command.CommandText = """
-            UPDATE provider_actions
-            SET state = $state, lease_owner = NULL, lease_expires_utc = NULL,
-                last_reason_code = $reason, updated_utc = $completed,
-                due_utc = CASE WHEN $state = $retry THEN $retryDue ELSE due_utc END,
-                completed_utc = CASE WHEN $state = $retry THEN NULL ELSE $completed END
-            WHERE action_id = $actionId AND state = $inFlight;
-            """;
-        command.Parameters.AddWithValue("$state", (int)outcome);
-        command.Parameters.AddWithValue("$reason", reasonCode);
-        command.Parameters.AddWithValue("$completed", completed);
-        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
-        command.Parameters.AddWithValue("$retryDue", retryDue);
-        command.Parameters.AddWithValue("$actionId", actionId);
-        command.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
-        if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+        await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+        await using (var command = connection.CreateCommand())
         {
-            throw new InvalidOperationException("Provider action completion was rejected.");
+            command.Transaction = transaction;
+            command.CommandText = """
+                UPDATE provider_actions
+                SET state = $state, lease_owner = NULL, lease_expires_utc = NULL,
+                    last_reason_code = $reason, updated_utc = $completed,
+                    due_utc = CASE WHEN $state = $retry THEN $retryDue ELSE due_utc END,
+                    completed_utc = CASE WHEN $state = $retry THEN NULL ELSE $completed END
+                WHERE action_id = $actionId AND state = $inFlight;
+                """;
+            command.Parameters.AddWithValue("$state", (int)outcome);
+            command.Parameters.AddWithValue("$reason", reasonCode);
+            command.Parameters.AddWithValue("$completed", completed);
+            command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+            command.Parameters.AddWithValue("$retryDue", retryDue);
+            command.Parameters.AddWithValue("$actionId", actionId);
+            command.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
+            if (await command.ExecuteNonQueryAsync(cancellationToken) != 1)
+            {
+                throw new InvalidOperationException("Provider action completion was rejected.");
+            }
         }
+
+        if (outcome == ProviderActionState.Accepted)
+        {
+            await using var lovedCommand = connection.CreateCommand();
+            lovedCommand.Transaction = transaction;
+            lovedCommand.CommandText = """
+                UPDATE loved_tracks
+                SET provider_loved = CASE
+                    (SELECT action_type FROM provider_actions WHERE action_id = $actionId)
+                    WHEN $love THEN 1
+                    WHEN $unlove THEN 0
+                    ELSE provider_loved
+                END
+                WHERE track_key = (
+                    SELECT track_key FROM provider_actions
+                    WHERE action_id = $actionId AND action_type IN ($love, $unlove)
+                );
+                """;
+            lovedCommand.Parameters.AddWithValue("$actionId", actionId);
+            lovedCommand.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+            lovedCommand.Parameters.AddWithValue("$unlove", (int)ProviderActionType.Unlove);
+            await lovedCommand.ExecuteNonQueryAsync(cancellationToken);
+        }
+
+        await transaction.CommitAsync(cancellationToken);
     }
 }
