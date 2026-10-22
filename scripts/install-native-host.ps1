@@ -1,17 +1,16 @@
-# Scrobblix native messaging host setup for Chrome and Microsoft Edge.
-# Run after building/publishing Scrobblix.NativeHost and loading the extension unpacked.
+# Scrobblix native messaging host setup for Chrome, Edge, and optional Firefox.
+# Run after publishing Scrobblix.NativeHost and loading the corresponding unpacked extension.
 [CmdletBinding()]
 param(
-    [Parameter(Mandatory = $true)]
-    [ValidatePattern('^[a-p]{32}$')]
+    [Parameter()]
     [string]$ExtensionId,
 
     [Parameter(Mandatory = $true)]
     [ValidateScript({ Test-Path -LiteralPath $_ -PathType Container })]
     [string]$NativeHostPublishDirectory,
 
-    [switch]$RegisterEdge = $true,
-    [switch]$RegisterChrome = $true,
+    [switch]$RegisterChrome,
+    [switch]$RegisterEdge,
 
     [Parameter()]
     [ValidateLength(1, 255)]
@@ -22,6 +21,23 @@ param(
 
 $ErrorActionPreference = 'Stop'
 
+# Backwards-compatible convenience: an ID with no explicit browser switches registers Chrome + Edge.
+# Firefox-only mode does not require a Chromium extension ID.
+$registerChromium = $RegisterChrome.IsPresent -or $RegisterEdge.IsPresent
+if (-not $RegisterChrome.IsPresent -and -not $RegisterEdge.IsPresent -and -not $RegisterFirefox.IsPresent -and
+    -not [string]::IsNullOrWhiteSpace($ExtensionId)) {
+    $RegisterChrome = $true
+    $RegisterEdge = $true
+    $registerChromium = $true
+}
+
+if (-not $registerChromium -and -not $RegisterFirefox.IsPresent) {
+    throw 'Choose at least one target: pass -ExtensionId for Chrome/Edge, or use -RegisterFirefox.'
+}
+if ($registerChromium -and $ExtensionId -notmatch '^[a-p]{32}$') {
+    throw 'A valid 32-character Chromium extension ID is required when registering Chrome or Edge.'
+}
+
 $sourceDirectory = (Resolve-Path -LiteralPath $NativeHostPublishDirectory).Path
 $sourceExecutable = Join-Path $sourceDirectory 'Scrobblix.NativeHost.exe'
 if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
@@ -31,29 +47,34 @@ if (-not (Test-Path -LiteralPath $sourceExecutable -PathType Leaf)) {
 $destinationDirectory = Join-Path $env:LOCALAPPDATA 'Scrobblix\NativeHost'
 New-Item -ItemType Directory -Path $destinationDirectory -Force | Out-Null
 Copy-Item -Path (Join-Path $sourceDirectory '*') -Destination $destinationDirectory -Recurse -Force
-
 $installedExecutable = Join-Path $destinationDirectory 'Scrobblix.NativeHost.exe'
-$manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
-$manifest = [ordered]@{
-    name = 'com.frpboy.scrobblix'
-    description = 'Scrobblix local playback metadata bridge'
-    path = $installedExecutable
-    type = 'stdio'
-    allowed_origins = @("chrome-extension://$ExtensionId/")
-}
-$manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+$trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
 
-$registryPaths = [System.Collections.Generic.List[string]]::new()
-if ($RegisterChrome) {
-    $registryPaths.Add('HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix')
-}
-if ($RegisterEdge) {
-    $registryPaths.Add('HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix')
-}
+if ($registerChromium) {
+    $manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
+    $manifest = [ordered]@{
+        name = 'com.frpboy.scrobblix'
+        description = 'Scrobblix local playback metadata bridge'
+        path = $installedExecutable
+        type = 'stdio'
+        allowed_origins = @("chrome-extension://$ExtensionId/")
+    }
+    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
 
-foreach ($registryPath in $registryPaths) {
-    New-Item -Path $registryPath -Force | Out-Null
-    Set-Item -LiteralPath $registryPath -Value $manifestPath
+    if ($RegisterChrome) {
+        $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
+        New-Item -Path $registryPath -Force | Out-Null
+        Set-Item -LiteralPath $registryPath -Value $manifestPath
+    }
+    if ($RegisterEdge) {
+        $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
+        New-Item -Path $registryPath -Force | Out-Null
+        Set-Item -LiteralPath $registryPath -Value $manifestPath
+    }
+
+    New-Item -Path $trustPath -Force | Out-Null
+    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value $ExtensionId -Type String
+    Write-Host "Chromium extension ID allow-listed: $ExtensionId"
 }
 
 if ($RegisterFirefox) {
@@ -70,18 +91,11 @@ if ($RegisterFirefox) {
     New-Item -Path $firefoxRegistryPath -Force | Out-Null
     Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
 
-    $trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
     New-Item -Path $trustPath -Force | Out-Null
     Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
     Write-Host "Firefox extension ID allow-listed: $FirefoxExtensionId"
 }
 
-$trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
-New-Item -Path $trustPath -Force | Out-Null
-Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value $ExtensionId -Type String
-
-Write-Host 'Scrobblix native messaging host registered.'
-Write-Host "Extension ID allow-listed: $ExtensionId"
+Write-Host 'Scrobblix native messaging host registration updated.'
 Write-Host "Native host: $installedExecutable"
-Write-Host "Manifest: $manifestPath"
-Write-Host 'Restart your browser completely before testing the companion.'
+Write-Host 'Restart any registered browser completely before testing the companion.'
