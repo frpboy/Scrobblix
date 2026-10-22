@@ -18,7 +18,7 @@ public sealed class SqliteQueueReader(string connectionString)
                 COALESCE(SUM(CASE WHEN state = $accepted THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN state = $retry THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN state = $authBlocked THEN 1 ELSE 0 END), 0),
-                COALESCE(SUM(CASE WHEN state = $permanentFailure THEN 1 ELSE 0 END), 0),
+                COALESCE(SUM(CASE WHEN state IN ($permanentFailure, $retryExhausted) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN state = $outcomeUnknown THEN 1 ELSE 0 END), 0)
             FROM provider_actions;
             """;
@@ -28,6 +28,7 @@ public sealed class SqliteQueueReader(string connectionString)
         command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
         command.Parameters.AddWithValue("$authBlocked", (int)ProviderActionState.AuthBlocked);
         command.Parameters.AddWithValue("$permanentFailure", (int)ProviderActionState.PermanentFailure);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
         command.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);
         await reader.ReadAsync(cancellationToken);

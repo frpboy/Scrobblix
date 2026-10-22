@@ -90,6 +90,14 @@ public partial class App : Microsoft.UI.Xaml.Application
                 await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
                 return changed;
             };
+            _window.QueueConfirmOutcomeAcceptedRequested += async actionId =>
+            {
+                var changed = await new SqliteProviderActionStore(connectionString)
+                    .ConfirmOutcomeAcceptedAsync(actionId, DateTimeOffset.UtcNow, applicationCancellation.Token);
+                logger.Warning("QUEUE_ACTION", $"User resolved ambiguous Last.fm submission as accepted; action_id={actionId}; changed={changed}.");
+                await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
+                return changed;
+            };
             var accountStore = new SqliteProviderAccountStore(connectionString);
             var credentialStore = new WindowsCredentialStore();
             _window.LovedTrackActionRequested += async (playId, actionType) =>

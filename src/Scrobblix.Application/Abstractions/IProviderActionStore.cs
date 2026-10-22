@@ -16,6 +16,8 @@ public interface IProviderActionStore
 
     Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
 
+    Task<bool> ConfirmOutcomeAcceptedAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+
     Task CompleteAsync(
         string actionId,
         ProviderActionState outcome,

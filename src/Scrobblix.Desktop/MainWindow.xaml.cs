@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     public event Func<string, Task<bool>>? QueueRetryNowRequested;
 
     public event Func<string, Task<bool>>? QueueCancelRequested;
+    public event Func<string, Task<bool>>? QueueConfirmOutcomeAcceptedRequested;
 
     public event Func<string, ProviderActionType, Task<bool>>? LovedTrackActionRequested;
 
@@ -440,18 +441,34 @@ public sealed partial class MainWindow : Window
             }
 
             var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
-            if (action.State == ProviderActionState.RetryScheduled)
+            if (action.State is ProviderActionState.RetryScheduled or ProviderActionState.RetryExhausted)
             {
                 var retryButton = new Button
                 {
-                    Content = "Retry now",
+                    Content = action.State == ProviderActionState.RetryExhausted ? "Retry manually" : "Retry now",
                     Tag = action.ActionId,
                 };
                 retryButton.Click += QueueRetryNowButton_Click;
                 actionsRow.Children.Add(retryButton);
             }
 
-            if (action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled or ProviderActionState.AuthBlocked)
+            if (action.State == ProviderActionState.SubmissionOutcomeUnknown)
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = "Last.fm may have accepted this scrobble before the connection failed. Check your Last.fm profile before choosing a recovery action to avoid duplicates.",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                });
+                var confirmAcceptedButton = new Button { Content = "Confirm accepted", Tag = action.ActionId };
+                confirmAcceptedButton.Click += QueueConfirmOutcomeAcceptedButton_Click;
+                actionsRow.Children.Add(confirmAcceptedButton);
+                var retryAnywayButton = new Button { Content = "Retry anyway…", Tag = action.ActionId };
+                retryAnywayButton.Click += QueueRetryUnknownOutcomeButton_Click;
+                actionsRow.Children.Add(retryAnywayButton);
+            }
+
+            if (action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled or ProviderActionState.AuthBlocked or ProviderActionState.RetryExhausted or ProviderActionState.SubmissionOutcomeUnknown)
             {
                 var cancelButton = new Button
                 {
@@ -471,6 +488,8 @@ public sealed partial class MainWindow : Window
     private static string FormatQueueState(ProviderActionState state) => state switch
     {
         ProviderActionState.RetryScheduled => "Retry scheduled",
+        ProviderActionState.RetryExhausted => "Automatic retries exhausted",
+        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown — review required",
         ProviderActionState.AuthBlocked => "Authentication blocked",
         ProviderActionState.PermanentFailure => "Failed",
         ProviderActionState.ProviderIgnored => "Ignored by provider",

@@ -7,6 +7,19 @@ namespace Scrobblix.Application.Queue;
 
 public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IScrobbleProvider provider, Action<string>? log = null)
 {
+    private const int MaximumAutomaticAttempts = 8;
+    private static readonly TimeSpan MaximumRetryAfter = TimeSpan.FromHours(24);
+    private static TimeSpan GetRetryDelay(int attemptCount, TimeSpan? providerRetryAfter)
+    {
+        if (providerRetryAfter is { } hint && hint > TimeSpan.Zero)
+        {
+            return hint > MaximumRetryAfter ? MaximumRetryAfter : hint;
+        }
+
+        var exponent = Math.Clamp(attemptCount - 1, 0, 6);
+        return TimeSpan.FromMinutes(Math.Min(60, 1 << exponent));
+    }
+
     public async Task<bool> ProcessNextAsync(
         string workerId,
         string sessionKey,
@@ -47,11 +60,19 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
                 ? ProviderActionState.AuthBlocked
                 : result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown
                     ? ProviderActionState.SubmissionOutcomeUnknown
-                    : result.IsTransient
-                        ? ProviderActionState.RetryScheduled
-                        : ProviderActionState.PermanentFailure;
-        await actionStore.CompleteAsync(action.ActionId, outcome, result.ReasonCode, nowUtc, cancellationToken, result.RetryAfter);
-        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={result.ReasonCode}; response_utc={nowUtc:O}.");
+                    : result.IsTransient && action.AttemptCount >= MaximumAutomaticAttempts
+                        ? ProviderActionState.RetryExhausted
+                        : result.IsTransient
+                            ? ProviderActionState.RetryScheduled
+                            : ProviderActionState.PermanentFailure;
+        var persistedReason = outcome == ProviderActionState.RetryExhausted
+            ? ReasonCodes.Provider.RetryExhausted
+            : result.ReasonCode;
+        var retryAfter = outcome == ProviderActionState.RetryScheduled
+            ? GetRetryDelay(action.AttemptCount, result.RetryAfter)
+            : null;
+        await actionStore.CompleteAsync(action.ActionId, outcome, persistedReason, nowUtc, cancellationToken, retryAfter);
+        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={persistedReason}; provider_reason={result.ReasonCode}; retry_after_seconds={retryAfter?.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)"}; response_utc={nowUtc:O}.");
         return true;
     }
 }

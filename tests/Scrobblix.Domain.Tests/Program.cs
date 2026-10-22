@@ -253,6 +253,11 @@ await actionStore.CompleteAsync(unknownQueueLease!.ActionId, ProviderActionState
 var queueWithUnknownOutcome = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueWithUnknownOutcome.SubmissionOutcomeUnknownCount == 1,
     "The durable queue reader surfaces ambiguous submission outcomes separately from retryable and permanently failed actions.");
+Assert(await actionStore.ConfirmOutcomeAcceptedAsync(unknownQueueLease.ActionId, observation.ObservedAtUtc.AddHours(1).AddSeconds(1), CancellationToken.None),
+    "A manually verified ambiguous submission can be marked accepted without resending it.");
+var queueAfterManualResolution = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
+Assert(queueAfterManualResolution.SubmissionOutcomeUnknownCount == 0,
+    "Manually resolved outcomes no longer remain in the unknown queue count.");
 
 var localMidday = new DateTimeOffset(DateTime.Today.AddHours(12)).AddMinutes(-10);
 var todayRecord = historyRecord with
@@ -379,6 +384,23 @@ Assert(await retryAfterProcessor.ProcessNextAsync("worker-rate-limit", "session-
     && retryAfterStore.CompletedRetryAfter == TimeSpan.FromSeconds(27),
     "Provider Retry-After hints are passed to durable queue scheduling.");
 
+var backoffStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-backoff", AttemptCount = 3 });
+var backoffProcessor = new ProviderActionProcessor(
+    backoffStore,
+    new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.TemporaryUnavailable, true)));
+Assert(await backoffProcessor.ProcessNextAsync("worker-backoff", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && backoffStore.CompletedState == ProviderActionState.RetryScheduled
+    && backoffStore.CompletedRetryAfter == TimeSpan.FromMinutes(4),
+    "Transient failures use capped exponential backoff when the provider supplies no Retry-After value.");
+
+var exhaustedStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-exhausted", AttemptCount = 8 });
+var exhaustedProcessor = new ProviderActionProcessor(
+    exhaustedStore,
+    new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.TemporaryUnavailable, true)));
+Assert(await exhaustedProcessor.ProcessNextAsync("worker-exhausted", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && exhaustedStore.CompletedState == ProviderActionState.RetryExhausted,
+    "Repeated transient failures stop automatic retries after the configured attempt limit.");
+
 var loveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-love", ActionType = ProviderActionType.Love });
 var loveProvider = new AcceptingScrobbleProvider();
 var loveProcessor = new ProviderActionProcessor(loveActionStore, loveProvider);
@@ -504,6 +526,8 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
     public Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
 
     public Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    public Task<bool> ConfirmOutcomeAcceptedAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
 
     public Task CompleteAsync(string actionId, ProviderActionState outcome, string reasonCode, DateTimeOffset completedUtc, CancellationToken cancellationToken, TimeSpan? retryAfter = null)
     {

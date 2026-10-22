@@ -11,4 +11,5 @@ public enum ProviderActionState
     PermanentFailure,
     Cancelled,
     SubmissionOutcomeUnknown,
+    RetryExhausted,
 }
