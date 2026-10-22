@@ -8,6 +8,7 @@ using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
+using Scrobblix.Domain.Diagnostics;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
@@ -22,6 +23,9 @@ public sealed partial class MainWindow : Window
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
+    private IReadOnlyList<QueueActionSummary> _queueActions = Array.Empty<QueueActionSummary>();
+    private PlayObservation? _displayedObservation;
+    private PlaybackTrackingStatus? _displayedTrackingStatus;
 
     public event Action<bool>? TrackingModeChanged;
 
@@ -94,6 +98,8 @@ public sealed partial class MainWindow : Window
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         _displayedPlayId = trackingStatus.PlayId;
+        _displayedObservation = observation;
+        _displayedTrackingStatus = trackingStatus;
         UpdateLovedButtons();
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
@@ -107,6 +113,7 @@ public sealed partial class MainWindow : Window
         EligibilityDetailText.Text = threshold is > 0
             ? $"Confirmed listening time: {FormatDuration(trackingStatus.ConfirmedPlayedMilliseconds)} / {FormatDuration(threshold.Value)}."
             : "Confirmed listening time is unavailable until a supported track has a known duration.";
+        UpdateScrobbleStatus();
         SetStartupStatus(
             observation.PlaybackState == PlayState.Playing
                 ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
@@ -594,10 +601,12 @@ public sealed partial class MainWindow : Window
 
     public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
     {
+        _queueActions = actions;
         QueuePageActionList.Children.Clear();
         if (actions.Count == 0)
         {
             QueuePageActionList.Children.Add(new TextBlock { Text = "No provider actions have been recorded yet." });
+            UpdateScrobbleStatus();
             return;
         }
 
@@ -680,6 +689,8 @@ public sealed partial class MainWindow : Window
             card.Child = content;
             QueuePageActionList.Children.Add(card);
         }
+
+        UpdateScrobbleStatus();
     }
 
     private static string FormatQueueState(ProviderActionState state) => state switch
@@ -1049,7 +1060,122 @@ public sealed partial class MainWindow : Window
                 ? "Tracking resumed. Checking Windows media controls."
                 : "Tracking paused. Local history and queued actions are unchanged.",
             InfoBarSeverity.Informational);
+        UpdateScrobbleStatus();
         TrackingModeChanged?.Invoke(_trackingMode.IsEnabled);
+    }
+
+    private void UpdateScrobbleStatus()
+    {
+        if (!_trackingMode.IsEnabled)
+        {
+            ScrobbleStatusText.Text = "Tracking paused";
+            return;
+        }
+
+        if (_displayedObservation is not { } observation || _displayedTrackingStatus is not { } trackingStatus)
+        {
+            ScrobbleStatusText.Text = "Waiting for supported playback";
+            return;
+        }
+
+        var playId = trackingStatus.PlayId;
+        var action = string.IsNullOrWhiteSpace(playId)
+            ? null
+            : _queueActions
+                .Where(item => string.Equals(item.PlayId, playId, StringComparison.Ordinal)
+                    && string.Equals(item.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
+                    && item.ActionType == ProviderActionType.Scrobble)
+                .OrderByDescending(item => item.AttemptCount)
+                .ThenByDescending(item => item.DueUtc)
+                .FirstOrDefault();
+
+        if (action is not null)
+        {
+            ScrobbleStatusText.Text = action.State switch
+            {
+                ProviderActionState.Accepted => "Sent to Last.fm",
+                ProviderActionState.Pending or ProviderActionState.InFlight or ProviderActionState.RetryScheduled
+                    => "Queued safely — waiting for Last.fm",
+                ProviderActionState.AuthBlocked
+                    => "Queued safely — reconnect Last.fm to resume delivery",
+                ProviderActionState.ProviderIgnored
+                    => "Not scrobbled — Last.fm ignored this track",
+                ProviderActionState.PermanentFailure or ProviderActionState.RetryExhausted
+                    => "Delivery needs attention — open Queue for recovery options",
+                ProviderActionState.SubmissionOutcomeUnknown
+                    => "Delivery uncertain — check Last.fm and review Queue before retrying",
+                ProviderActionState.Cancelled => "Queue action cancelled",
+                _ => "Last.fm delivery status is being checked",
+            };
+            return;
+        }
+
+        var decision = trackingStatus.Decision;
+        if (decision.IsEligible)
+        {
+            ScrobbleStatusText.Text = _isLastFmConnected
+                ? "Eligible — checking Last.fm delivery status"
+                : "Eligible — connect Last.fm to submit this play";
+            return;
+        }
+
+        if (decision.ReasonCode == ReasonCodes.Playback.Advertisement)
+        {
+            ScrobbleStatusText.Text = "Not eligible — advertisement playback is ignored";
+            return;
+        }
+
+        if (decision.ReasonCode == ReasonCodes.Playback.TrackTooShort)
+        {
+            ScrobbleStatusText.Text = "Not eligible — this track is too short to scrobble";
+            return;
+        }
+
+        if (decision.ReasonCode == ReasonCodes.Duplicate.ProviderActionExists)
+        {
+            ScrobbleStatusText.Text = "A Last.fm action already exists for this play — check Queue";
+            return;
+        }
+
+        if (decision.ThresholdMilliseconds is > 0 threshold)
+        {
+            var remaining = Math.Max(0L, threshold - trackingStatus.ConfirmedPlayedMilliseconds);
+            if (observation.PlaybackState == PlayState.Ended)
+            {
+                ScrobbleStatusText.Text = "Not eligible — played too briefly";
+            }
+            else if (observation.PlaybackState == PlayState.Paused)
+            {
+                ScrobbleStatusText.Text = $"Paused — eligible in {FormatDuration(remaining)}";
+            }
+            else if (observation.PlaybackState == PlayState.Playing)
+            {
+                ScrobbleStatusText.Text = $"Listening — eligible in {FormatDuration(remaining)}";
+            }
+            else
+            {
+                ScrobbleStatusText.Text = $"Eligibility needs {FormatDuration(remaining)} more confirmed listening";
+            }
+
+            return;
+        }
+
+        ScrobbleStatusText.Text = decision.ReasonCode switch
+        {
+            ReasonCodes.Metadata.MissingArtist or ReasonCodes.Metadata.MissingTitle
+                => "Waiting for track details — artist and title are required",
+            ReasonCodes.Playback.DurationUnknown or ReasonCodes.Metadata.InvalidDuration
+                => "Waiting for a valid track duration",
+            ReasonCodes.Playback.NonMusic
+                => "Not eligible — this playback is not classified as music",
+            ReasonCodes.Source.ExcludedByUser
+                => "Not eligible — this source is excluded in Settings",
+            ReasonCodes.Duplicate.MergedSources
+                => "Duplicate source event merged — no new scrobble created",
+            ReasonCodes.Playback.SourceLostBeforeEligibility
+                => "Playback source was lost before eligibility; waiting for another update",
+            _ => "Waiting for enough confirmed listening to determine eligibility",
+        };
     }
 
     private static string FormatDuration(long milliseconds) =>
