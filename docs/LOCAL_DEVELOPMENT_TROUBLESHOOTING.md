@@ -75,15 +75,28 @@ If launch fails with 0x80040154 Class not registered, install/register the Windo
 
 Missing artwork must not stop playback or scrobbling. Check logs for metadata provider, HTTP status and cache. A player icon means no usable cover was provided; the branded placeholder means no fallback returned an image. Report wrong art with artist/title/album/source only—never attach token-bearing URLs.
 
-## 6. Browser companion / Native Messaging
+## 6. Build and register the browser companion
 
-1. Build with npm --prefix browser-extension ci, npm --prefix browser-extension run check and npm --prefix browser-extension run build.
-2. Validate with node scripts/validate-browser-manifests.mjs.
-3. Load the extension unpacked and register the browser's actual ID with scripts/install-native-host.ps1.
-4. Restart browser and Scrobblix, play supported media and confirm the event in Sources/Diagnostics.
-5. Use scripts/uninstall-native-host.ps1 to remove registration.
+From the source clone, build the standalone development package:
 
-The CI bundle must preserve browser-extension/dist/ and browser-extension-firefox/dist/ because both manifests refer to those paths.
+```powershell
+.\scripts\setup-browser-companion.ps1
+```
+
+Load `artifacts\Scrobblix\BrowserCompanion\chromium` in Chrome or Edge via the browser's extensions page with Developer mode enabled. Copy the exact extension ID displayed by each browser, then register the host from the source clone:
+
+```powershell
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Chrome -ExtensionId "ACTUAL_CHROME_ID"
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Edge -ExtensionId "ACTUAL_EDGE_ID"
+```
+
+For both browsers, pass both IDs in a single invocation so the allow-list and native-host manifest stay in sync:
+
+```powershell
+.\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser ChromeAndEdge -ExtensionId @("CHROME_ID","EDGE_ID")
+```
+
+For Firefox run `.\scripts\setup-browser-companion.ps1 -Browser Firefox`, then load `artifacts\Scrobblix\BrowserCompanion\firefox\manifest.json` as a temporary add-on from `about:debugging#/runtime/this-firefox`. A `-RegisterOnly` run is available when the package is already built. Restart browser and Scrobblix, play supported media and confirm the event in Sources/Diagnostics.
 
 ## 7. Logs and safe reports
 
