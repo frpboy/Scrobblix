@@ -34,7 +34,7 @@ The following capability surfaces or implementation paths exist in the codebase.
 - [ ] Test backup/restore against a disposable copy of non-production data, including corrupt archive, wrong schema, checksum mismatch and safety-snapshot restore.
 - [ ] Review Native Messaging sender identity, framed message size/rate limits, message schema, allow-list fail-closed behavior, per-user registry/manifest ACLs, executable path trust and uninstall cleanup.
 - [ ] Verify Chrome, Edge and Firefox event delivery, restart/reload/reconnect and source arbitration. Browser integration remains optional for desktop Spotify if GSMTC supplies sufficient metadata.
-- [ ] Add a support-bundle export with preview and strict redaction tests: exclude Last.fm API/shared secrets, session keys, full listening DB/history, artwork cache, arbitrary full URLs, usernames and raw dumps by default.
+- [ ] Qualify the diagnostics export with seeded canary secrets and path/track metadata; verify the ZIP contains only the four allow-listed entries and no raw log messages. Test Save-dialog cancellation, filesystem failure, archive integrity/hash and accessibility.
 - [ ] Verify Explorer restart/tray recovery, notification privacy/activation, lock-screen behavior, clean shutdown and crash/restart.
 - [ ] Run keyboard, Narrator, contrast, DPI/scaling and responsive-layout checks on real Windows.
 
