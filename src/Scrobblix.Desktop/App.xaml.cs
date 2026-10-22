@@ -21,7 +21,7 @@ using Scrobblix.Windows;
 
 namespace Scrobblix.Desktop;
 
-public partial class App : Microsoft.UI.Xaml.Application
+public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 {
     private static long _lastDashboardRefreshUtcTicks;
     private MainWindow? _window;
@@ -32,6 +32,17 @@ public partial class App : Microsoft.UI.Xaml.Application
     public App()
     {
         InitializeComponent();
+    }
+
+    public void Dispose()
+    {
+        var tray = _trayIcon;
+        _trayIcon = null;
+        tray?.Dispose();
+
+        var notifications = _notificationService;
+        _notificationService = null;
+        notifications?.Dispose();
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -45,10 +56,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
-            _trayIcon?.Dispose();
-            _trayIcon = null;
-            _notificationService?.Dispose();
-            _notificationService = null;
+            Dispose();
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
