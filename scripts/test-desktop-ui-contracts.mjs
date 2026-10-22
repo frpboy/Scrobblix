@@ -84,6 +84,14 @@ for (const view of ["HomeView", "HistoryView", "StatisticsView", "LovedView", "Q
 }
 assert.ok(xaml.includes('Text="Source: not detected"') && xaml.includes('x:Name="CurrentTrackSourceIcon"'), "Unknown playback must retain a readable neutral source fallback.");
 assert.ok(xaml.includes('Content="Show artist and track title in notifications (off by default)"'), "Notification track-detail privacy must remain opt-in.");
+assert.ok(!xaml.includes('Padding="32"'), "Core pages should not waste workspace with the former 32px outer inset.");
+assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth=/g) ?? []).length, 8, "All eight page roots should share the compact 24px / 16px content rhythm.");
+assert.ok(xaml.includes('x:Name="StartupInfo" IsOpen="False" IsClosable="True"'), "Routine startup/playback status must not reserve Home vertical space.");
+assert.ok(code.includes("StartupInfo.IsOpen = isAttention || isTrackingAction;"), "The Home status banner should appear only for attention and explicit pause/resume actions.");
+assert.ok(xaml.includes('<StackPanel Spacing="12">') && xaml.includes('Border Padding="12" CornerRadius="6"'), "Now Playing internal rhythm should be compact without removing the focal card.");
+assert.ok(xaml.includes('Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">\\n                                    <Button x:Name="TrackingToggleButton"'), "Tracking and Love/Unlove actions should share one compact row.");
+assert.ok(!xaml.includes('Border Padding="24"') && !xaml.includes('Border Padding="20"'), "Secondary content cards should use the compact spacing token.");
+
 assert.ok(!xaml.includes("<Storyboard") && !xaml.includes("AcrylicBrush"), "The utility rail must not introduce decorative motion or unsupported new surface treatments.");
 
 console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");
