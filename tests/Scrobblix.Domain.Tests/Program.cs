@@ -41,6 +41,17 @@ Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcd
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)), "Native host forwarding fails closed when no extension ID is registered.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope from a different extension identity.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
+using var firefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"scrobblix@frpboy.in"}""");
+using var otherFirefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"other-addon@example.org"}""");
+var allowedFirefoxNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal) { "scrobblix@frpboy.in" };
+Assert(NativeHostCallerValidator.MatchesFirefoxExtensionId("scrobblix@frpboy.in", firefoxNativeHostEnvelope.RootElement, allowedFirefoxNativeHostExtensions),
+    "Firefox native host forwarding accepts the explicitly allow-listed add-on ID.");
+Assert(!NativeHostCallerValidator.MatchesFirefoxExtensionId("scrobblix@frpboy.in", firefoxNativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)),
+    "Firefox native host forwarding fails closed when no add-on ID is registered.");
+Assert(!NativeHostCallerValidator.MatchesFirefoxExtensionId("scrobblix@frpboy.in", otherFirefoxNativeHostEnvelope.RootElement, allowedFirefoxNativeHostExtensions),
+    "Firefox native host forwarding rejects a payload from a different add-on.");
+Assert(!NativeHostCallerValidator.MatchesFirefoxExtensionId("scrobblix@frpboy.in", incompleteNativeHostEnvelope.RootElement, allowedFirefoxNativeHostExtensions),
+    "Firefox native host forwarding rejects envelopes without an add-on identity.");
 Assert(standardTrack.IsEligible && standardTrack.ThresholdMilliseconds == 150_000, "300-second track becomes eligible at half duration.");
 
 var longTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 900_000, 240_000);
