@@ -20,6 +20,7 @@ public sealed partial class MainWindow : Window
     private string? _displayedPlayId;
     private bool _isLastFmConnected;
     private bool _updatingNotificationPreference;
+    private bool _updatingNotificationPrivacyPreference;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
 
     public event Action<bool>? TrackingModeChanged;
@@ -46,6 +47,8 @@ public sealed partial class MainWindow : Window
     public event Func<string, Task<bool>>? RestoreRequested;
 
     public event Func<bool, Task>? DesktopNotificationsPreferenceChanged;
+
+    public event Func<bool, Task>? NotificationTrackDetailsPreferenceChanged;
 
     private string? _logDirectory;
 
@@ -371,6 +374,52 @@ public sealed partial class MainWindow : Window
 
     public void SetDesktopNotificationsStatus(string status) =>
         DesktopNotificationsStatusText.Text = status;
+
+    public void SetNotificationTrackDetailsEnabled(bool enabled)
+    {
+        _updatingNotificationPrivacyPreference = true;
+        try
+        {
+            NotificationTrackDetailsCheckBox.IsChecked = enabled;
+        }
+        finally
+        {
+            _updatingNotificationPrivacyPreference = false;
+        }
+
+        NotificationPrivacyStatusText.Text = enabled
+            ? "Artist and track title may appear on notification banners and the lock screen."
+            : "Track details are hidden in notification banners and the lock screen.";
+    }
+
+    private async void NotificationTrackDetailsCheckBox_Changed(object sender, RoutedEventArgs args)
+    {
+        if (_updatingNotificationPrivacyPreference) return;
+        var enabled = NotificationTrackDetailsCheckBox.IsChecked == true;
+        var handler = NotificationTrackDetailsPreferenceChanged;
+        if (handler is null)
+        {
+            SetNotificationTrackDetailsEnabled(false);
+            NotificationPrivacyStatusText.Text = "Notification privacy settings are not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        NotificationTrackDetailsCheckBox.IsEnabled = false;
+        try
+        {
+            await handler(enabled);
+        }
+        catch (Exception exception)
+        {
+            SetNotificationTrackDetailsEnabled(false);
+            NotificationPrivacyStatusText.Text = $"Notification privacy preference could not be saved ({exception.GetType().Name}).";
+            DiagnosticLogRequested?.Invoke($"Notification privacy preference update failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            NotificationTrackDetailsCheckBox.IsEnabled = true;
+        }
+    }
 
     private async void DesktopNotificationsCheckBox_Changed(object sender, RoutedEventArgs args)
     {
