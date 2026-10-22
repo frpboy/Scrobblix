@@ -93,6 +93,21 @@ jobs:
               }
             }
           }
+          $crashDumpRoot = Join-Path $env:LOCALAPPDATA 'CrashDumps'
+          if (Test-Path $crashDumpRoot) {
+            Get-ChildItem -Path $crashDumpRoot -Filter '*XamlCompiler*' -File -ErrorAction SilentlyContinue |
+              Select-Object -First 5 FullName, Length, LastWriteTime |
+              Format-Table -AutoSize | Out-String | Write-Output
+          }
+          try {
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 120 -ErrorAction Stop |
+              Where-Object { $_.ProviderName -match 'Application Error|\.NET Runtime|Windows Error Reporting' -and $_.Message -match 'XamlCompiler|Scrobblix' } |
+              Select-Object -First 10 TimeCreated, ProviderName, Id, Message |
+              Format-List | Out-String -Width 220 | Write-Output
+          }
+          catch {
+            Write-Output "Application event-log inspection unavailable: $($_.Exception.GetType().Name)"
+          }
           exit 0
       - name: Validate desktop UI contracts
         run: node scripts/test-desktop-ui-contracts.mjs
