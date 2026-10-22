@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-22
+
+- Fixed deterministic ownership and shutdown of the app's single-instance semaphore, activation event, listener cancellation source and tray icon, including duplicate-instance launch and window-construction failure. Added lifecycle contract assertions and a real-Windows manual test case.
+
 All notable changes to Scrobblix will be documented here. The project follows Semantic Versioning and a Keep-a-Changelog-style structure.
 
 ## [Unreleased]
