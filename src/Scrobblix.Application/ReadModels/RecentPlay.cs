@@ -10,4 +10,10 @@ public sealed record RecentPlay(
     long ConfirmedPlayedMilliseconds,
     DateTimeOffset? EligibleUtc,
     string? TerminalReasonCode,
-    string? ArtworkPath = null);
+    string? ArtworkPath = null,
+    string? AlbumArtist = null,
+    int? TrackNumber = null,
+    int? ReleaseYear = null,
+    string? RecordingMusicBrainzId = null,
+    string? ReleaseMusicBrainzId = null,
+    string? ArtworkSource = null);

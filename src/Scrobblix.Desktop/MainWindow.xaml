@@ -19,7 +19,7 @@
                 <TextBlock Text="Scrobblix" Style="{StaticResource TitleTextBlockStyle}" />
                 <TextBlock Text="Listening companion" Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
-            <NavigationView Grid.Row="1" PaneDisplayMode="LeftMinimal" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
+            <NavigationView x:Name="AppNavigationView" Grid.Row="1" PaneDisplayMode="Left" IsBackButtonVisible="Collapsed" IsSettingsVisible="False" IsPaneToggleButtonVisible="False" SelectionChanged="Navigation_SelectionChanged">
                 <NavigationView.MenuItems>
                     <NavigationViewItem Content="Home" Tag="home" IsSelected="True" />
                     <NavigationViewItem Content="History" Tag="history" />
@@ -86,7 +86,7 @@
                         <StackPanel Spacing="4"><TextBlock Text="Queue" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="QueueStateText" Text="Queue not configured" /><TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Not connected" TextWrapping="Wrap" /><TextBlock Text="Local history can continue without a provider account." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel Spacing="6"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Not connected" TextWrapping="Wrap" /><TextBlock Text="Add your API key and approve account access in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /><Button Content="Configure API key / Login" Click="OpenLastFmSettingsButton_Click" HorizontalAlignment="Left" /></StackPanel>
                     </Border>
                     <Border Grid.Row="1" Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                         <StackPanel Spacing="4"><TextBlock Text="Sources" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="Checking Windows media controls" /><TextBlock Text="Browser Companion support is not configured in this build." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>

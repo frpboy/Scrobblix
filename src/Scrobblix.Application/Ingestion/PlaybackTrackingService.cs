@@ -43,14 +43,20 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore)
             null,
             null,
             null,
-            observation.ArtworkPath);
+            observation.ArtworkPath,
+            observation.AlbumArtist,
+            observation.TrackNumber,
+            observation.ReleaseYear,
+            observation.RecordingMusicBrainzId,
+            observation.ReleaseMusicBrainzId,
+            observation.ArtworkSource);
         await localPlayStore.UpsertAsync(record, cancellationToken);
         if (didPersistEligiblePlay)
         {
             _persistedEligiblePlay = true;
         }
 
-        return new PlaybackTrackingStatus(decision, _tracker.ConfirmedPlayedMilliseconds, didPersistEligiblePlay, didStartPlay);
+        return new PlaybackTrackingStatus(decision, _tracker.ConfirmedPlayedMilliseconds, didPersistEligiblePlay, didStartPlay, _playId);
     }
 
     private static string GetTrackIdentity(PlayObservation observation) => string.Join(

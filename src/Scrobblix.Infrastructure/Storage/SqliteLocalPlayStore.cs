@@ -2,6 +2,7 @@ using System.Globalization;
 using Microsoft.Data.Sqlite;
 using Scrobblix.Application.Abstractions;
 using Scrobblix.Domain.History;
+using Scrobblix.Domain.Metadata;
 
 namespace Scrobblix.Infrastructure.Storage;
 
@@ -30,11 +31,15 @@ public sealed class SqliteLocalPlayStore(string connectionString) : ILocalPlaySt
             INSERT INTO plays (
                 play_id, started_utc, artist, title, album, duration_ms,
                 confirmed_played_ms, eligibility_threshold_ms, eligible_utc,
-                local_status, terminal_reason_code, artwork_path, created_utc, updated_utc)
+                local_status, terminal_reason_code, artwork_path, album_artist,
+                track_number, release_year, recording_mbid, release_mbid, artwork_source,
+                created_utc, updated_utc)
             VALUES (
                 $playId, $startedUtc, $artist, $title, $album, $durationMs,
                 $confirmedMs, $thresholdMs, $eligibleUtc,
-                0, NULL, $artworkPath, $updatedUtc, $updatedUtc)
+                0, NULL, $artworkPath, $albumArtist,
+                $trackNumber, $releaseYear, $recordingMbid, $releaseMbid, $artworkSource,
+                $updatedUtc, $updatedUtc)
             ON CONFLICT(play_id) DO UPDATE SET
                 artist = COALESCE(excluded.artist, plays.artist),
                 title = COALESCE(excluded.title, plays.title),
@@ -48,6 +53,12 @@ public sealed class SqliteLocalPlayStore(string connectionString) : ILocalPlaySt
                     ELSE plays.terminal_reason_code
                 END,
                 artwork_path = COALESCE(excluded.artwork_path, plays.artwork_path),
+                album_artist = COALESCE(excluded.album_artist, plays.album_artist),
+                track_number = COALESCE(excluded.track_number, plays.track_number),
+                release_year = COALESCE(excluded.release_year, plays.release_year),
+                recording_mbid = COALESCE(excluded.recording_mbid, plays.recording_mbid),
+                release_mbid = COALESCE(excluded.release_mbid, plays.release_mbid),
+                artwork_source = COALESCE(excluded.artwork_source, plays.artwork_source),
                 updated_utc = excluded.updated_utc;
             """;
         command.Parameters.AddWithValue("$playId", play.PlayId);
@@ -60,7 +71,44 @@ public sealed class SqliteLocalPlayStore(string connectionString) : ILocalPlaySt
         command.Parameters.AddWithValue("$thresholdMs", (object?)play.Eligibility.ThresholdMilliseconds ?? DBNull.Value);
         command.Parameters.AddWithValue("$eligibleUtc", (object?)eligibleUtc ?? DBNull.Value);
         command.Parameters.AddWithValue("$artworkPath", (object?)play.ArtworkPath ?? DBNull.Value);
+        command.Parameters.AddWithValue("$albumArtist", (object?)play.AlbumArtist ?? DBNull.Value);
+        command.Parameters.AddWithValue("$trackNumber", (object?)play.TrackNumber ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseYear", (object?)play.ReleaseYear ?? DBNull.Value);
+        command.Parameters.AddWithValue("$recordingMbid", (object?)play.RecordingMusicBrainzId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseMbid", (object?)play.ReleaseMusicBrainzId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$artworkSource", (object?)play.ArtworkSource ?? DBNull.Value);
         command.Parameters.AddWithValue("$updatedUtc", observed);
+        await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
+    public async Task UpdateMetadataAsync(string playId, PlayMetadataEnrichment metadata, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(playId);
+        ArgumentNullException.ThrowIfNull(metadata);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE plays SET
+                album_artist = COALESCE($albumArtist, album_artist),
+                track_number = COALESCE($trackNumber, track_number),
+                release_year = COALESCE($releaseYear, release_year),
+                recording_mbid = COALESCE($recordingMbid, recording_mbid),
+                release_mbid = COALESCE($releaseMbid, release_mbid),
+                artwork_path = COALESCE($artworkPath, artwork_path),
+                artwork_source = COALESCE($artworkSource, artwork_source),
+                updated_utc = $updatedUtc
+            WHERE play_id = $playId;
+            """;
+        command.Parameters.AddWithValue("$playId", playId);
+        command.Parameters.AddWithValue("$albumArtist", (object?)metadata.AlbumArtist ?? DBNull.Value);
+        command.Parameters.AddWithValue("$trackNumber", (object?)metadata.TrackNumber ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseYear", (object?)metadata.ReleaseYear ?? DBNull.Value);
+        command.Parameters.AddWithValue("$recordingMbid", (object?)metadata.RecordingMusicBrainzId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$releaseMbid", (object?)metadata.ReleaseMusicBrainzId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$artworkPath", (object?)metadata.ArtworkPath ?? DBNull.Value);
+        command.Parameters.AddWithValue("$artworkSource", (object?)metadata.ArtworkSource ?? DBNull.Value);
+        command.Parameters.AddWithValue("$updatedUtc", DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture));
         await command.ExecuteNonQueryAsync(cancellationToken);
     }
 }

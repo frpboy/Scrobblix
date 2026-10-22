@@ -7,6 +7,7 @@ using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
+using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Desktop;
@@ -14,6 +15,7 @@ namespace Scrobblix.Desktop;
 public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
+    private string? _displayedPlayId;
 
     public event Action<bool>? TrackingModeChanged;
     public event Func<string, string, Task>? LastFmApiCredentialsSaveRequested;
@@ -46,10 +48,9 @@ public sealed partial class MainWindow : Window
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
+        _displayedPlayId = trackingStatus.PlayId;
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
-        CurrentTrackDetail.Text = string.IsNullOrWhiteSpace(observation.Artist)
-            ? "Artist unavailable"
-            : observation.Artist;
+        CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
         DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
@@ -67,6 +68,67 @@ public sealed partial class MainWindow : Window
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
                 : InfoBarSeverity.Informational);
+    }
+
+    public void SetEnrichedMetadata(string playId, PlayObservation observation, PlayMetadataEnrichment metadata)
+    {
+        if (!string.Equals(_displayedPlayId, playId, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        var enrichedObservation = observation with
+        {
+            AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+            TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
+            ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
+            RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
+            ReleaseMusicBrainzId = metadata.ReleaseMusicBrainzId ?? observation.ReleaseMusicBrainzId,
+            ArtworkPath = metadata.ArtworkPath ?? observation.ArtworkPath,
+            ArtworkSource = metadata.ArtworkSource ?? observation.ArtworkSource,
+        };
+        CurrentTrackDetail.Text = BuildTrackDetail(enrichedObservation);
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, enrichedObservation.ArtworkPath);
+    }
+
+    private static string BuildTrackDetail(PlayObservation observation)
+    {
+        var lines = new List<string>();
+        if (!string.IsNullOrWhiteSpace(observation.Artist))
+        {
+            lines.Add(observation.Artist);
+        }
+        else
+        {
+            lines.Add("Artist unavailable");
+        }
+
+        if (!string.IsNullOrWhiteSpace(observation.AlbumArtist)
+            && !string.Equals(observation.AlbumArtist, observation.Artist, StringComparison.OrdinalIgnoreCase))
+        {
+            lines.Add($"Album artist: {observation.AlbumArtist}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(observation.Album))
+        {
+            lines.Add(observation.Album);
+        }
+
+        var details = new List<string>();
+        if (observation.TrackNumber is > 0)
+        {
+            details.Add($"Track {observation.TrackNumber.Value}");
+        }
+        if (observation.ReleaseYear is >= 1000 and <= 9999)
+        {
+            details.Add(observation.ReleaseYear.Value.ToString(CultureInfo.InvariantCulture));
+        }
+        if (details.Count > 0)
+        {
+            lines.Add(string.Join(" · ", details));
+        }
+
+        return string.Join(Environment.NewLine, lines);
     }
 
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
@@ -126,6 +188,23 @@ public sealed partial class MainWindow : Window
                 TextWrapping = TextWrapping.Wrap,
             });
         }
+        if (!string.IsNullOrWhiteSpace(play.AlbumArtist)
+            && !string.Equals(play.AlbumArtist, play.Artist, StringComparison.OrdinalIgnoreCase))
+        {
+            details.Children.Add(new TextBlock
+            {
+                Text = $"Album artist: {play.AlbumArtist}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+        var trackDetails = new List<string>();
+        if (play.TrackNumber is > 0) trackDetails.Add($"Track {play.TrackNumber.Value}");
+        if (play.ReleaseYear is >= 1000 and <= 9999) trackDetails.Add(play.ReleaseYear.Value.ToString(CultureInfo.InvariantCulture));
+        if (trackDetails.Count > 0)
+        {
+            details.Children.Add(new TextBlock { Text = string.Join(" · ", trackDetails), FontSize = 12 });
+        }
 
         details.Children.Add(new TextBlock
         {
@@ -158,6 +237,21 @@ public sealed partial class MainWindow : Window
             image.Visibility = Visibility.Collapsed;
             fallback.Visibility = Visibility.Visible;
         }
+    }
+
+    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var settingsItem = AppNavigationView.MenuItems
+            .OfType<NavigationViewItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, "settings", StringComparison.Ordinal));
+        if (settingsItem is not null)
+        {
+            AppNavigationView.SelectedItem = settingsItem;
+            return;
+        }
+
+        HomeView.Visibility = Visibility.Collapsed;
+        SettingsView.Visibility = Visibility.Visible;
     }
 
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)

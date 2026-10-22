@@ -1,11 +1,28 @@
 type PlaybackState = "playing" | "paused" | "unknown";
 
+type ExtendedMediaMetadata = MediaMetadata & {
+  albumArtist?: string;
+  trackNumber?: number;
+  releaseYear?: number;
+  recordingMusicBrainzId?: string;
+  releaseMusicBrainzId?: string;
+};
+
 function send(media: HTMLMediaElement, state: PlaybackState): void {
-  const metadata = navigator.mediaSession?.metadata;
+  const metadata = navigator.mediaSession?.metadata as ExtendedMediaMetadata | undefined;
+  const artworkUrl = metadata?.artwork
+    ?.map((image) => image.src)
+    .find((src) => src.startsWith("https://"));
   chrome.runtime.sendMessage({
     artist: metadata?.artist,
     title: metadata?.title,
     album: metadata?.album,
+    albumArtist: metadata?.albumArtist,
+    trackNumber: metadata?.trackNumber,
+    releaseYear: metadata?.releaseYear,
+    recordingMusicBrainzId: metadata?.recordingMusicBrainzId,
+    releaseMusicBrainzId: metadata?.releaseMusicBrainzId,
+    artworkUrl,
     durationMilliseconds: Number.isFinite(media.duration) ? Math.round(media.duration * 1000) : undefined,
     positionMilliseconds: Number.isFinite(media.currentTime) ? Math.round(media.currentTime * 1000) : undefined,
     state,

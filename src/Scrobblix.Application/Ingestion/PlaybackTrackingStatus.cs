@@ -6,4 +6,5 @@ public sealed record PlaybackTrackingStatus(
     EligibilityDecision Decision,
     long ConfirmedPlayedMilliseconds,
     bool DidPersistEligiblePlay,
-    bool DidStartPlay = false);
+    bool DidStartPlay = false,
+    string? PlayId = null);
