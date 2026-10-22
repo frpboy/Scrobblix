@@ -18,6 +18,12 @@ Scrobblix must answer three questions immediately:
 2. **What have I listened to?**
 3. **Why did or did not this track scrobble?**
 
+## Downloads and preview releases
+
+Version tags trigger the automated [Preview Release workflow](.github/workflows/release.yml). It runs the full Windows CI checks before publishing the desktop test bundle, optional browser companion, and SHA-256 checksums on the [GitHub Releases page](https://github.com/frpboy/Scrobblix/releases).
+
+**Current distribution status:** preview ZIPs are unsigned development test bundles—not a signed installer or stable production release. The app may require the matching Microsoft Windows App Runtime, and real-Windows/listening qualification and installer-signing gates remain open. Read the [release process](docs/RELEASE_PROCESS.md) before downloading or distributing a preview.
+
 ## Recommended implementation baseline
 
 | Area | Decision |
