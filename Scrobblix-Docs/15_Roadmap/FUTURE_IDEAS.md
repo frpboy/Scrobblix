@@ -2,10 +2,10 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Deferred ideas; none are committed v1 scope  
+> **Last updated:** 2026-10-22
 
-Potential ideas, not commitments:
+Potential ideas, not commitments. **Do not schedule these ahead of private-beta readiness, live-playback evidence, reliability recovery and signed Windows distribution.**
 
 - ListenBrainz and Libre.fm providers.
 - Source/plugin SDK and signed plugin model.
