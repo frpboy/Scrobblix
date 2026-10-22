@@ -211,6 +211,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private void ToggleAdvancedDetailsButton_Click(object sender, RoutedEventArgs args)
+    {
+        var show = AdvancedSettingsDetails.Visibility != Visibility.Visible;
+        AdvancedSettingsDetails.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
+        ToggleAdvancedDetailsButton.Content = show ? "Hide advanced details" : "Show advanced details";
+        AutomationProperties.SetName(ToggleAdvancedDetailsButton, show ? "Hide advanced details" : "Show advanced details");
+    }
+
     private void RailAttentionButton_Click(object sender, RoutedEventArgs args) => SelectDestination("queue");
     private void OpenSourcesButton_Click(object sender, RoutedEventArgs args) => SelectDestination("sources");
     private void OpenDiagnosticsButton_Click(object sender, RoutedEventArgs args) => SelectDestination("diagnostics");
