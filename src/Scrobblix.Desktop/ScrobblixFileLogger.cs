@@ -59,6 +59,8 @@ public sealed class ScrobblixFileLogger
         }
     }
 
+    internal static string SanitizeForTesting(string? value, int maximumLength = 6000) => Sanitize(value, maximumLength);
+
     private static string Sanitize(string? value, int maximumLength)
     {
         var normalized = (value ?? string.Empty)
