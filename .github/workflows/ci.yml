@@ -39,10 +39,50 @@ jobs:
           $searchRoot = 'src/Scrobblix.Desktop/obj/Release'
           if (Test-Path $searchRoot) {
             $files = Get-ChildItem -Path $searchRoot -Recurse -File -ErrorAction SilentlyContinue |
-              Where-Object { $_.Name -in @('input.json', 'output.json', 'XamlCompiler.log', 'XamlCompiler.err') -and $_.Length -lt 250000 }
+              Where-Object { $_.Name -in @('input.json', 'output.json', 'XamlCompiler.log', 'XamlCompiler.err') }
             foreach ($file in $files) {
-              Write-Output "----- $($file.Name) -----"
-              Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+              Write-Output "----- $($file.Name) ($($file.Length) bytes) -----"
+              if ($file.Name -eq 'input.json') {
+                Write-Output "XAML input exists at $($file.FullName)."
+                continue
+              }
+
+              $raw = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+              if ($null -eq $raw) { continue }
+              foreach ($needle in @('error', 'exception', 'lineNumber', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                $offset = 0
+                $shown = 0
+                while (($index = $raw.IndexOf($needle, $offset, [StringComparison]::OrdinalIgnoreCase)) -ge 0 -and $shown -lt 5) {
+                  $start = [Math]::Max(0, $index - 240)
+                  $length = [Math]::Min(680, $raw.Length - $start)
+                  Write-Output ("MATCH [{0}] {1}" -f $needle, $raw.Substring($start, $length))
+                  $offset = $index + $needle.Length
+                  $shown++
+                }
+              }
+            }
+
+            $compiler = Get-ChildItem -Path "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk.winui" -Recurse -Filter 'XamlCompiler.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            $input = Get-ChildItem -Path $searchRoot -Recurse -Filter 'input.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $compiler -and $null -ne $input) {
+              $replay = Join-Path $input.DirectoryName 'output-diagnostic-replay.json'
+              $log = Join-Path $input.DirectoryName 'xaml-compiler-replay.log'
+              Write-Output "Replaying XAML compiler from $($compiler.FullName)"
+              & $compiler.FullName $input.FullName $replay 2>&1 | Tee-Object -FilePath $log
+              Write-Output "Replay exit code: $LASTEXITCODE"
+              if (Test-Path $replay) {
+                $raw = Get-Content -LiteralPath $replay -Raw -ErrorAction SilentlyContinue
+                if ($raw) {
+                  foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                    $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                    if ($index -ge 0) {
+                      $start = [Math]::Max(0, $index - 240)
+                      $length = [Math]::Min(1200, $raw.Length - $start)
+                      Write-Output ("REPLAY MATCH [{0}] {1}" -f $needle, $raw.Substring($start, $length))
+                    }
+                  }
+                }
+              }
             }
           }
       - name: Validate desktop UI contracts
