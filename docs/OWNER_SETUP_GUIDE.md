@@ -106,56 +106,26 @@ From the Scrobblix source repository, run:
 .\scripts\setup-browser-companion.ps1
 ```
 
-The helper installs the locked npm dependencies, type-checks/builds the extension, validates both browser manifests, publishes the native host, stages the Chrome/Edge and Firefox extension folders, validates required outputs, and creates `artifacts\Scrobblix\Scrobblix-BrowserCompanion.zip`.
+The helper installs locked npm dependencies, type-checks/builds the extension, validates both manifests, publishes the native host, stages Chrome/Edge and Firefox folders, verifies required outputs, and creates `artifacts\Scrobblix\Scrobblix-BrowserCompanion.zip`.
 
-For Chrome or Edge, next load `artifacts\Scrobblix\BrowserCompanion\chromium` from `chrome://extensions` or `edge://extensions` with Developer mode enabled. Copy the ID actually displayed by that browser, then register the host:
+For Chrome/Edge, load `artifacts\Scrobblix\BrowserCompanion\chromium` from `chrome://extensions` or `edge://extensions` with Developer mode enabled. Copy the actual ID displayed by each browser, then register:
 
 ```powershell
 .\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Chrome -ExtensionId "ACTUAL_CHROME_ID"
 .\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Edge -ExtensionId "ACTUAL_EDGE_ID"
 ```
 
-If both browsers are used, load the extension in both and register their IDs together in one call:
+If you use both browsers, load the extension in both and register their IDs together:
 
 ```powershell
 .\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser ChromeAndEdge -ExtensionId @("CHROME_ID","EDGE_ID")
 ```
 
-For Firefox, run `.\scripts\setup-browser-companion.ps1 -Browser Firefox`, then load `artifacts\Scrobblix\BrowserCompanion\firefox\manifest.json` as a temporary add-on from `about:debugging#/runtime/this-firefox`. Temporary add-ons are development-only and may need to be loaded again after browser restart.
+For Firefox, run `.\scripts\setup-browser-companion.ps1 -Browser Firefox`, then load `artifacts\Scrobblix\BrowserCompanion\firefox\manifest.json` as a temporary add-on from `about:debugging#/runtime/this-firefox`. Temporary add-ons are development-only and may need to be loaded again after a browser restart.
 
 Browser policies require the user to load/approve the extension; the builder does not silently sideload it. Restart the browser and Scrobblix after registration. CI also publishes a separate `Scrobblix-BrowserCompanion` development artifact.
 
-For the detailed manual steps, package layout, and uninstall process see [Browser Companion README](../browser-extension/README.md) and [Local Development and Troubleshooting](LOCAL_DEVELOPMENT_TROUBLESHOOTING.md).
-
-
-The browser companion is optional; desktop playback continues through Windows
-media controls without it. The current extension targets Chromium (Chrome and
-Edge) and the supported sites declared in browser-extension/manifest.json.
-Firefox development support is now present as `browser-extension/manifest.firefox.json`, with a fixed development add-on ID and optional native-host registration. To load it, copy the companion folder, use the Firefox manifest as the copied folder's `manifest.json`, load it temporarily from `about:debugging#/runtime/this-firefox`, and run the native-host installer with `-RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in"`. CI verifies the manifest/build/host hooks, but real Firefox installation and delivery still require a manual Windows test; this is not a signed Firefox release package.
-
-From the repository root, build the extension and publish the native host:
-
-- Run npm ci from browser-extension.
-- Run npm run build from browser-extension.
-- Run dotnet publish src\Scrobblix.NativeHost\Scrobblix.NativeHost.csproj -c Release -o artifacts\nativehost.
-
-1. Open chrome://extensions (or edge://extensions), enable Developer mode,
-   and select **Load unpacked** for the repository's browser-extension folder.
-2. Copy the extension ID shown on that page.
-3. Register the native host for your Windows user using that exact ID:
-
-   .\scripts\install-native-host.ps1 -ExtensionId "your-32-character-extension-id" -NativeHostPublishDirectory "artifacts\nativehost"
-
-4. Completely restart the browser, start Scrobblix, and play media on one of the
-   supported sites.
-5. To uninstall the browser bridge, run .\scripts\uninstall-native-host.ps1.
-   This unregisters the native host but does not delete history, artwork, or logs.
-
-The native host requires an explicit extension allow-list saved under the
-current user's registry. If the ID is not registered, forwarding fails closed.
-The bridge sends playback metadata to the local app only; it does not hold
-Last.fm credentials and does not create a localhost server. Do not install an
-unreviewed extension or share the Last.fm shared secret with it.
+For detailed manual steps, package layout and uninstall process, see [Browser Companion README](../browser-extension/README.md) and [Local Development and Troubleshooting](LOCAL_DEVELOPMENT_TROUBLESHOOTING.md).
 
 ## 7. Release signing and GitHub
 
