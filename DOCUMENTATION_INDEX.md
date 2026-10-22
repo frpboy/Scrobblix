@@ -11,6 +11,7 @@ This file is the repository-wide catalogue. Section README files provide guided 
 - [Master Implementation Plan](docs/MASTER_IMPLEMENTATION_PLAN.md) — capability matrix, recommendations, acceptance cases and release gates.
 - [Implementation Resume Guide](docs/IMPLEMENTATION_RESUME.md) — branch, baseline and continuation commands.
 - [Local Development and Troubleshooting](docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md) — build locks, validation, credential safety and browser checks.
+- [Browser Companion build and install](browser-extension/README.md) — one-command TypeScript build, native host publishing, package paths, and exact browser registration steps.
 
 ## Repository statistics
 
