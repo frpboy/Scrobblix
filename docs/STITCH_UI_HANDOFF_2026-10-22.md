@@ -72,3 +72,35 @@ Source identity is based on real observation metadata only: exact known GSMTC ap
 - **Simplification:** duplicate Home tiles for Sources and Queue were removed. Queue state remains visible inside Last.fm delivery, and the dedicated Queue and Sources pages retain detailed views. Home requests only three recent tracks.
 - **Status labels:** the live InfoBar title now follows the current state instead of continuing to say “Starting Scrobblix” after startup. User-facing separators use punctuation that reads clearly with assistive technology.
 - **Verification boundary:** build/XAML checks and automated state assertions are required on the exact commit. Windows visual review at 100%, 150% and 200% scaling, keyboard-only traversal, Narrator and live states remain manual gates, marked NOT RUN until exercised on Windows.
+
+
+## Navigation rail screen pair handoff
+
+The desktop implementation already provides the behavior to design against. In the existing private Stitch project `projects/7036359710720803750`, create or update two screen variants using the current `assets/9199632273178927416` design system. Keep them as design references for native WinUI; do not ship the generated HTML as the desktop UI.
+
+### Screen A — wide / expanded rail
+
+- Frame: Windows desktop workspace at 1440 × 900 logical pixels, system light appearance.
+- Rail: 240 px; Scrobblix mark, product name, “Listening companion”, a 40 × 40 collapse button, all eight destinations with Fluent icons and labels, optional action-only “Queue needs attention” control, and the local-data privacy statement.
+- Main content: existing lightweight Home hierarchy, with Now Playing and confirmed-listening eligibility as the focal region, truthful Last.fm delivery underneath, then concise Today and three recent items. Do not add charts or player controls.
+- State example: show generic playback/empty placeholder states, never invented artist names, statistics, account handles, or provider acceptance.
+
+### Screen B — compact / icon rail
+
+- Same frame and data hierarchy as Screen A, with a 64 px rail. It is a layout variant of the same page, not a different destination.
+- Header: Scrobblix mark and a 40 × 40 expand button. Destinations remain in the identical order and each icon has a tooltip and accessible name.
+- Footer: visible privacy icon with a tooltip and a full accessible description. Do not remove the local-only statement from the accessibility tree.
+- Attention indicator: shown only when queue work needs an explicit action; it remains text-backed in expanded mode and accessible in compact mode. Never add counts as a second notification feed.
+- Preserve the current selected route. The layout change must not reload the view, reset tracking, or alter queue delivery.
+
+### Shared restrictions
+
+- Use only existing Fluent controls, system colors and current tonal-lavender accent. Motion remains minimal and system-driven. No gradients, ornamental badges, glow, or new decorative surface.
+- Source marks must come from the local reviewed asset registry. For unapproved or missing marks, use the current neutral Fluent glyph plus a visible text identity.
+- Do not add a Last.fm mark until its required written permission is recorded in `src/Scrobblix.Desktop/Assets/providers/README.md`. Do not fabricate Spotify, YouTube Music, or JioSaavn artwork; their current source names and neutral icons are intentional fallbacks.
+- Browser-extension popup/options/store work, new source adapters, provider behavior, playback rules, remote assets and telemetry remain out of scope.
+
+### External workspace verification
+
+This file contains the implementation brief and acceptance contract. It does not itself prove that new screen revisions were saved to Stitch. Record the resulting screen IDs and export IDs here only after checking the actual Stitch workspace. The external Stitch editing connector was not available in the current implementation session; the existing project and current Home handoff remain the starting point.
+
