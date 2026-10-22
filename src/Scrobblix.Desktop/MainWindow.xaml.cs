@@ -866,19 +866,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
-    {
-        var settingsItem = AppNavigationView.MenuItems
-            .OfType<NavigationViewItem>()
-            .FirstOrDefault(item => string.Equals(item.Tag as string, "settings", StringComparison.Ordinal));
-        if (settingsItem is not null)
-        {
-            AppNavigationView.SelectedItem = settingsItem;
-            return;
-        }
-        HomeView.Visibility = Visibility.Collapsed;
-        SettingsView.Visibility = Visibility.Visible;
-    }
+    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args) =>
+        SelectDestination("settings");
 
     private async void SaveLastFmCredentialsButton_Click(object sender, RoutedEventArgs args)
     {
