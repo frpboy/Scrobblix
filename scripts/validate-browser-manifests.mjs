@@ -33,8 +33,16 @@ requireCondition(nativeHostValidator.includes("MatchesFirefoxExtensionId"), "Nat
 requireCondition(nativeHostProgram.includes("firefoxCallerId"), "Native host must parse Firefox native-messaging arguments.");
 const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
 const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
+const browserSetupScript = await readFile(resolve(root, "scripts/setup-browser-companion.ps1"), "utf8");
 requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
 requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "The installer must write the Firefox add-on allow-list.");
 requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
+
+requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host registration must support different Chrome and Edge extension IDs.");
+requireCondition(nativeHostInstaller.includes("allowed_origins = @($extensionIds"), "Native-host manifest must allow-list each registered Chromium extension ID.");
+requireCondition(nativeHostInstaller.includes("Value ($extensionIds -join ';')"), "Desktop allow-list must contain every registered Chromium extension ID.");
+requireCondition(browserSetupScript.includes("Scrobblix-BrowserCompanion.zip"), "The setup script must create a standalone browser companion package.");
+requireCondition(browserSetupScript.includes("RegisterOnly"), "The setup script must support registration without rebuilding the package.");
+requireCondition(browserSetupScript.includes("chromiumRoot"), "The setup script must prepare an unpacked Chromium extension folder.");
 
 console.log("Chromium and Firefox manifests, emitted scripts, and Firefox host identity hooks are valid.");
