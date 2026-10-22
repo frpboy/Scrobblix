@@ -100,7 +100,19 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | UX-06 | Use Narrator, contrast theme and 100/150/200% display scale. | Labels, status changes, controls and content remain perceivable/operable. | NOT RUN | |
 | UX-07 | Toggle tracking off while a track plays, then on. | “Tracking paused” is explicit; no listening time accrued during pause; queue worker state remains separate. | NOT RUN | |
 
-## G. Private-beta decision summary
+## G. Support bundle safety and usability
+
+| ID | Scenario and steps | Expected result | Result | Evidence / defect |
+|---|---|---|---|---|
+| SB-01 | Open Diagnostics and choose Export support bundle; review the confirmation before saving. | Exact allow-listed files/fields and exclusions are described; no automatic upload is implied. | NOT RUN | |
+| SB-02 | Export to a new ZIP and inspect every entry with a ZIP viewer. | Only `manifest.json`, `event-summary.txt`, `operational-events.tsv` and `README.txt` exist; raw logs, database, artwork and preference files are absent. | NOT RUN | |
+| SB-03 | Compare the displayed SHA-256 with a locally calculated ZIP hash. | Hashes match, ZIP opens cleanly and event count matches the manifest/status. | NOT RUN | |
+| SB-04 | Cancel the confirmation or the Save dialog. | No support archive is generated or uploaded; diagnostics UI remains usable. | NOT RUN | |
+| SB-05 | Seed a test log with fake credentials, session key, token, artist/title, URL and username/path canaries. | Automated redaction assertions pass and none of the canaries appear in any archive entry. | NOT RUN | |
+| SB-06 | Export with an empty log folder, a source log locked/rotated during capture, and a denied output location. | Empty/partial-source scenarios fail safely or produce a clearly reported minimal bundle; destination failures do not corrupt an existing archive. | NOT RUN | |
+| SB-07 | Navigate to the Diagnostics export with keyboard and Narrator; inspect at 100%, 150% and 200% scale. | Dialog, save action, status and errors are accessible; no mouse-only operation is required. | NOT RUN | |
+
+## H. Private-beta decision summary
 
 | Gate | Result | Evidence link / notes |
 |---|---|---|
@@ -112,7 +124,7 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | Backup/restore on disposable data | NOT RUN | |
 | Chrome + Edge + Firefox (or browser companion explicitly omitted from beta) | NOT RUN | |
 | Native Messaging security review | NOT RUN | |
-| Support-bundle secret canary test | NOT RUN | |
+| Support-bundle canary test + Windows export review | NOT RUN | |
 | Windows tray/notifications/accessibility | NOT RUN | |
 | Signed install/upgrade/rollback/uninstall | NOT RUN | |
 
