@@ -24,6 +24,7 @@ public static class SupportBundleExporter
     private const int MaximumLogFiles = 5;
     private const int MaximumEventsPerFile = 750;
     private const long MaximumBytesPerLogFile = 8 * 1024 * 1024;
+    private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
     private static readonly Regex SafeCategory = new("^[A-Z0-9_]{1,32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ExceptionTypePattern = new(@"(?i)\bexception\s*=\s*([A-Za-z_][A-Za-z0-9_.+]{0,100})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex HResultPattern = new(@"(?i)\bhresult\s*=\s*(-?(?:0x)?[0-9a-f]{1,16})", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -184,16 +185,16 @@ public static class SupportBundleExporter
 
         var summary = new StringBuilder();
         summary.AppendLine("Scrobblix privacy-safe diagnostics summary");
-        summary.AppendLine($"Generated (UTC): {DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)}");
-        summary.AppendLine($"Application version: {safeAppVersion}");
-        summary.AppendLine($"Windows version: {safeWindowsVersion}");
-        summary.AppendLine($"Log files inspected: {inspected.ToString(CultureInfo.InvariantCulture)}");
-        summary.AppendLine($"Operational events included: {events.Count.ToString(CultureInfo.InvariantCulture)}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Generated (UTC): {DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture)}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Application version: {safeAppVersion}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Windows version: {safeWindowsVersion}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Log files inspected: {inspected.ToString(CultureInfo.InvariantCulture)}");
+        summary.AppendLine(CultureInfo.InvariantCulture, $"Operational events included: {events.Count.ToString(CultureInfo.InvariantCulture)}");
         summary.AppendLine();
         summary.AppendLine("Counts by level and category (no original messages are included):");
         foreach (var group in events.GroupBy(item => (item.Level, item.Category)).OrderBy(group => group.Key.Level).ThenBy(group => group.Key.Category, StringComparer.Ordinal))
         {
-            summary.AppendLine($"{group.Key.Level}\t{group.Key.Category}\t{group.Count().ToString(CultureInfo.InvariantCulture)}");
+            summary.AppendLine(CultureInfo.InvariantCulture, $"{group.Key.Level}\t{group.Key.Category}\t{group.Count().ToString(CultureInfo.InvariantCulture)}");
         }
 
         var eventLines = new StringBuilder("timestamp_utc\tlevel\tcategory\texception_type\thresult\treason_code\n");
@@ -208,7 +209,7 @@ public static class SupportBundleExporter
         }
 
         return new BundleSnapshot(
-            JsonSerializer.Serialize(manifest, new JsonSerializerOptions { WriteIndented = true }),
+            JsonSerializer.Serialize(manifest, ManifestJsonOptions),
             summary.ToString(),
             eventLines.ToString(),
             inspected,
