@@ -6,6 +6,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Fixed
 
+- Updated backup restore validation to recognize schema version 5 and migration `0005_loved_tracks`, so current databases pass backup validation instead of being rejected during staged restore.
+
 - Added lifecycle contract assertions and a real-Windows acceptance case for App-owned single-instance resources. Corrected the database migration assertion to cover all five embedded migrations.
 
 ### Added

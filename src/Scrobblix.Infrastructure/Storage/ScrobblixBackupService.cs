@@ -13,7 +13,7 @@ namespace Scrobblix.Infrastructure.Storage;
 public sealed class ScrobblixBackupService
 {
     public const int CurrentFormatVersion = 1;
-    public const int CurrentSchemaVersion = 4;
+    public const int CurrentSchemaVersion = 5;
     private const long MaximumDatabaseBytes = 2L * 1024 * 1024 * 1024;
     private const long MaximumArchiveBytes = 2L * 1024 * 1024 * 1024;
     private const string DatabaseEntryName = "scrobblix.db";
@@ -27,6 +27,7 @@ public sealed class ScrobblixBackupService
         "0002_accounts",
         "0003_local_history_artwork",
         "0004_richer_metadata",
+        "0005_loved_tracks",
     ];
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
