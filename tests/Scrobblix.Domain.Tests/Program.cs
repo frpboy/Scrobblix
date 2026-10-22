@@ -20,6 +20,8 @@ using Microsoft.Data.Sqlite;
 using Scrobblix.Infrastructure.Providers;
 using Scrobblix.NativeHost;
 using System.Text.Json;
+using System.IO.Compression;
+using Scrobblix.Infrastructure.Diagnostics;
 
 Assert(BrowserPlaybackStateMapper.Parse("playing") == PlayState.Playing, "Browser media playing events map to Playing.");
 Assert(BrowserPlaybackStateMapper.Parse("paused") == PlayState.Paused, "Browser media pause events map to Paused.");
@@ -171,6 +173,63 @@ var adTrackingStatus = countdownStatus with
 Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — advertisement playback is ignored",
     "Home status explains why advertisement playback is not eligible.");
+
+var supportBundleRoot = Path.Combine(Path.GetTempPath(), $"scrobblix-support-test-{Guid.NewGuid():N}");
+var supportLogDirectory = Path.Combine(supportBundleRoot, "logs");
+Directory.CreateDirectory(supportLogDirectory);
+var supportLog = Path.Combine(supportLogDirectory, "scrobblix-20261022-000000-100.log");
+var supportArchivePath = Path.Combine(supportBundleRoot, "support.zip");
+try
+{
+    await File.WriteAllTextAsync(
+        supportLog,
+        "000001 | 2026-10-22T12:00:00.0000000+00:00 | WARN | LASTFM | request failed; api_key=CANARY_API_SECRET; artist=CANARY_TRACK; url=https://example.com/private?token=CANARY_TOKEN; path=C:\\Users\\CANARY_USER\\AppData\\Local\\Scrobblix\\scrobblix.db" + Environment.NewLine +
+        "000002 | 2026-10-22T12:00:01.0000000+00:00 | ERROR | LASTFM | response failed; exception=HttpRequestException; hresult=0x80131500; reason_code=provider.temporary_unavailable; session_key=CANARY_SESSION_KEY" + Environment.NewLine);
+    var supportResult = await SupportBundleExporter.CreateAsync(
+        supportArchivePath,
+        supportLogDirectory,
+        "1.2.3-test",
+        "10.0.26100",
+        CancellationToken.None);
+
+    Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
+    Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 2,
+        "Support bundle reports the number of inspected logs and sanitized events.");
+
+    using (var archive = ZipFile.OpenRead(supportArchivePath))
+    {
+        var names = archive.Entries.Select(entry => entry.FullName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
+        Assert(names.SequenceEqual(new[] { "README.txt", "event-summary.txt", "manifest.json", "operational-events.tsv" }),
+            "Support bundle contains only the explicit diagnostics allow-list, never a database or artwork.");
+
+        var archiveContents = new StringBuilder();
+        foreach (var entry in archive.Entries)
+        {
+            using var reader = new StreamReader(entry.Open(), Encoding.UTF8);
+            archiveContents.Append(await reader.ReadToEndAsync());
+        }
+
+        var exportedText = archiveContents.ToString();
+        Assert(!exportedText.Contains("CANARY_API_SECRET", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_SESSION_KEY", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_TOKEN", StringComparison.Ordinal),
+            "Support bundle excludes seeded credential/token canaries.");
+        Assert(!exportedText.Contains("CANARY_TRACK", StringComparison.Ordinal)
+            && !exportedText.Contains("CANARY_USER", StringComparison.Ordinal)
+            && !exportedText.Contains("example.com", StringComparison.Ordinal),
+            "Support bundle excludes track metadata, username-like path values and full URLs.");
+        Assert(exportedText.Contains("HttpRequestException", StringComparison.Ordinal)
+            && exportedText.Contains("provider.temporary_unavailable", StringComparison.Ordinal),
+            "Support bundle retains a constrained exception type and machine-readable reason code.");
+    }
+}
+finally
+{
+    try { if (Directory.Exists(supportBundleRoot)) Directory.Delete(supportBundleRoot, recursive: true); }
+    catch (IOException) { }
+    catch (UnauthorizedAccessException) { }
+}
 
 var historyRecord = new LocalPlayRecord(
     "play-1",
