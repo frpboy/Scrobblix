@@ -47,6 +47,9 @@ jobs:
         run: npm run build
         working-directory: browser-extension
 
+      - name: Test browser sender and payload validation
+        run: node scripts/test-browser-security.mjs
+
       - name: Validate Chromium and Firefox manifests
         run: node scripts/validate-browser-manifests.mjs
 

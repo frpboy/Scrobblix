@@ -43,6 +43,16 @@ Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcd
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", nativeHostEnvelope.RootElement, new HashSet<string>(StringComparer.Ordinal)), "Native host forwarding fails closed when no extension ID is registered.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", mismatchedNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope from a different extension identity.");
 Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://abcdefghijklmnopabcdefghijklmnop/", incompleteNativeHostEnvelope.RootElement, allowedNativeHostExtensions), "Native host forwarding rejects an envelope missing the extension identity without throwing.");
+using var secondNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"ponmlkjihgfedcbaponmlkjihgfedcba"}""");
+var multipleAllowedNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal)
+{
+    "abcdefghijklmnopabcdefghijklmnop",
+    "ponmlkjihgfedcbaponmlkjihgfedcba",
+};
+Assert(NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/", secondNativeHostEnvelope.RootElement, multipleAllowedNativeHostExtensions),
+    "Native host allows a separately registered second Chromium extension ID.");
+Assert(!NativeHostCallerValidator.MatchesExtensionOrigin("chrome-extension://ponmlkjihgfedcbaponmlkjihgfedcba/", secondNativeHostEnvelope.RootElement, allowedNativeHostExtensions),
+    "Native host rejects an otherwise well-formed extension ID that is not allow-listed.");
 using var firefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"scrobblix@frpboy.in"}""");
 using var otherFirefoxNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"other-addon@example.org"}""");
 var allowedFirefoxNativeHostExtensions = new HashSet<string>(StringComparer.Ordinal) { "scrobblix@frpboy.in" };

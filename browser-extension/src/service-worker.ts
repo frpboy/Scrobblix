@@ -1,16 +1,16 @@
+import { isPlaybackObservation, isSupportedSender, type PlaybackObservation } from "./message-validation.js";
+
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
-
-type PlaybackObservation = {
-  artist?: string; title?: string; album?: string; albumArtist?: string; artworkUrl?: string;
-  trackNumber?: number; releaseYear?: number; recordingMusicBrainzId?: string; releaseMusicBrainzId?: string;
-  durationMilliseconds?: number; positionMilliseconds?: number; state: "playing" | "paused" | "ended" | "unknown";
-};
-
 const hostName = "com.frpboy.scrobblix";
 let sequence = 0;
 
-scrobblixWorkerApi.runtime.onMessage.addListener((observation: PlaybackObservation, sender) => {
-  if (!sender.tab?.id || (observation.title?.length ?? 0) > 1024 || (observation.artist?.length ?? 0) > 1024 || (observation.artworkUrl?.length ?? 0) > 4096) return;
+scrobblixWorkerApi.runtime.onMessage.addListener((incoming: unknown, sender) => {
+  // Content scripts execute beside untrusted page content. Only accept messages
+  // from the explicit supported origins and validate data again at the worker boundary.
+  if (!isSupportedSender(sender) || !isPlaybackObservation(incoming)) return;
+
+  const observation: PlaybackObservation = incoming;
+  const sourceUrl = new URL(sender.url!);
   const port = scrobblixWorkerApi.runtime.connectNative(hostName);
   let finished = false;
   const finish = () => {
@@ -19,19 +19,28 @@ scrobblixWorkerApi.runtime.onMessage.addListener((observation: PlaybackObservati
       port.disconnect();
     }
   };
-  port.onMessage.addListener(finish);
+  port.onMessage.addListener((response: unknown) => {
+    if (typeof response === "object" && response !== null
+        && "messageId" in response
+        && (response as { messageId?: unknown }).messageId === messageId) {
+      finish();
+    } else {
+      finish();
+    }
+  });
   port.onDisconnect.addListener(() => { finished = true; });
+  const messageId = crypto.randomUUID();
   port.postMessage({
     protocolVersion: 1,
-    messageId: crypto.randomUUID(),
+    messageId,
     type: "playback.observation.v1",
     sentAtUtc: new Date().toISOString(),
     browserInstanceId: scrobblixWorkerApi.runtime.id,
     sequence: ++sequence,
-    payload: { ...observation, tabId: sender.tab.id, siteOrigin: getOrigin(sender.url) },
+    payload: {
+      ...observation,
+      tabId: sender.tab!.id,
+      siteOrigin: sourceUrl.origin,
+    },
   });
 });
-
-function getOrigin(url: string | undefined): string | undefined {
-  try { return url ? new URL(url).origin : undefined; } catch { return undefined; }
-}

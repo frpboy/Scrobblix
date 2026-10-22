@@ -14,6 +14,7 @@ const requireCondition = (condition, message) => {
 
 requireCondition(chromium.manifest_version === 3, "Chromium companion must use Manifest V3.");
 requireCondition(chromium.background?.service_worker === "dist/service-worker.js", "Chromium service worker is missing.");
+requireCondition(!chromium.background?.scripts, "Chromium Manifest V3 must not use the legacy background.scripts field.");
 requireCondition(chromium.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Chromium media observer is missing.");
 requireCondition(firefox.manifest_version === 3, "Firefox companion must use Manifest V3.");
 requireCondition(firefox.background?.scripts?.includes("dist/service-worker.js"), "Firefox background script is missing.");
@@ -21,7 +22,7 @@ requireCondition(!firefox.background?.service_worker, "Firefox manifest must not
 requireCondition(firefox.browser_specific_settings?.gecko?.id === "scrobblix@frpboy.in", "Firefox add-on ID must match the registered native-host identity.");
 requireCondition(firefox.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Firefox media observer is missing.");
 
-for (const path of ["dist/service-worker.js", "dist/media-observer.js"]) {
+for (const path of ["dist/service-worker.js", "dist/media-observer.js", "dist/message-validation.js"]) {
   await access(resolve(extensionRoot, path));
 }
 
@@ -30,8 +31,13 @@ const nativeHostProgram = await readFile(resolve(root, "src/Scrobblix.NativeHost
 requireCondition(nativeHostValidator.includes("ReadAllowedFirefoxExtensionIds"), "Native host must read the Firefox add-on allow-list.");
 requireCondition(nativeHostValidator.includes("MatchesFirefoxExtensionId"), "Native host must validate Firefox add-on identity.");
 requireCondition(nativeHostProgram.includes("firefoxCallerId"), "Native host must parse Firefox native-messaging arguments.");
+requireCondition(nativeHostProgram.includes("var trustedEnvelope"), "Native host must compute sender trust before message dispatch.");
+requireCondition(nativeHostProgram.indexOf("if (!trustedEnvelope)") < nativeHostProgram.indexOf('else if (type == "ping.v1")'), "Native host must reject an untrusted sender before responding to ping.");
 const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
 const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
+requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host setup must support different Chrome and Edge extension IDs.");
+requireCondition(nativeHostInstaller.includes("allowed_origins = $allowedOrigins"), "Native-host manifest must allow-list every supplied Chromium extension ID.");
+requireCondition(nativeHostInstaller.includes("($extensionIds -join ';')"), "Desktop allow-list must contain every registered Chromium extension ID.");
 requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
 requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "The installer must write the Firefox add-on allow-list.");
 requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
