@@ -104,3 +104,12 @@ The desktop implementation already provides the behavior to design against. In t
 
 This file contains the implementation brief and acceptance contract. It does not itself prove that new screen revisions were saved to Stitch. Record the resulting screen IDs and export IDs here only after checking the actual Stitch workspace. The external Stitch editing connector was not available in the current implementation session; the existing project and current Home handoff remain the starting point.
 
+
+
+## Listening card interaction polish (2026-10-22)
+
+- Home uses one accessible heart control for Love/Unlove. A neutral heart uses the secondary text color; the latest locally queued Love intent turns it red. Toggling back queues Unlove. The icon reflects requested intent, not an assertion that Last.fm has accepted the action; the Loved page remains authoritative for delivery status.
+- Compact navigation reapplies destination names/tooltips and keeps each Fluent icon visible when the rail enters compact mode.
+- The artwork frame keeps the fallback visible until local artwork successfully decodes, with a native Fluent glyph fallback if SVG placeholder rendering fails. Artwork remains local-cache-only; no runtime image URL or third-party logo was added.
+- App identity remains the theme-aware bundled Scrobblix mark and existing desktop icon. No Last.fm trademark was added because the asset ledger lists written permission as a prerequisite.
+- Windows runtime validation remains required for compact navigation, the Love/Unlove toggle, and real artwork decoding.
