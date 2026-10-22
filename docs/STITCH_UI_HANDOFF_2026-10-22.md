@@ -104,3 +104,25 @@ The desktop implementation already provides the behavior to design against. In t
 
 This file contains the implementation brief and acceptance contract. It does not itself prove that new screen revisions were saved to Stitch. Record the resulting screen IDs and export IDs here only after checking the actual Stitch workspace. The external Stitch editing connector was not available in the current implementation session; the existing project and current Home handoff remain the starting point.
 
+
+
+## Listening card interaction polish (2026-10-22)
+
+- Home uses one accessible heart control for Love/Unlove. A neutral heart uses the secondary text color; the latest locally queued Love intent turns it red. Toggling back queues Unlove. The icon reflects requested intent, not an assertion that Last.fm has accepted the action; the Loved page remains authoritative for delivery status.
+- Compact navigation reapplies destination names/tooltips and keeps each Fluent icon visible when the rail enters compact mode.
+- The artwork frame keeps the fallback visible until local artwork successfully decodes, with a native Fluent glyph fallback if SVG placeholder rendering fails. Artwork remains local-cache-only; no runtime image URL or third-party logo was added.
+- App identity remains the theme-aware bundled Scrobblix mark and existing desktop icon. No Last.fm trademark was added because the asset ledger lists written permission as a prerequisite.
+- Windows runtime validation remains required for compact navigation, the Love/Unlove toggle, and real artwork decoding.
+
+
+## Artwork fallback order (2026-10-22)
+
+Artwork enrichment follows a best-available local-first strategy:
+
+1. Keep valid artwork already supplied by the active playback source.
+2. If its cache path is missing/weak and the source supplies an artwork URL, fetch and cache that URL.
+3. Match the track/release with MusicBrainz and fetch the release front image from Cover Art Archive when artwork is still missing or weak.
+4. Use Last.fm track metadata/artwork as a later fallback when a Last.fm API key is configured.
+5. Keep the bundled Scrobblix artwork placeholder visible if no usable cover can be found.
+
+All remote artwork is validated and cached locally; MusicBrainz queries stay globally serialized and spaced to respect its public-service request limit. Artwork UI must show its placeholder until a real local image has successfully decoded.

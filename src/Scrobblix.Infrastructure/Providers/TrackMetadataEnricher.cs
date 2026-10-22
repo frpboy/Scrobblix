@@ -66,10 +66,12 @@ public sealed class TrackMetadataEnricher
 
         _log?.Invoke($"Metadata lookup started; artist={observation.Artist}; title={observation.Title}; album={observation.Album ?? "(missing)"}; lastfm_key_configured={_lastFmApiKey is not null}; source_artwork={(string.IsNullOrWhiteSpace(observation.ArtworkPath) ? "missing" : "available")}.");
         var result = FromObservation(observation);
-        if (string.IsNullOrWhiteSpace(result.ArtworkPath) && !string.IsNullOrWhiteSpace(observation.ArtworkUrl))
+        if (HasWeakArtwork(result) && !string.IsNullOrWhiteSpace(observation.ArtworkUrl))
         {
+            // A source may supply a stale/unusable cache path while also exposing a usable
+            // artwork URL. Try the direct source URL before falling back to MusicBrainz/Cover Art Archive.
             var sourceArtwork = await TryCacheArtworkAsync(observation.ArtworkUrl, "browser-session", cancellationToken);
-            result = Merge(result, sourceArtwork);
+            result = MergeArtwork(result, sourceArtwork);
         }
 
         var release = await TryFindReleaseAsync(observation, result.ReleaseMusicBrainzId, cancellationToken);
