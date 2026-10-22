@@ -1,4 +1,3 @@
-        // Diagnostic logs describe operational state; listening metadata remains private.
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
