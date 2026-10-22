@@ -1,6 +1,6 @@
 # Scrobblix Browser Companion
 
-The companion observes media metadata and playback-state changes in supported browser tabs, then forwards bounded metadata through Native Messaging to the local Scrobblix desktop app. It does not capture audio or contact Last.fm itself.
+The companion observes media metadata and playback-state changes in supported YouTube, YouTube Music, and Spotify Web Player tabs, then forwards bounded metadata through Native Messaging to the local Scrobblix desktop app. It does not capture audio or contact Last.fm itself.
 
 ## Build
 
@@ -47,4 +47,4 @@ For a signed/distributed Firefox extension, set and maintain a stable add-on ID 
 
 ## Scope and limitations
 
-The adapter reads supported HTML audio/video elements on YouTube Music and Spotify Web Player. Sites can change their metadata APIs or player markup. Actual browser-installed validation must still be run in Chrome/Edge and Firefox on Windows. The named pipe is current-user-only but a release still needs stronger same-user process identity checks.
+The adapter reads supported HTML audio/video elements on YouTube, YouTube Music, and Spotify Web Player. Standard YouTube videos can expose incomplete artist metadata, so Scrobblix tracks only metadata the page actually publishes and never invents missing fields. Sites can change their metadata APIs or player markup. Actual browser-installed validation must still be run in Chrome/Edge and Firefox on Windows. The named pipe is current-user-only but a release still needs stronger same-user process identity checks.

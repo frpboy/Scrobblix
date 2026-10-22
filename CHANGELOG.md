@@ -19,6 +19,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 - Reframed Scrobblix from a basic Last.fm utility into a local-first Windows listening companion with transparent diagnostics.
 - Windows notifications now expire automatically: 5 seconds for accepted-scrobble confirmations and 10 seconds for delivery warnings that need attention.
+- Browser Companion permissions now include standard YouTube, so its media observer can report YouTube playback when the companion is installed and connected.
 
 ### Security
 

@@ -17,6 +17,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://www.youtube.com/*",
         "https://music.youtube.com/*",
         "https://open.spotify.com/*"
       ],
@@ -27,6 +28,7 @@
     }
   ],
   "optional_host_permissions": [
+    "https://www.youtube.com/*",
     "https://music.youtube.com/*",
     "https://open.spotify.com/*"
   ],
