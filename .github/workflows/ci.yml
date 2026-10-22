@@ -32,6 +32,86 @@ jobs:
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
+      - name: Dump WinUI XAML compiler diagnostics on build failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $searchRoot = 'src/Scrobblix.Desktop/obj/Release'
+          if (Test-Path $searchRoot) {
+            $files = Get-ChildItem -Path $searchRoot -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -in @('input.json', 'output.json', 'XamlCompiler.log', 'XamlCompiler.err') }
+            foreach ($file in $files) {
+              Write-Output "----- $($file.Name) ($($file.Length) bytes) -----"
+              if ($file.Name -eq 'input.json') {
+                Write-Output "XAML compiler input found: $($file.FullName)"
+                continue
+              }
+
+              $raw = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+              if ($raw) {
+                foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                  $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                  if ($index -ge 0) {
+                    $startAt = [Math]::Max(0, $index - 240)
+                    $length = [Math]::Min(1200, $raw.Length - $startAt)
+                    Write-Output ("MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
+                  }
+                }
+              }
+            }
+
+            $compiler = Get-ChildItem -Path "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk.winui" -Recurse -Filter 'XamlCompiler.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            $inputFile = Get-ChildItem -Path $searchRoot -Recurse -Filter 'input.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $compiler -and $null -ne $inputFile) {
+              $replay = Join-Path $inputFile.DirectoryName 'output-diagnostic-replay.json'
+              $stdout = Join-Path $inputFile.DirectoryName 'xaml-compiler-stdout.txt'
+              $stderr = Join-Path $inputFile.DirectoryName 'xaml-compiler-stderr.txt'
+              Write-Output "Replaying compiler with redirected stdout/stderr."
+              $process = Start-Process -FilePath $compiler.FullName -ArgumentList @($inputFile.FullName, $replay) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+              Write-Output "Replay exit code: $($process.ExitCode)"
+              foreach ($logPath in @($stdout, $stderr)) {
+                if (Test-Path $logPath) {
+                  $text = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
+                  if ($text) {
+                    Write-Output "----- $([System.IO.Path]::GetFileName($logPath)) -----"
+                    Write-Output $text.Substring(0, [Math]::Min(8000, $text.Length))
+                  }
+                }
+              }
+              if (Test-Path $replay) {
+                $raw = Get-Content -LiteralPath $replay -Raw -ErrorAction SilentlyContinue
+                if ($raw) {
+                  foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                    $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                    if ($index -ge 0) {
+                      $startAt = [Math]::Max(0, $index - 240)
+                      $length = [Math]::Min(1600, $raw.Length - $startAt)
+                      Write-Output ("REPLAY MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
+                    }
+                  }
+                }
+              }
+            }
+          }
+          $crashDumpRoot = Join-Path $env:LOCALAPPDATA 'CrashDumps'
+          if (Test-Path $crashDumpRoot) {
+            Get-ChildItem -Path $crashDumpRoot -Filter '*XamlCompiler*' -File -ErrorAction SilentlyContinue |
+              Select-Object -First 5 FullName, Length, LastWriteTime |
+              Format-Table -AutoSize | Out-String | Write-Output
+          }
+          try {
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 120 -ErrorAction Stop |
+              Where-Object { $_.ProviderName -match 'Application Error|\.NET Runtime|Windows Error Reporting' -and $_.Message -match 'XamlCompiler|Scrobblix' } |
+              Select-Object -First 10 TimeCreated, ProviderName, Id, Message |
+              Format-List | Out-String -Width 220 | Write-Output
+          }
+          catch {
+            Write-Output "Application event-log inspection unavailable: $($_.Exception.GetType().Name)"
+          }
+          exit 0
+      - name: Validate desktop UI contracts
+        run: node scripts/test-desktop-ui-contracts.mjs
+
       - name: Run domain and infrastructure assertions
         run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
 

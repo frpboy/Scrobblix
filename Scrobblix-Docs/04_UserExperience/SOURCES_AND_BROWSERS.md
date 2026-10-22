@@ -43,3 +43,11 @@ Users may define broad preference (`Automatic`, `Prefer Browser Companion`, `Pre
 ## Exclusions
 
 Application/site exclusions require a reason field only for diagnostics if the user chooses. Excluded sources remain visible with “Ignored by your settings.”
+
+
+## Source identity and logo policy
+
+- A source name may only be resolved from a current observation's exact known GSMTC application ID or HTTPS origin. Never infer brand from song metadata, artwork or window captions.
+- The text label remains visible if a provider logo is absent. The identity registry only checks local assets; it never fetches logos at runtime.
+- `src/Scrobblix.Desktop/Assets/providers/README.md` is the approval ledger. Until a brand's current usage rules and permission basis are recorded, Scrobblix uses neutral Fluent icons plus text. The Last.fm API Terms specifically require prior written approval in each case for marks/logos/graphics.
+- Browser companion code/site support is unchanged by this desktop-only UI work.

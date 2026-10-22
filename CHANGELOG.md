@@ -17,6 +17,13 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Changed
 
+- Added a preference-backed compact/expanded desktop navigation rail with width hysteresis, unchanged route selection, and local preference persistence.
+- Added light/dark/high-contrast Scrobblix app marks and a multi-size owned ICO for the supported title-bar and tray surfaces.
+- Reorganized desktop Settings into General, Last.fm, Detection, Notifications, Privacy, Storage, and collapsed Advanced details.
+- Added truthful source labels from exact observed application IDs/origins, neutral fallbacks, and a local asset approval ledger; third-party marks remain absent until their usage is reviewed.
+- Added static desktop UI contract checks and real-Windows acceptance rows for navigation, scaling, keyboard/screen reader, high contrast, and activation paths.
+- Expanded desktop UI contract assertions for navigation order/accessibility, responsive rail behavior, preference safety, source identity allow-lists, local logo fallback, and notification privacy.
+
 - Bounded Browser Companion named-pipe I/O retries and throttled repetitive warnings while retaining suppressed-warning counts.
 - Updated the local build/run helper to target the private-beta readiness branch and refuse to rebuild while an existing desktop/tray process holds output DLLs.
 - Reframed Scrobblix from a basic Last.fm utility into a local-first Windows listening companion with transparent diagnostics.
