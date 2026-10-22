@@ -89,8 +89,8 @@ assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth=/g) ?? 
 assert.ok(xaml.includes('x:Name="StartupInfo" IsOpen="False" IsClosable="True"'), "Routine startup/playback status must not reserve Home vertical space.");
 assert.ok(code.includes("StartupInfo.IsOpen = isAttention || isTrackingAction;"), "The Home status banner should appear only for attention and explicit pause/resume actions.");
 assert.ok(xaml.includes('<StackPanel Spacing="12">') && xaml.includes('Border Padding="12" CornerRadius="6"'), "Now Playing internal rhythm should be compact without removing the focal card.");
-assert.ok(xaml.includes('Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">\\n                                    <Button x:Name="TrackingToggleButton"'), "Tracking and Love/Unlove actions should share one compact row.");
-assert.ok(!xaml.includes('Border Padding="24"') && !xaml.includes('Border Padding="20"'), "Secondary content cards should use the compact spacing token.");
+assert.ok(/Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">\\s*<Button x:Name="TrackingToggleButton"/.test(xaml), "Tracking and Love/Unlove actions should share one compact row.");
+assert.ok(xaml.includes('Border Padding="20" CornerRadius="8"') && !xaml.includes('Border Padding="24"'), "Keep the primary Now Playing card slightly roomier and compact secondary cards.");
 
 assert.ok(!xaml.includes("<Storyboard") && !xaml.includes("AcrylicBrush"), "The utility rail must not introduce decorative motion or unsupported new surface treatments.");
 
