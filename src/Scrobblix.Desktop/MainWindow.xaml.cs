@@ -10,6 +10,7 @@ using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
+using Scrobblix.Domain.Queue;
 
 namespace Scrobblix.Desktop;
 
@@ -17,6 +18,10 @@ public sealed partial class MainWindow : Window
 {
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
+    private bool _isLastFmConnected;
+    private bool _updatingNotificationPreference;
+    private bool _updatingNotificationPrivacyPreference;
+    private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
 
     public event Action<bool>? TrackingModeChanged;
 
@@ -29,6 +34,21 @@ public sealed partial class MainWindow : Window
     public event Func<string, string, Task>? LastFmApiCredentialsSaveRequested;
 
     public event Action<string>? DiagnosticLogRequested;
+
+    public event Func<string, Task<bool>>? QueueRetryNowRequested;
+
+    public event Func<string, Task<bool>>? QueueCancelRequested;
+    public event Func<string, Task<bool>>? QueueConfirmOutcomeAcceptedRequested;
+
+    public event Func<string, ProviderActionType, Task<bool>>? LovedTrackActionRequested;
+
+    public event Func<string, Task>? BackupRequested;
+
+    public event Func<string, Task<bool>>? RestoreRequested;
+
+    public event Func<bool, Task>? DesktopNotificationsPreferenceChanged;
+
+    public event Func<bool, Task>? NotificationTrackDetailsPreferenceChanged;
 
     private string? _logDirectory;
 
@@ -55,13 +75,14 @@ public sealed partial class MainWindow : Window
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
         var windowId = Microsoft.UI.Win32Interop.GetWindowIdFromWindow(handle);
         var appWindow = Microsoft.UI.Windowing.AppWindow.GetFromWindowId(windowId);
-        appWindow.Resize(new global::Windows.Graphics.SizeInt32(1120, 800));
         if (appWindow.Presenter is Microsoft.UI.Windowing.OverlappedPresenter presenter)
         {
             presenter.IsResizable = true;
             presenter.IsMaximizable = true;
             presenter.IsMinimizable = true;
         }
+
+        appWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 780));
     }
 
     public void SetStartupStatus(string message, InfoBarSeverity severity)
@@ -73,6 +94,7 @@ public sealed partial class MainWindow : Window
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
         _displayedPlayId = trackingStatus.PlayId;
+        UpdateLovedButtons();
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
@@ -104,6 +126,7 @@ public sealed partial class MainWindow : Window
         var enrichedObservation = observation with
         {
             AlbumArtist = metadata.AlbumArtist ?? observation.AlbumArtist,
+            Album = metadata.Album ?? observation.Album,
             TrackNumber = metadata.TrackNumber ?? observation.TrackNumber,
             ReleaseYear = metadata.ReleaseYear ?? observation.ReleaseYear,
             RecordingMusicBrainzId = metadata.RecordingMusicBrainzId ?? observation.RecordingMusicBrainzId,
@@ -209,19 +232,77 @@ public sealed partial class MainWindow : Window
     public void SetRecentHistory(IReadOnlyList<RecentPlay> plays)
     {
         RecentActivityList.Children.Clear();
-        HistoryList.Children.Clear();
         if (plays.Count == 0)
         {
             RecentActivityList.Children.Add(new TextBlock { Text = "No recent activity" });
             RecentActivityList.Children.Add(new TextBlock { Text = "Detected plays and provider outcomes will be listed here once tracking begins.", TextWrapping = TextWrapping.Wrap });
-            HistoryList.Children.Add(new TextBlock { Text = "No listening sessions recorded yet." });
             return;
         }
+        foreach (var play in plays) AddPlayRow(RecentActivityList, play);
+    }
 
-        foreach (var play in plays)
+    public void SetHistoryPage(IReadOnlyList<RecentPlay> plays)
+    {
+        _historyRecords = plays;
+        RenderHistory();
+    }
+
+    private void HistorySearchInput_TextChanged(object sender, TextChangedEventArgs args) => RenderHistory();
+
+    private void RenderHistory()
+    {
+        if (HistoryList is null || HistorySearchInput is null || HistoryResultCountText is null) return;
+        HistoryList.Children.Clear();
+        var query = HistorySearchInput.Text?.Trim();
+        IEnumerable<RecentPlay> filtered = string.IsNullOrWhiteSpace(query)
+            ? _historyRecords
+            : _historyRecords.Where(play => ContainsIgnoreCase(play.Artist, query)
+                || ContainsIgnoreCase(play.Title, query)
+                || ContainsIgnoreCase(play.Album, query)
+                || ContainsIgnoreCase(play.AlbumArtist, query));
+        var filteredRows = filtered.ToArray();
+        HistoryResultCountText.Text = string.IsNullOrWhiteSpace(query)
+            ? $"Showing {_historyRecords.Count:N0} most recent session(s) (maximum 500 loaded)."
+            : $"Showing {filteredRows.Length:N0} of {_historyRecords.Count:N0} loaded session(s).";
+        foreach (var play in filteredRows) AddPlayRow(HistoryList, play);
+        if (filteredRows.Length == 0)
         {
-            AddPlayRow(RecentActivityList, play);
-            AddPlayRow(HistoryList, play);
+            HistoryList.Children.Add(new TextBlock
+            {
+                Text = string.IsNullOrWhiteSpace(query) ? "No listening sessions recorded yet." : "No local sessions match this search.",
+                TextWrapping = TextWrapping.Wrap,
+            });
+        }
+    }
+
+    private static bool ContainsIgnoreCase(string? value, string query) =>
+        value?.Contains(query, StringComparison.OrdinalIgnoreCase) == true;
+
+    private async void ExportHistoryCsvButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (_historyRecords.Count == 0)
+        {
+            HistoryResultCountText.Text = "There are no local history sessions to export yet.";
+            return;
+        }
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"scrobblix-history-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("CSV file", new List<string> { ".csv" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+            await global::Windows.Storage.FileIO.WriteTextAsync(file, HistoryCsvExporter.Export(_historyRecords));
+            HistoryResultCountText.Text = $"Exported {_historyRecords.Count:N0} recent session(s) to {file.Name}.";
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidOperationException or System.Runtime.InteropServices.COMException)
+        {
+            HistoryResultCountText.Text = $"CSV export failed ({exception.GetType().Name}). Check the selected folder's permissions and try again.";
+            DiagnosticLogRequested?.Invoke($"History CSV export failed; exception={exception.GetType().Name}.");
         }
     }
 
@@ -274,6 +355,193 @@ public sealed partial class MainWindow : Window
         Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
     }
 
+    public void SetDesktopNotificationsEnabled(bool enabled)
+    {
+        _updatingNotificationPreference = true;
+        try
+        {
+            DesktopNotificationsCheckBox.IsChecked = enabled;
+        }
+        finally
+        {
+            _updatingNotificationPreference = false;
+        }
+
+        SetDesktopNotificationsStatus(enabled
+            ? "Windows notifications are enabled for accepted scrobbles and persistent delivery issues."
+            : "Windows notifications are off. Enable this option to receive delivery updates.");
+    }
+
+    public void SetDesktopNotificationsStatus(string status) =>
+        DesktopNotificationsStatusText.Text = status;
+
+    public void SetNotificationTrackDetailsEnabled(bool enabled)
+    {
+        _updatingNotificationPrivacyPreference = true;
+        try
+        {
+            NotificationTrackDetailsCheckBox.IsChecked = enabled;
+        }
+        finally
+        {
+            _updatingNotificationPrivacyPreference = false;
+        }
+
+        NotificationPrivacyStatusText.Text = enabled
+            ? "Artist and track title may appear on notification banners and the lock screen."
+            : "Track details are hidden in notification banners and the lock screen.";
+    }
+
+    private async void NotificationTrackDetailsCheckBox_Changed(object sender, RoutedEventArgs args)
+    {
+        if (_updatingNotificationPrivacyPreference) return;
+        var enabled = NotificationTrackDetailsCheckBox.IsChecked == true;
+        var handler = NotificationTrackDetailsPreferenceChanged;
+        if (handler is null)
+        {
+            SetNotificationTrackDetailsEnabled(false);
+            NotificationPrivacyStatusText.Text = "Notification privacy settings are not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        NotificationTrackDetailsCheckBox.IsEnabled = false;
+        try
+        {
+            await handler(enabled);
+        }
+        catch (Exception exception)
+        {
+            SetNotificationTrackDetailsEnabled(false);
+            NotificationPrivacyStatusText.Text = $"Notification privacy preference could not be saved ({exception.GetType().Name}).";
+            DiagnosticLogRequested?.Invoke($"Notification privacy preference update failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            NotificationTrackDetailsCheckBox.IsEnabled = true;
+        }
+    }
+
+    private async void DesktopNotificationsCheckBox_Changed(object sender, RoutedEventArgs args)
+    {
+        if (_updatingNotificationPreference) return;
+        var enabled = DesktopNotificationsCheckBox.IsChecked == true;
+        var handler = DesktopNotificationsPreferenceChanged;
+        if (handler is null)
+        {
+            SetDesktopNotificationsEnabled(false);
+            SetDesktopNotificationsStatus("Notification settings are not initialized. Restart Scrobblix and try again.");
+            return;
+        }
+
+        DesktopNotificationsCheckBox.IsEnabled = false;
+        try
+        {
+            await handler(enabled);
+        }
+        catch (Exception exception)
+        {
+            SetDesktopNotificationsEnabled(false);
+            SetDesktopNotificationsStatus($"Notification setting could not be saved ({exception.GetType().Name}).");
+            DiagnosticLogRequested?.Invoke($"Desktop notification preference update failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            DesktopNotificationsCheckBox.IsEnabled = true;
+        }
+    }
+
+    private async void CreateBackupButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (BackupRequested is null)
+        {
+            DataManagementStatusText.Text = "Backup service is not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"Scrobblix-Backup-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("Scrobblix backup", new List<string> { ".scrobblix-backup" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null) return;
+
+            CreateBackupButton.IsEnabled = false;
+            DataManagementStatusText.Text = "Creating a consistent SQLite snapshot. Local tracking can continue.";
+            await BackupRequested.Invoke(file.Path);
+            DataManagementStatusText.Text = $"Backup created successfully: {file.Name}. Credentials, session keys, and cached artwork were excluded.";
+        }
+        catch (Exception exception)
+        {
+            DataManagementStatusText.Text = $"Backup failed ({exception.GetType().Name}). Check the destination folder and local database, then try again.";
+            DiagnosticLogRequested?.Invoke($"Database backup failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            CreateBackupButton.IsEnabled = true;
+        }
+    }
+
+    private async void RestoreBackupButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (RestoreRequested is null)
+        {
+            DataManagementStatusText.Text = "Restore service is not initialized. Restart Scrobblix and try again.";
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileOpenPicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                ViewMode = global::Windows.Storage.Pickers.PickerViewMode.List,
+            };
+            picker.FileTypeFilter.Add(".scrobblix-backup");
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSingleFileAsync();
+            if (file is null) return;
+
+            var confirmation = new ContentDialog
+            {
+                XamlRoot = Content.XamlRoot,
+                Title = "Stage this Scrobblix restore?",
+                Content = "Scrobblix will validate the backup, stage it, then close. On the next launch the database is restored after a safety snapshot of the current database. The archive does not contain Last.fm credentials or artwork.",
+                PrimaryButtonText = "Validate and restore",
+                CloseButtonText = "Cancel",
+                DefaultButton = ContentDialogButton.Close,
+            };
+            if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+
+            RestoreBackupButton.IsEnabled = false;
+            DataManagementStatusText.Text = "Validating the backup manifest, checksum, schema, and SQLite integrity…";
+            var staged = await RestoreRequested.Invoke(file.Path);
+            if (!staged)
+            {
+                DataManagementStatusText.Text = "Restore was not staged. The active database was not changed.";
+                return;
+            }
+
+            DataManagementStatusText.Text = "Backup validated and staged. Scrobblix will close; launch it again to apply the restore.";
+            await Task.Delay(TimeSpan.FromSeconds(1));
+            Close();
+            Microsoft.UI.Xaml.Application.Current.Exit();
+        }
+        catch (Exception exception)
+        {
+            DataManagementStatusText.Text = $"Restore failed ({exception.GetType().Name}). The active database was not deliberately replaced; review Diagnostics and try another backup.";
+            DiagnosticLogRequested?.Invoke($"Database restore staging failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            RestoreBackupButton.IsEnabled = true;
+        }
+    }
+
     private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
     {
         var settingsItem = AppNavigationView.MenuItems
@@ -316,10 +584,212 @@ public sealed partial class MainWindow : Window
         var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
+        StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
+        LovedView.Visibility = destination == "loved" ? Visibility.Visible : Visibility.Collapsed;
         QueueView.Visibility = destination == "queue" ? Visibility.Visible : Visibility.Collapsed;
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
+    }
+
+    public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
+    {
+        QueuePageActionList.Children.Clear();
+        if (actions.Count == 0)
+        {
+            QueuePageActionList.Children.Add(new TextBlock { Text = "No provider actions have been recorded yet." });
+            return;
+        }
+
+        foreach (var action in actions)
+        {
+            var card = new Border
+            {
+                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            };
+            var content = new StackPanel { Spacing = 6 };
+            var track = string.IsNullOrWhiteSpace(action.Artist) && string.IsNullOrWhiteSpace(action.Title)
+                ? "Unknown track"
+                : $"{action.Artist ?? "Unknown artist"} — {action.Title ?? "Unknown title"}";
+            content.Children.Add(new TextBlock { Text = track, FontSize = 15, TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{action.Provider} · {action.ActionType} · {FormatQueueState(action.State)} · attempts {action.AttemptCount:N0}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"Original due time: {action.DueUtc.ToLocalTime():g}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(action.LastReasonCode))
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = $"Reason: {action.LastReasonCode}",
+                    FontSize = 12,
+                    TextWrapping = TextWrapping.Wrap,
+                });
+            }
+
+            var actionsRow = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8 };
+            if (action.State is ProviderActionState.RetryScheduled or ProviderActionState.RetryExhausted)
+            {
+                var retryButton = new Button
+                {
+                    Content = action.State == ProviderActionState.RetryExhausted ? "Retry manually" : "Retry now",
+                    Tag = action.ActionId,
+                };
+                retryButton.Click += QueueRetryNowButton_Click;
+                actionsRow.Children.Add(retryButton);
+            }
+
+            if (action.State == ProviderActionState.SubmissionOutcomeUnknown)
+            {
+                content.Children.Add(new TextBlock
+                {
+                    Text = "Last.fm may have accepted this scrobble before the connection failed. Check your Last.fm profile before choosing a recovery action to avoid duplicates.",
+                    TextWrapping = TextWrapping.Wrap,
+                    FontSize = 12,
+                });
+                var confirmAcceptedButton = new Button { Content = "Confirm accepted", Tag = action.ActionId };
+                confirmAcceptedButton.Click += QueueConfirmOutcomeAcceptedButton_Click;
+                actionsRow.Children.Add(confirmAcceptedButton);
+                var retryAnywayButton = new Button { Content = "Retry anyway…", Tag = action.ActionId };
+                retryAnywayButton.Click += QueueRetryUnknownOutcomeButton_Click;
+                actionsRow.Children.Add(retryAnywayButton);
+            }
+
+            if (action.State is ProviderActionState.Pending or ProviderActionState.RetryScheduled or ProviderActionState.AuthBlocked or ProviderActionState.RetryExhausted or ProviderActionState.SubmissionOutcomeUnknown)
+            {
+                var cancelButton = new Button
+                {
+                    Content = "Cancel action",
+                    Tag = action.ActionId,
+                };
+                cancelButton.Click += QueueCancelButton_Click;
+                actionsRow.Children.Add(cancelButton);
+            }
+
+            if (actionsRow.Children.Count > 0) content.Children.Add(actionsRow);
+            card.Child = content;
+            QueuePageActionList.Children.Add(card);
+        }
+    }
+
+    private static string FormatQueueState(ProviderActionState state) => state switch
+    {
+        ProviderActionState.RetryScheduled => "Retry scheduled",
+        ProviderActionState.RetryExhausted => "Automatic retries exhausted",
+        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown — review required",
+        ProviderActionState.AuthBlocked => "Authentication blocked",
+        ProviderActionState.PermanentFailure => "Failed",
+        ProviderActionState.ProviderIgnored => "Ignored by provider",
+        ProviderActionState.InFlight => "In progress",
+        _ => state.ToString(),
+    };
+
+    private async void QueueRetryNowButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueRetryNowRequested is null) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueRetryNowRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "Retry scheduled immediately. The worker will attempt delivery when Last.fm is connected."
+                : "This action changed before it could be retried. Refreshing its current state.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Retry could not be scheduled ({exception.GetType().Name}).";
+        }
+    }
+
+    private async void QueueRetryUnknownOutcomeButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueRetryNowRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Retry an uncertain Last.fm scrobble?",
+            Content = "Last.fm may already have accepted this request. Retrying can create a duplicate scrobble. Check your Last.fm profile first; continue only if you accept that risk.",
+            PrimaryButtonText = "Retry anyway",
+            CloseButtonText = "Go back",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueRetryNowRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "Manual retry queued. A duplicate may result if Last.fm accepted the earlier request."
+                : "This action changed before it could be retried.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Manual retry could not be scheduled ({exception.GetType().Name}).";
+        }
+    }
+
+    private async void QueueConfirmOutcomeAcceptedButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueConfirmOutcomeAcceptedRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Confirm this scrobble was accepted?",
+            Content = "Use this only after checking your Last.fm profile and confirming the exact track is present. Scrobblix will stop attempting delivery for this action.",
+            PrimaryButtonText = "Confirm accepted",
+            CloseButtonText = "Go back",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueConfirmOutcomeAcceptedRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "The action is marked accepted locally based on your confirmation."
+                : "This action changed before it could be resolved.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"The action could not be resolved ({exception.GetType().Name}).";
+        }
+    }
+
+    private async void QueueCancelButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueCancelRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Cancel queued action?",
+            Content = "This keeps the history record but marks the selected provider action as cancelled. It does not remove an already accepted Last.fm scrobble.",
+            PrimaryButtonText = "Cancel action",
+            CloseButtonText = "Keep action",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueCancelRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "The queued action was cancelled. Local listening history was kept."
+                : "This action is already running or has changed and could not be cancelled.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Action could not be cancelled ({exception.GetType().Name}).";
+        }
     }
 
     public void SetQueueSummary(QueueSummary summary)
@@ -330,14 +800,147 @@ public sealed partial class MainWindow : Window
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
 
+    public void SetStatisticsSummary(ListeningStatistics summary)
+    {
+        StatisticsSessionsText.Text = summary.TotalSessionCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsListeningText.Text = FormatListeningTime(summary.ConfirmedListeningMilliseconds);
+        StatisticsEligibleText.Text = summary.EligibleSessionCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsAcceptedText.Text = summary.AcceptedScrobbleCount.ToString("N0", CultureInfo.InvariantCulture);
+        StatisticsTopArtistsList.Children.Clear();
+        if (summary.TopArtists.Count == 0)
+        {
+            StatisticsTopArtistsList.Children.Add(new TextBlock { Text = "No artist totals are available yet." });
+            return;
+        }
+        foreach (var artist in summary.TopArtists)
+        {
+            var row = new StackPanel { Spacing = 3 };
+            row.Children.Add(new TextBlock { Text = artist.Artist, FontSize = 15 });
+            row.Children.Add(new TextBlock { Text = $"{artist.PlayCount:N0} session(s) · {FormatListeningTime(artist.ConfirmedListeningMilliseconds)} confirmed", FontSize = 12 });
+            StatisticsTopArtistsList.Children.Add(row);
+        }
+    }
+
+    public void SetLovedTracks(IReadOnlyList<LovedTrackSummary> tracks)
+    {
+        LovedTracksList.Children.Clear();
+        LovedPageStatusText.Text = tracks.Count == 0
+            ? "No Love/Unlove actions have been recorded by Scrobblix yet."
+            : $"Showing {tracks.Count:N0} latest distinct track intent(s). Status reflects the local queue and provider response.";
+        if (tracks.Count == 0)
+        {
+            LovedTracksList.Children.Add(new TextBlock { Text = "Use Love or Unlove on Last.fm from the current-track card to create an action." });
+            return;
+        }
+
+        foreach (var track in tracks)
+        {
+            var card = new Border
+            {
+                Padding = new Thickness(14),
+                CornerRadius = new CornerRadius(8),
+                BorderThickness = new Thickness(1),
+                BorderBrush = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardStrokeColorDefaultBrush"],
+            };
+            var content = new StackPanel { Spacing = 5 };
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{track.Artist ?? "Unknown artist"} — {track.Title ?? "Unknown title"}",
+                FontSize = 15,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(track.Album))
+                content.Children.Add(new TextBlock { Text = track.Album, FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            content.Children.Add(new TextBlock
+            {
+                Text = $"{(track.RequestedAction == ProviderActionType.Love ? "Love" : "Unlove")} · {FormatLovedState(track.RequestedAction, track.State)} · attempts {track.AttemptCount:N0}",
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            if (!string.IsNullOrWhiteSpace(track.LastReasonCode))
+                content.Children.Add(new TextBlock { Text = $"Reason: {track.LastReasonCode}", FontSize = 12, TextWrapping = TextWrapping.Wrap });
+            card.Child = content;
+            LovedTracksList.Children.Add(card);
+        }
+    }
+
+    private static string FormatLovedState(ProviderActionType actionType, ProviderActionState state) =>
+        (actionType, state) switch
+        {
+            (ProviderActionType.Love, ProviderActionState.Accepted) => "Loved on Last.fm",
+            (ProviderActionType.Unlove, ProviderActionState.Accepted) => "Unloved on Last.fm",
+            (_, ProviderActionState.Pending) => "Queued",
+            (_, ProviderActionState.InFlight) => "Sending to Last.fm",
+            (_, ProviderActionState.RetryScheduled) => "Retry scheduled",
+            (_, ProviderActionState.AuthBlocked) => "Blocked by authentication",
+            (_, ProviderActionState.PermanentFailure) => "Provider rejected the action",
+            (_, ProviderActionState.Cancelled) => "Cancelled / superseded",
+            _ => state.ToString(),
+        };
+
+    public void SetLovedActionFeedback(string message) => CurrentTrackLoveStatusText.Text = message;
+
+    private void UpdateLovedButtons()
+    {
+        var canAct = _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
+        if (CurrentTrackUnloveButton is not null) CurrentTrackUnloveButton.IsEnabled = canAct;
+        if (CurrentTrackLoveStatusText is null) return;
+        CurrentTrackLoveStatusText.Text = !_isLastFmConnected
+            ? "Connect Last.fm in Settings to manage loved tracks."
+            : string.IsNullOrWhiteSpace(_displayedPlayId)
+                ? "Start a supported track to love or unlove it."
+                : "Requests are saved locally first; provider status appears on the Loved page.";
+    }
+
+    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args) =>
+        await RequestLovedTrackActionAsync(ProviderActionType.Love);
+
+    private async void CurrentTrackUnloveButton_Click(object sender, RoutedEventArgs args) =>
+        await RequestLovedTrackActionAsync(ProviderActionType.Unlove);
+
+    private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
+    {
+        if (string.IsNullOrWhiteSpace(_displayedPlayId))
+        {
+            SetLovedActionFeedback("Wait for Scrobblix to save the current listening session before requesting Love/Unlove.");
+            return;
+        }
+        if (LovedTrackActionRequested is null)
+        {
+            SetLovedActionFeedback("Loved-track actions are not initialized. Restart Scrobblix and try again.");
+            return;
+        }
+
+        CurrentTrackLoveButton.IsEnabled = false;
+        CurrentTrackUnloveButton.IsEnabled = false;
+        try
+        {
+            var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
+            if (!queued)
+                SetLovedActionFeedback("No duplicate request was created. Check Loved and Queue for the current state.");
+            else
+                SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; delivery status appears on Loved.");
+        }
+        finally
+        {
+            UpdateLovedButtons();
+        }
+    }
+
     public void SetTodaySummary(TodaySummary summary)
     {
-        TodayStateText.Text = DashboardStatusText.TodayHeadline(summary);
-        TodayDetailText.Text = DashboardStatusText.TodayDetail(summary);
+        TodayStateText.Text = summary.DetectedSessionCount == 0
+            ? "No listening activity yet today"
+            : $"{summary.DetectedSessionCount:N0} listening session{(summary.DetectedSessionCount == 1 ? string.Empty : "s")} today";
+        TodayDetailText.Text =
+            $"Confirmed listening: {FormatListeningTime(summary.ConfirmedListeningMilliseconds)} · Eligible: {summary.EligibleSessionCount:N0} · Accepted: {summary.AcceptedScrobbleCount:N0}";
     }
 
     public void SetLastFmUnavailable()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
@@ -346,6 +949,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmReadyToConnect()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
@@ -362,6 +967,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnected(string userName)
     {
+        _isLastFmConnected = true;
+        UpdateLovedButtons();
         SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
@@ -370,6 +977,8 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmConnectionError()
     {
+        _isLastFmConnected = false;
+        UpdateLovedButtons();
         SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
@@ -439,5 +1048,14 @@ public sealed partial class MainWindow : Window
     }
 
     private static string FormatDuration(long milliseconds) =>
-        TimeSpan.FromMilliseconds(milliseconds).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+        TimeSpan.FromMilliseconds(Math.Max(0, milliseconds)).ToString(@"m\:ss", CultureInfo.InvariantCulture);
+
+    private static string FormatListeningTime(long milliseconds)
+    {
+        var duration = TimeSpan.FromMilliseconds(Math.Max(0, milliseconds));
+        var totalHours = (long)duration.TotalHours;
+        return totalHours > 0
+            ? $"{totalHours}:{duration.Minutes:D2}:{duration.Seconds:D2}"
+            : $"{(long)duration.TotalMinutes}:{duration.Seconds:D2}";
+    }
 }

@@ -1,22 +1,45 @@
 # Prioritized Backlog
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (\`frpboy\`)  
+> **Status:** Active implementation; release gates remain open  
+> **Last updated:** 2026-10-21
 
-## P0 — Must protect correctness/data
+## Implemented and CI-verified baseline
 
-State machine, monotonic timing, atomic eligibility/queue, queue leases/retry, duplicate guard, migration/backup, credential/redaction, diagnostics reasons.
+- GSMTC polling and local playback observation ingestion.
+- Canonical playback tracker, eligibility decisions, durable SQLite history, queue leasing and restart recovery.
+- Last.fm signature/authentication/submission code and Credential Locker boundary.
+- Home, History (recent session page), Queue summary, Sources, Diagnostics and Settings.
+- Chromium Browser Companion and Native Messaging registration helpers.
+- Source arbitration, local metadata/artwork enrichment, SVG fallback and sequential UTC logs.
+- Desktop publish and test-bundle assembly in GitHub Actions.
+- This continuation adds search/export and local Statistics; leave them unverified until its CI run passes.
 
-## P1 — Required v1 experience
+## Remaining P0 — Correctness, security and recovery
 
-GSMTC, Last.fm auth/scrobble, tray/Home/History/Queue/Diagnostics/Sources/Settings, Browser Companion with initial adapters, export, notifications, installer/update, accessibility.
+- Exponential bounded retry/backoff, Retry-After handling and circuit-breaker policy.
+- Reconcile ambiguous Last.fm POST outcomes; never blindly resend a possibly accepted scrobble.
+- Harden and test the native-host-to-desktop peer identity boundary.
+- Backup/restore, migration rollback and crash-recovery qualification.
+- Queue item details/actions with a clear retry/cancel policy.
+- Retention controls and sanitized support bundles.
 
-## P2 — Strong v1/early follow-up
+## Remaining P1 — Required v1 experience
 
-Statistics/timeline polish, loved view/read reconciliation, advanced search, ARM64, broader adapter matrix, WinGet/Store, localization.
+- Loved-track list and durable love/unlove commands.
+- Firefox extension, manifest/installer registration and lifecycle validation.
+- Tray/minimize-to-tray, notifications and activation handling.
+- Full history pagination, play details, advanced filters and larger-range export.
+- Onboarding, application-specific source controls and accessibility qualification.
+- Signed installer/update/repair/uninstall and clean-machine tests.
 
-## P3 — Later
+## Remaining P2 — Strong v1 / beta polish
 
-User metadata rules, manual scrobbling, plugins, extra providers, Discord, cloud sync, macOS/Linux. Cloud/plugin work requires new threat/privacy architecture.
+- Statistics timeline, date ranges, listening reports and provider reliability.
+- Backup/restore UX and configuration export with secrets excluded.
+- Performance/soak checks, compatibility matrix, About/licenses/attribution and release docs.
+
+## Out of scope for v1
+
+- User metadata rule editor, plugins, third-party providers, Discord, cloud sync and non-Windows clients.

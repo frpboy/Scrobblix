@@ -29,32 +29,34 @@ Git, screenshots, issues, logs, or a tracked `.env` file.
 
 ## 3. Configure the current desktop build locally
 
-The current build deliberately reads the API values only from the process
-environment. This avoids placing them in source code, the local database, or
-Git.
+The desktop Settings page supports saving credentials directly into Windows
+Credential Locker. Prefer that flow for local use:
 
-Open a fresh PowerShell window and run the following, replacing the placeholders
-locally. Do not send the values to anyone:
+1. Start Scrobblix using the terminal commands in the repository README.
+2. Open **Settings**.
+3. Enter your API key and shared secret, then select **Save API credentials
+   securely**.
+4. Select **Connect Last.fm**, approve Scrobblix in your browser, and return to
+   the app to select **Finish approval**.
 
-```powershell
-$env:SCROBBLIX_LASTFM_API_KEY = "your-api-key"
-$env:SCROBBLIX_LASTFM_API_SECRET = "your-shared-secret"
-dotnet run --project src\Scrobblix.Desktop\Scrobblix.Desktop.csproj
-```
+Scrobblix stores application credentials and the user session key in Windows
+Credential Locker. They are not written to SQLite or Git.
 
-These values apply only to that PowerShell session. Start the app from the same
-window. If the app says that Last.fm setup is unavailable, close it and check
-that both variables are set in the same window before starting again.
+For headless development automation, these process-scoped environment variables
+remain supported as a fallback. Do not paste them into a tracked environment
+file or persist the shared secret as a user-wide variable unless you accept
+that exposure:
 
-For a packaged release, use a secure deployment secret store or a Windows
-credential-management installation step rather than a tracked configuration
-file. Do not use `setx` for the shared secret unless you accept that it will be
-stored as a persistent user environment variable.
+- SCROBBLIX_LASTFM_API_KEY
+- SCROBBLIX_LASTFM_API_SECRET
+
+Those values apply only to the PowerShell session from which the app is started.
+The in-app credential form is the preferred workflow.
 
 ## 4. Approve the Last.fm account
 
-1. Start Scrobblix with the two environment variables configured.
-2. Open **Settings** and select **Connect Last.fm**.
+1. Start Scrobblix and confirm that API credentials are configured in Settings.
+2. Select **Connect Last.fm**.
 3. Your browser opens the Last.fm approval page. Sign in to the account that
    should receive scrobbles and approve Scrobblix.
 4. Return to Scrobblix and select **Finish approval**.
@@ -83,38 +85,34 @@ reporting an issue; remove credentials from screenshots.
 
 ## 6. Browser companion and native host
 
-The browser companion is optional: desktop playback continues through Windows
-media controls without it. Installing the companion requires a packaged native
-messaging host and the browser extension ID, so wait until the extension release
-artifact exists. At that time:
+The browser companion is optional; desktop playback continues through Windows
+media controls without it. The current extension targets Chromium (Chrome and
+Edge) and the supported sites declared in browser-extension/manifest.json.
+Firefox development support is now present as `browser-extension/manifest.firefox.json`, with a fixed development add-on ID and optional native-host registration. To load it, copy the companion folder, use the Firefox manifest as the copied folder's `manifest.json`, load it temporarily from `about:debugging#/runtime/this-firefox`, and run the native-host installer with `-RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in"`. CI verifies the manifest/build/host hooks, but real Firefox installation and delivery still require a manual Windows test; this is not a signed Firefox release package.
 
-1. Choose Chrome or Edge and load only the built extension from the release
-   artifact.
-2. Copy the browser-generated extension ID into the native-host manifest
-   allowlist.
-3. Register the manifest for that browser and test the browser-to-app connection.
-4. Approve only the documented browser permissions and verify that no unauthenticated
-   localhost listener is created.
+From the repository root, build the extension and publish the native host:
 
-For an explicit development installation after the extension and host have been
-built, publish the host to a stable local folder and register it for the current
-Windows user. Replace the placeholders locally:
+- Run npm ci from browser-extension.
+- Run npm run build from browser-extension.
+- Run dotnet publish src\Scrobblix.NativeHost\Scrobblix.NativeHost.csproj -c Release -o artifacts\nativehost.
 
-```powershell
-$hostFolder = Join-Path $env:LOCALAPPDATA "Scrobblix\NativeHost"
-dotnet publish src\Scrobblix.NativeHost\Scrobblix.NativeHost.csproj -c Release -o $hostFolder
-.\scripts\Register-ScrobblixNativeHost.ps1 -ExtensionId "your-32-character-extension-id" -Browser Both -HostPath "$hostFolder\Scrobblix.NativeHost.exe"
-```
+1. Open chrome://extensions (or edge://extensions), enable Developer mode,
+   and select **Load unpacked** for the repository's browser-extension folder.
+2. Copy the extension ID shown on that page.
+3. Register the native host for your Windows user using that exact ID:
 
-The registration script writes a manifest with one exact `allowed_origins`
-entry and registers it under the current user's Chrome and/or Edge native
-messaging registry locations. It does not install an extension, send data to a
-server, or use administrator permissions. Use `-WhatIf` first to preview the
-local registry and manifest changes.
+   .\scripts\install-native-host.ps1 -ExtensionId "your-32-character-extension-id" -NativeHostPublishDirectory "artifacts\nativehost"
 
-Send the extension ID (it is not a secret) only after the packaged artifact is
-available. Do not install an unreviewed native host or share the Last.fm secret
-with an extension.
+4. Completely restart the browser, start Scrobblix, and play media on one of the
+   supported sites.
+5. To uninstall the browser bridge, run .\scripts\uninstall-native-host.ps1.
+   This unregisters the native host but does not delete history, artwork, or logs.
+
+The native host requires an explicit extension allow-list saved under the
+current user's registry. If the ID is not registered, forwarding fails closed.
+The bridge sends playback metadata to the local app only; it does not hold
+Last.fm credentials and does not create a localhost server. Do not install an
+unreviewed extension or share the Last.fm shared secret with it.
 
 ## 7. Release signing and GitHub
 

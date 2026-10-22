@@ -22,18 +22,20 @@ public sealed class TrackMetadataEnricher
     private readonly HttpClient _client;
     private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
+    private readonly Action<string>? _log;
     private readonly ConcurrentDictionary<string, PlayMetadataEnrichment> _cache = new(StringComparer.Ordinal);
     private long _configurationVersion;
 
     public long ConfigurationVersion => Interlocked.Read(ref _configurationVersion);
 
-    public TrackMetadataEnricher(HttpClient client, string? lastFmApiKey, string artworkDirectory)
+    public TrackMetadataEnricher(HttpClient client, string? lastFmApiKey, string artworkDirectory, Action<string>? log = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(artworkDirectory);
         _client = client;
         _lastFmApiKey = string.IsNullOrWhiteSpace(lastFmApiKey) ? null : lastFmApiKey.Trim();
         _artworkDirectory = artworkDirectory;
+        _log = log;
         if (_client.DefaultRequestHeaders.UserAgent.Count == 0)
         {
             _client.DefaultRequestHeaders.UserAgent.ParseAdd("Scrobblix/0.1.0 (+https://github.com/frpboy/Scrobblix)");
@@ -58,9 +60,11 @@ public sealed class TrackMetadataEnricher
         var key = MakeCacheKey(observation);
         if (_cache.TryGetValue(key, out var cached))
         {
+            _log?.Invoke($"Metadata cache hit; artist={observation.Artist}; title={observation.Title}; artwork_source={cached.ArtworkSource ?? "(none)"}.");
             return Merge(FromObservation(observation), cached);
         }
 
+        _log?.Invoke($"Metadata lookup started; artist={observation.Artist}; title={observation.Title}; album={observation.Album ?? "(missing)"}; lastfm_key_configured={_lastFmApiKey is not null}; source_artwork={(string.IsNullOrWhiteSpace(observation.ArtworkPath) ? "missing" : "available")}.");
         var result = FromObservation(observation);
         if (string.IsNullOrWhiteSpace(result.ArtworkPath) && !string.IsNullOrWhiteSpace(observation.ArtworkUrl))
         {
@@ -69,8 +73,14 @@ public sealed class TrackMetadataEnricher
         }
 
         var release = await TryFindReleaseAsync(observation, result.ReleaseMusicBrainzId, cancellationToken);
+        if (release is null)
+        {
+            release = await TryFindRecordingReleaseAsync(observation, cancellationToken);
+        }
+
         if (release is not null)
         {
+            _log?.Invoke($"MusicBrainz release matched; artist={observation.Artist}; title={observation.Title}; release_mbid={release.ReleaseId}.");
             result = Merge(result, release.Metadata);
             if (HasWeakArtwork(result))
             {
@@ -81,6 +91,10 @@ public sealed class TrackMetadataEnricher
                 result = MergeArtwork(result, coverPath);
             }
         }
+        else
+        {
+            _log?.Invoke($"MusicBrainz release lookup did not return a confident match; artist={observation.Artist}; title={observation.Title}; album={observation.Album ?? "(missing)"}. Artwork falls back to Last.fm if its API key is configured.");
+        }
 
         var needsLastFm = _lastFmApiKey is not null
             && (string.IsNullOrWhiteSpace(result.RecordingMusicBrainzId)
@@ -90,6 +104,7 @@ public sealed class TrackMetadataEnricher
                 || HasWeakArtwork(result));
         if (needsLastFm)
         {
+            _log?.Invoke($"Trying Last.fm track metadata fallback; artist={observation.Artist}; title={observation.Title}.");
             var lastFm = await TryLastFmAsync(observation, cancellationToken);
             if (lastFm is not null)
             {
@@ -103,6 +118,7 @@ public sealed class TrackMetadataEnricher
         }
 
         _cache[key] = result;
+        _log?.Invoke($"Metadata lookup finished; artist={observation.Artist}; title={observation.Title}; release_year={result.ReleaseYear?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; artwork_source={result.ArtworkSource ?? "(missing)"}; artwork_file={(result.ArtworkPath is null ? "(missing)" : "cached")}.");
         return result;
     }
 
@@ -113,7 +129,8 @@ public sealed class TrackMetadataEnricher
         observation.RecordingMusicBrainzId,
         observation.ReleaseMusicBrainzId,
         observation.ArtworkPath,
-        observation.ArtworkSource);
+        observation.ArtworkSource,
+        observation.Album);
 
     private static bool HasWeakArtwork(PlayMetadataEnrichment metadata) =>
         string.IsNullOrWhiteSpace(metadata.ArtworkPath)
@@ -144,7 +161,8 @@ public sealed class TrackMetadataEnricher
         preferred.RecordingMusicBrainzId ?? fallback.RecordingMusicBrainzId,
         preferred.ReleaseMusicBrainzId ?? fallback.ReleaseMusicBrainzId,
         preferred.ArtworkPath ?? fallback.ArtworkPath,
-        preferred.ArtworkSource ?? fallback.ArtworkSource);
+        preferred.ArtworkSource ?? fallback.ArtworkSource,
+        preferred.Album ?? fallback.Album);
 
     private static string MakeCacheKey(PlayObservation observation) =>
         string.Join("\u001f",
@@ -306,6 +324,151 @@ public sealed class TrackMetadataEnricher
         }
     }
 
+    private async Task<ReleaseLookup?> TryFindRecordingReleaseAsync(
+        PlayObservation observation,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(observation.Artist) || string.IsNullOrWhiteSpace(observation.Title))
+        {
+            return null;
+        }
+
+        var artistQuery = !string.IsNullOrWhiteSpace(observation.AlbumArtist)
+            ? observation.AlbumArtist
+            : observation.Artist;
+        var query = $"recording:\"{EscapeQuery(observation.Title)}\" AND artist:\"{EscapeQuery(artistQuery)}\"";
+        var url = $"https://musicbrainz.org/ws/2/recording/?query={Uri.EscapeDataString(query)}&inc=releases+artist-credits&fmt=json&limit=5";
+        using var document = await TryGetMusicBrainzJsonAsync(url, cancellationToken);
+        if (document is null
+            || !document.RootElement.TryGetProperty("recordings", out var recordings)
+            || recordings.ValueKind != JsonValueKind.Array)
+        {
+            _log?.Invoke($"MusicBrainz recording lookup found no usable results; artist={observation.Artist}; title={observation.Title}.");
+            return null;
+        }
+
+        var expectedTitle = Normalize(observation.Title);
+        var expectedArtist = Normalize(artistQuery);
+        JsonElement? selectedRelease = null;
+        string? recordingId = null;
+        var bestReleaseScore = 0;
+
+        foreach (var recording in recordings.EnumerateArray())
+        {
+            if (!string.Equals(Normalize(ReadText(recording, "title")), expectedTitle, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var recordingArtist = Normalize(ReadArtistCredit(recording));
+            var artistMatches = recordingArtist.Length > 0
+                && (recordingArtist.Contains(expectedArtist, StringComparison.Ordinal)
+                    || expectedArtist.Contains(recordingArtist, StringComparison.Ordinal));
+            if (!artistMatches)
+            {
+                continue;
+            }
+
+            if (!recording.TryGetProperty("releases", out var releases) || releases.ValueKind != JsonValueKind.Array)
+            {
+                continue;
+            }
+
+            foreach (var candidate in releases.EnumerateArray())
+            {
+                var candidateId = ReadText(candidate, "id");
+                if (!Guid.TryParse(candidateId, out _))
+                {
+                    continue;
+                }
+
+                var releaseTitle = Normalize(ReadText(candidate, "title"));
+                var releaseArtist = Normalize(ReadArtistCredit(candidate));
+                var albumMatches = !string.IsNullOrWhiteSpace(observation.Album)
+                    && string.Equals(releaseTitle, Normalize(observation.Album), StringComparison.Ordinal);
+                if (!string.IsNullOrWhiteSpace(observation.Album) && !albumMatches)
+                {
+                    continue;
+                }
+
+                var releaseArtistMatches = releaseArtist.Length > 0
+                    && (releaseArtist.Contains(expectedArtist, StringComparison.Ordinal)
+                        || expectedArtist.Contains(releaseArtist, StringComparison.Ordinal));
+                // If album metadata is missing, only use releases whose artist credit is also a plausible match.
+                if (string.IsNullOrWhiteSpace(observation.Album) && !releaseArtistMatches)
+                {
+                    continue;
+                }
+
+                var score = (albumMatches ? 4 : 0)
+                    + (releaseArtistMatches ? 2 : 0)
+                    + (string.IsNullOrWhiteSpace(ReadText(candidate, "date")) ? 0 : 1);
+                if (score > bestReleaseScore)
+                {
+                    selectedRelease = candidate.Clone();
+                    recordingId = ReadText(recording, "id");
+                    bestReleaseScore = score;
+                }
+            }
+        }
+
+        if (selectedRelease is null)
+        {
+            _log?.Invoke($"MusicBrainz recording matched the track but no safe release was available; artist={observation.Artist}; title={observation.Title}; album={observation.Album ?? "(missing)"}.");
+            return null;
+        }
+
+        var releaseId = ReadText(selectedRelease.Value, "id");
+        if (!Guid.TryParse(releaseId, out _))
+        {
+            return null;
+        }
+
+        var basicMetadata = new PlayMetadataEnrichment(
+            ReadArtistCredit(selectedRelease.Value) ?? ReadArtistCreditFromRecording(document, recordingId),
+            null,
+            ParseYear(ReadText(selectedRelease.Value, "date")),
+            recordingId,
+            releaseId,
+            null,
+            null,
+            ReadText(selectedRelease.Value, "title"));
+
+        _log?.Invoke($"MusicBrainz recording fallback matched a release; artist={observation.Artist}; title={observation.Title}; release_mbid={releaseId}; album={ReadText(selectedRelease.Value, "title") ?? "(missing)"}.");
+        var details = await TryGetMusicBrainzJsonAsync(
+            $"https://musicbrainz.org/ws/2/release/{Uri.EscapeDataString(releaseId!)}?inc=recordings+artist-credits&fmt=json",
+            cancellationToken);
+        if (details is null)
+        {
+            return new ReleaseLookup(releaseId!, basicMetadata);
+        }
+
+        using (details)
+        {
+            return new ReleaseLookup(releaseId!, Merge(basicMetadata, ExtractReleaseMetadata(details.RootElement, observation)));
+        }
+    }
+
+    private static string? ReadArtistCreditFromRecording(JsonDocument document, string? recordingId)
+    {
+        if (string.IsNullOrWhiteSpace(recordingId)
+            || !document.RootElement.TryGetProperty("recordings", out var recordings)
+            || recordings.ValueKind != JsonValueKind.Array)
+        {
+            return null;
+        }
+
+        foreach (var recording in recordings.EnumerateArray())
+        {
+            if (string.Equals(ReadText(recording, "id"), recordingId, StringComparison.Ordinal))
+            {
+                return ReadArtistCredit(recording);
+            }
+        }
+
+        return null;
+    }
+
     private static PlayMetadataEnrichment ExtractReleaseMetadata(JsonElement release, PlayObservation observation)
     {
         var result = new PlayMetadataEnrichment(
@@ -315,7 +478,8 @@ public sealed class TrackMetadataEnricher
             null,
             ReadText(release, "id"),
             null,
-            null);
+            null,
+            ReadText(release, "title"));
 
         if (!release.TryGetProperty("media", out var mediaList) || mediaList.ValueKind != JsonValueKind.Array)
         {
@@ -375,21 +539,25 @@ public sealed class TrackMetadataEnricher
             _lastMusicBrainzRequestUtc = DateTimeOffset.UtcNow;
             if (!response.IsSuccessStatusCode)
             {
+                _log?.Invoke($"MusicBrainz request failed; status={(int)response.StatusCode}; result={response.StatusCode}.");
                 return null;
             }
 
             return JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
         }
-        catch (HttpRequestException)
+        catch (HttpRequestException exception)
         {
+            _log?.Invoke($"MusicBrainz network error; exception={exception.GetType().Name}.");
             return null;
         }
-        catch (JsonException)
+        catch (JsonException exception)
         {
+            _log?.Invoke($"MusicBrainz returned invalid JSON; exception={exception.GetType().Name}.");
             return null;
         }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            _log?.Invoke("MusicBrainz request timed out.");
             return null;
         }
         finally
@@ -423,11 +591,13 @@ public sealed class TrackMetadataEnricher
                 return null;
             }
 
+            string? albumTitle = null;
             string? albumMbid = null;
             string? imageUrl = null;
             string? albumArtist = null;
             if (track.TryGetProperty("album", out var album))
             {
+                albumTitle = ReadText(album, "title");
                 albumMbid = ReadText(album, "mbid");
                 albumArtist = ReadText(album, "artist");
                 if (album.TryGetProperty("image", out var images) && images.ValueKind == JsonValueKind.Array)
@@ -452,7 +622,8 @@ public sealed class TrackMetadataEnricher
                     recordingId,
                     albumMbid,
                     null,
-                    null),
+                    null,
+                    albumTitle),
                 imageUrl);
         }
         catch (HttpRequestException)
@@ -473,6 +644,7 @@ public sealed class TrackMetadataEnricher
     {
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri) || !IsSafeRemoteImageUri(imageUri))
         {
+            _log?.Invoke($"Artwork source rejected; source={source}; reason=invalid_or_unsafe_https_uri.");
             return new PlayMetadataEnrichment();
         }
 
@@ -481,9 +653,11 @@ public sealed class TrackMetadataEnricher
         var cachedPath = Directory.EnumerateFiles(_artworkDirectory, cacheKey + ".*").FirstOrDefault();
         if (cachedPath is not null)
         {
+            _log?.Invoke($"Artwork cache hit; source={source}; host={imageUri.Host}; file={Path.GetFileName(cachedPath)}.");
             return new PlayMetadataEnrichment(ArtworkPath: cachedPath, ArtworkSource: source);
         }
 
+        _log?.Invoke($"Artwork fetch started; source={source}; host={imageUri.Host}.");
         var currentUri = imageUri;
         for (var attempt = 0; attempt < 5; attempt++)
         {
@@ -511,11 +685,13 @@ public sealed class TrackMetadataEnricher
                 if (!response.IsSuccessStatusCode || response.Content.Headers.ContentType?.MediaType is not { } mediaType
                     || !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                 {
+                    _log?.Invoke($"Artwork fetch rejected; source={source}; host={currentUri.Host}; status={(int)response.StatusCode}; content_type={response.Content.Headers.ContentType?.MediaType ?? "(missing)"}.");
                     return new PlayMetadataEnrichment();
                 }
 
                 if (response.Content.Headers.ContentLength is > MaxArtworkBytes)
                 {
+                    _log?.Invoke($"Artwork image exceeds the configured size limit; source={source}; host={currentUri.Host}; content_length={response.Content.Headers.ContentLength}.");
                     return new PlayMetadataEnrichment();
                 }
 
@@ -547,6 +723,7 @@ public sealed class TrackMetadataEnricher
 
                     if (output.Length + read > MaxArtworkBytes)
                     {
+                        _log?.Invoke($"Artwork image exceeded the configured size limit while streaming; source={source}; host={currentUri.Host}.");
                         return new PlayMetadataEnrichment();
                     }
 
@@ -556,18 +733,22 @@ public sealed class TrackMetadataEnricher
                 var tempPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 await File.WriteAllBytesAsync(tempPath, output.ToArray(), cancellationToken);
                 File.Move(tempPath, targetPath, overwrite: true);
+                _log?.Invoke($"Artwork cached successfully; source={source}; host={currentUri.Host}; bytes={output.Length}; file={Path.GetFileName(targetPath)}.");
                 return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
             }
-            catch (HttpRequestException)
+            catch (HttpRequestException exception)
             {
+                _log?.Invoke($"Artwork network error; source={source}; host={currentUri.Host}; exception={exception.GetType().Name}.");
                 return new PlayMetadataEnrichment();
             }
-            catch (IOException)
+            catch (IOException exception)
             {
+                _log?.Invoke($"Artwork cache IO error; source={source}; exception={exception.GetType().Name}.");
                 return new PlayMetadataEnrichment();
             }
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
+                _log?.Invoke($"Artwork fetch timed out; source={source}; host={currentUri.Host}.");
                 return new PlayMetadataEnrichment();
             }
         }

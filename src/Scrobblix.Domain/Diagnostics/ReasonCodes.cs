@@ -50,6 +50,9 @@ public static class ReasonCodes
         public const string RateLimited = "provider.rate_limited";
         public const string TemporaryUnavailable = "provider.temporary_unavailable";
         public const string SubmissionOutcomeUnknown = "provider.submission_outcome_unknown";
+        public const string IgnoredUnknown = "provider.ignored.unknown";
+        public const string RetryExhausted = "provider.retry_exhausted";
+        public const string UserConfirmedAccepted = "provider.user_confirmed_accepted";
         public const string ResponseInvalid = "provider.response_invalid";
     }
 

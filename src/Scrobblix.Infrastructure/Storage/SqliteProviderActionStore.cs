@@ -47,7 +47,7 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         await using var select = connection.CreateCommand();
         select.Transaction = transaction;
         select.CommandText = """
-            SELECT a.action_id, a.play_id, a.provider, a.account_id, p.artist, p.title, p.album, p.started_utc, p.duration_ms, a.attempt_count
+            SELECT a.action_id, a.play_id, a.provider, a.account_id, p.artist, p.title, p.album, p.started_utc, p.duration_ms, a.attempt_count, a.action_type
             FROM provider_actions a
             JOIN plays p ON p.play_id = a.play_id
             WHERE a.state IN ($pending, $retry) AND a.due_utc <= $now
@@ -75,7 +75,8 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
             reader.IsDBNull(6) ? null : reader.GetString(6),
             DateTimeOffset.Parse(reader.GetString(7), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
             reader.IsDBNull(8) ? null : reader.GetInt32(8),
-            reader.GetInt32(9) + 1);
+            reader.GetInt32(9) + 1,
+            (ProviderActionType)reader.GetInt32(10));
         await reader.DisposeAsync();
 
         await using var update = connection.CreateCommand();
@@ -102,12 +103,81 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         return lease;
     }
 
+    public async Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $pending, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
+                last_reason_code = NULL, completed_utc = NULL, updated_utc = $now
+            WHERE action_id = $actionId AND state IN ($retry, $retryExhausted, $outcomeUnknown);
+            """;
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        command.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $cancelled, last_reason_code = $reason, completed_utc = $now, updated_utc = $now,
+                lease_owner = NULL, lease_expires_utc = NULL
+            WHERE action_id = $actionId AND state IN ($pending, $retry, $authBlocked, $retryExhausted, $outcomeUnknown);
+            """;
+        command.Parameters.AddWithValue("$cancelled", (int)ProviderActionState.Cancelled);
+        command.Parameters.AddWithValue("$reason", "user.cancelled");
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$authBlocked", (int)ProviderActionState.AuthBlocked);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        command.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
+    public async Task<bool> ConfirmOutcomeAcceptedAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $accepted, last_reason_code = $reason, completed_utc = $now, updated_utc = $now,
+                lease_owner = NULL, lease_expires_utc = NULL
+            WHERE action_id = $actionId AND state = $outcomeUnknown;
+            """;
+        command.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+        command.Parameters.AddWithValue("$reason", ReasonCodes.Provider.UserConfirmedAccepted);
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        command.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
     public async Task CompleteAsync(
         string actionId,
         ProviderActionState outcome,
         string reasonCode,
         DateTimeOffset completedUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? retryAfter = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
         ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
@@ -117,7 +187,10 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         }
 
         var completed = completedUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
-        var retryDue = completedUtc.Add(RetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var effectiveRetryDelay = retryAfter is { } requestedDelay && requestedDelay > TimeSpan.Zero
+            ? requestedDelay
+            : RetryDelay;
+        var retryDue = completedUtc.Add(effectiveRetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();

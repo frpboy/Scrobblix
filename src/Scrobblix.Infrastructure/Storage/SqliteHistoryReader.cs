@@ -21,13 +21,17 @@ public sealed class SqliteHistoryReader(string connectionString)
                 COALESCE(SUM(CASE WHEN p.eligible_utc IS NOT NULL THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(CASE WHEN EXISTS (
                     SELECT 1 FROM provider_actions a
-                    WHERE a.play_id = p.play_id AND a.state = $accepted
+                    WHERE a.play_id = p.play_id
+                      AND a.provider = 'lastfm'
+                      AND a.action_type = $scrobble
+                      AND a.state = $accepted
                 ) THEN 1 ELSE 0 END), 0),
                 COALESCE(SUM(p.confirmed_played_ms), 0)
             FROM plays p
             WHERE p.started_utc >= $startUtc AND p.started_utc < $endUtc;
             """;
         command.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+        command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
         command.Parameters.AddWithValue("$startUtc", localStart.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$endUtc", localEnd.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
         await using var reader = await command.ExecuteReaderAsync(cancellationToken);

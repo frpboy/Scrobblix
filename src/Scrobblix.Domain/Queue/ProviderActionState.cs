@@ -10,4 +10,6 @@ public enum ProviderActionState
     AuthBlocked,
     PermanentFailure,
     Cancelled,
+    SubmissionOutcomeUnknown,
+    RetryExhausted,
 }

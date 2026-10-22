@@ -90,6 +90,7 @@ public sealed class SqliteLocalPlayStore(string connectionString) : ILocalPlaySt
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE plays SET
+                album = COALESCE($album, album),
                 album_artist = COALESCE($albumArtist, album_artist),
                 track_number = COALESCE($trackNumber, track_number),
                 release_year = COALESCE($releaseYear, release_year),
@@ -101,6 +102,7 @@ public sealed class SqliteLocalPlayStore(string connectionString) : ILocalPlaySt
             WHERE play_id = $playId;
             """;
         command.Parameters.AddWithValue("$playId", playId);
+        command.Parameters.AddWithValue("$album", (object?)metadata.Album ?? DBNull.Value);
         command.Parameters.AddWithValue("$albumArtist", (object?)metadata.AlbumArtist ?? DBNull.Value);
         command.Parameters.AddWithValue("$trackNumber", (object?)metadata.TrackNumber ?? DBNull.Value);
         command.Parameters.AddWithValue("$releaseYear", (object?)metadata.ReleaseYear ?? DBNull.Value);
