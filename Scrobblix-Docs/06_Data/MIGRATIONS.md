@@ -33,3 +33,8 @@ Store migration ID, semantic name, app version, checksum, started/completed UTC,
 ## Testing
 
 Every supported upgrade path is tested with representative data volumes, malformed legacy rows, interrupted migration simulation, disk-full injection, and downgrade behavior. Downgrades are generally unsupported; users can restore a compatible backup or export/import through a documented format.
+
+
+## Downgrade and migration-history safety
+
+At startup, Scrobblix validates that the recorded `schema_migrations` rows are a contiguous prefix of the migration sequence compiled into the current build. An unknown future migration or a gap in the history must stop initialization before repository operations begin. Do not launch an older binary against a database migrated by a newer release; use a supported application version or restore a verified backup.
