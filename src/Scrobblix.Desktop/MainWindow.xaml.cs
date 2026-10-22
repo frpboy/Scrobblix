@@ -1012,6 +1012,7 @@ public sealed partial class MainWindow : Window
             ? "Your account is connected. Manage credentials and delivery settings in Settings."
             : "Add API credentials and approve your account in Settings.";
         OpenLastFmSettingsButton.Content = isConnected ? "Manage Last.fm settings" : "Configure API key / Login";
+        UpdateScrobbleStatus();
     }
 
     private async void ConnectLastFmButton_Click(object sender, RoutedEventArgs args)
