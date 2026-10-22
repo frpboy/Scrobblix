@@ -408,6 +408,16 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
     "A nominal success response without a scrobbles result does not inflate accepted totals.");
 
 
+// Logger sanitizer regression: canary listening metadata must not persist in diagnostic messages.
+var sanitizedDiagnostic = Scrobblix.Infrastructure.Diagnostics.DiagnosticMessageSanitizer.Sanitize(
+    "artist=Private Artist; title=Secret Track; album=Personal Album; action_id=abc123");
+Assert(!sanitizedDiagnostic.Contains("Private Artist", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Secret Track", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Personal Album", StringComparison.Ordinal)
+    && sanitizedDiagnostic.Contains("artist=[REDACTED]", StringComparison.Ordinal)
+    && sanitizedDiagnostic.Contains("title=[REDACTED]", StringComparison.Ordinal),
+    "Diagnostic logs redact artist, title, and album metadata.");
+
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
