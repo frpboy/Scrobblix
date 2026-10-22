@@ -86,3 +86,11 @@ node scripts/validate-browser-manifests.mjs
 ```
 
 Do not put Last.fm API secrets or session keys in source control, logs, screenshots or issue comments.
+
+
+## P0 issue #6 — App disposable-resource ownership (2026-10-22)
+
+- The current `main` implementation in `src/Scrobblix.Desktop/App.xaml.cs` already includes the CA1001 fix: `App` implements `IDisposable`, owns the single-instance semaphore, activation event, listener cancellation source and tray icon, and disposes them on duplicate-instance, window-construction failure and normal close paths. Normal close and explicit disposal share the listener cleanup method.
+- This candidate adds durable source-contract assertions for those paths and manual matrix case `P0-OWN-01`. The physical Windows duplicate-start/close/relaunch scenario is still `NOT RUN`.
+- The initial current-main CI attempt exposed two stale schema expectations: the migration assertion expected four rows while `SqliteDatabase` applies five migrations (`0001`–`0005`), and backup restore validation still allowed only migrations through `0004_richer_metadata`. This candidate corrects the assertion to five and updates backup validation to schema version 5 including `0005_loved_tracks`.
+- Candidate commit and matching full Windows workflow: pending after the schema/restore validation correction. Keep issue #6 open until that exact-head workflow succeeds.

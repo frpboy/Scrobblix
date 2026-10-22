@@ -417,7 +417,7 @@ await using (var migrationConnection = new SqliteConnection(connectionString))
     await migrationConnection.OpenAsync(CancellationToken.None);
     await using var migrationCommand = migrationConnection.CreateCommand();
     migrationCommand.CommandText = "SELECT COUNT(*) FROM schema_migrations;";
-    Assert(Convert.ToInt32(await migrationCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 4, "Every embedded migration is recorded after initialization.");
+    Assert(Convert.ToInt32(await migrationCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 5, "Every embedded migration is recorded after initialization.");
 }
 var observationStore = new SqlitePlaybackObservationStore(connectionString);
 var ingestion = new PlaybackObservationIngestionService(observationStore);
