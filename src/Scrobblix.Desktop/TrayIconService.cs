@@ -12,7 +12,6 @@ namespace Scrobblix.Desktop;
 internal sealed class TrayIconService : IDisposable
 {
     private const uint WmSize = 0x0005;
-    private const uint WmCommand = 0x0111;
     private const uint WmApp = 0x8000;
     private const uint TrayCallbackMessage = WmApp + 0x31;
     private const uint SizeMinimized = 1;
@@ -69,7 +68,8 @@ internal sealed class TrayIconService : IDisposable
             InfoTitle = string.Empty,
         };
 
-        if (!Shell_NotifyIcon(NimAdd, ref UnsafeCopy(_iconData)))
+        var iconData = _iconData;
+        if (!Shell_NotifyIcon(NimAdd, ref iconData))
         {
             RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not add the Scrobblix notification-area icon.");
@@ -77,15 +77,6 @@ internal sealed class TrayIconService : IDisposable
 
         _iconInstalled = true;
     }
-
-    private static ref NotifyIconData UnsafeCopy(NotifyIconData value)
-    {
-        // Shell_NotifyIcon requires a mutable reference even though NIM_ADD only reads it.
-        _temporaryIconData = value;
-        return ref _temporaryIconData;
-    }
-
-    private static NotifyIconData _temporaryIconData;
 
     private IntPtr WindowSubclass(
         IntPtr windowHandle,
@@ -164,7 +155,6 @@ internal sealed class TrayIconService : IDisposable
                 _window.Close();
             }
 
-            _ = PostMessage(_windowHandle, WmCommand, new IntPtr(command), IntPtr.Zero);
         }
         finally
         {
@@ -270,7 +260,4 @@ internal sealed class TrayIconService : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr windowHandle);
 
-    [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool PostMessage(IntPtr windowHandle, uint message, IntPtr wParam, IntPtr lParam);
 }
