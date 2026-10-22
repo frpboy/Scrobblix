@@ -1,0 +1,94 @@
+name: Preview Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  validate-tag:
+    name: Validate release tag
+    runs-on: ubuntu-latest
+    steps:
+      - name: Enforce semantic version tag format
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          if [[ ! "$RELEASE_TAG" =~ ^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-([0-9A-Za-z-]+)(\.[0-9A-Za-z-]+)*)?(\+([0-9A-Za-z-]+)(\.[0-9A-Za-z-]+)*)?$ ]]; then
+            echo "::error::Invalid release tag '$RELEASE_TAG'. Use vMAJOR.MINOR.PATCH, for example v0.1.0-beta.1."
+            exit 1
+          fi
+
+  validate-and-package:
+    name: Full Windows CI and package
+    needs: validate-tag
+    uses: ./.github/workflows/ci.yml
+    permissions:
+      contents: read
+
+  publish-preview:
+    name: Publish GitHub preview release
+    runs-on: ubuntu-latest
+    needs: validate-and-package
+    permissions:
+      contents: write
+    steps:
+      - name: Download validated Windows test bundle
+        uses: actions/download-artifact@v4
+        with:
+          name: Scrobblix-Windows-TestBundle
+          path: artifacts/windows
+
+      - name: Download validated browser companion
+        uses: actions/download-artifact@v4
+        with:
+          name: Scrobblix-BrowserCompanion
+          path: artifacts/browser
+
+      - name: Prepare release assets and SHA-256 checksums
+        shell: bash
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          mkdir -p release-assets
+          test -s artifacts/windows/Scrobblix-Windows-TestBundle.zip
+          test -s artifacts/browser/Scrobblix-BrowserCompanion.zip
+          cp artifacts/windows/Scrobblix-Windows-TestBundle.zip "release-assets/Scrobblix-Windows-TestBundle-${RELEASE_TAG}.zip"
+          cp artifacts/browser/Scrobblix-BrowserCompanion.zip "release-assets/Scrobblix-BrowserCompanion-${RELEASE_TAG}.zip"
+          (
+            cd release-assets
+            sha256sum ./*.zip > SHA256SUMS.txt
+          )
+          echo "Prepared release assets:"
+          ls -lh release-assets
+          cat release-assets/SHA256SUMS.txt
+
+      - name: Create GitHub prerelease
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: Scrobblix ${{ github.ref_name }} — Preview
+          prerelease: true
+          make_latest: "false"
+          generate_release_notes: true
+          body: |
+            > [!WARNING]
+            > **Unsigned preview build — not a signed installer or production release.** Scrobblix has not yet completed all real-Windows, listening/queue, signing, upgrade/rollback, and distribution qualification gates.
+
+            ## Included downloads
+
+            - **Windows Test Bundle** — unpackaged desktop app, native messaging host, Chromium/Firefox companion files, helper scripts, and setup notes. Follow the included `README-TESTING.txt`.
+            - **Browser Companion** — separate browser/native-host development package. Browser store signing/publication is not implied.
+            - **SHA256SUMS.txt** — SHA-256 hashes for both ZIP downloads.
+
+            The desktop app may require the matching Microsoft Windows App Runtime. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
+          files: release-assets/*
+          fail_on_unmatched_files: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

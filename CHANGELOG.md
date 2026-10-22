@@ -12,6 +12,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Added
 
+- Added a tag-driven GitHub Preview Release workflow that reuses full CI, publishes the Windows test bundle and browser companion, attaches SHA-256 checksums, and keeps builds marked as prereleases until release-readiness gates are closed.
+- Documented preview release creation, download verification, tag naming, and current unsigned-distribution limitations.
 - Initial product, engineering, UI/UX, security, testing, operations, and AI-agent documentation baseline.
 - Selected .NET 10, WinUI 3, GSMTC, TypeScript WebExtensions, Native Messaging, and SQLite architecture.
 
