@@ -19,6 +19,7 @@ public sealed partial class MainWindow : Window
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
     private bool _isLastFmConnected;
+    private bool _updatingNotificationPreference;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
 
     public event Action<bool>? TrackingModeChanged;
@@ -43,6 +44,8 @@ public sealed partial class MainWindow : Window
     public event Func<string, Task>? BackupRequested;
 
     public event Func<string, Task<bool>>? RestoreRequested;
+
+    public event Func<bool, Task>? DesktopNotificationsPreferenceChanged;
 
     private string? _logDirectory;
 
@@ -347,6 +350,55 @@ public sealed partial class MainWindow : Window
         }
 
         Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
+    }
+
+    public void SetDesktopNotificationsEnabled(bool enabled)
+    {
+        _updatingNotificationPreference = true;
+        try
+        {
+            DesktopNotificationsCheckBox.IsChecked = enabled;
+        }
+        finally
+        {
+            _updatingNotificationPreference = false;
+        }
+
+        SetDesktopNotificationsStatus(enabled
+            ? "Windows notifications are enabled for accepted scrobbles and persistent delivery issues."
+            : "Windows notifications are off. Enable this option to receive delivery updates.");
+    }
+
+    public void SetDesktopNotificationsStatus(string status) =>
+        DesktopNotificationsStatusText.Text = status;
+
+    private async void DesktopNotificationsCheckBox_Changed(object sender, RoutedEventArgs args)
+    {
+        if (_updatingNotificationPreference) return;
+        var enabled = DesktopNotificationsCheckBox.IsChecked == true;
+        var handler = DesktopNotificationsPreferenceChanged;
+        if (handler is null)
+        {
+            SetDesktopNotificationsEnabled(false);
+            SetDesktopNotificationsStatus("Notification settings are not initialized. Restart Scrobblix and try again.");
+            return;
+        }
+
+        DesktopNotificationsCheckBox.IsEnabled = false;
+        try
+        {
+            await handler(enabled);
+        }
+        catch (Exception exception)
+        {
+            SetDesktopNotificationsEnabled(false);
+            SetDesktopNotificationsStatus($"Notification setting could not be saved ({exception.GetType().Name}).");
+            DiagnosticLogRequested?.Invoke($"Desktop notification preference update failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            DesktopNotificationsCheckBox.IsEnabled = true;
+        }
     }
 
     private async void CreateBackupButton_Click(object sender, RoutedEventArgs args)
