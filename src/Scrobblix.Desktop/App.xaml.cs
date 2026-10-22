@@ -56,10 +56,32 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
             _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
-            var connectionString = $"Data Source={Path.Combine(dataDirectory, "scrobblix.db")}";
+            var databasePath = Path.Combine(dataDirectory, "scrobblix.db");
+            var connectionString = $"Data Source={databasePath}";
+            var backupService = new ScrobblixBackupService();
+            var restoreSafetySnapshot = await backupService.ApplyStagedRestoreAsync(
+                dataDirectory, databasePath, CancellationToken.None);
+            if (restoreSafetySnapshot is not null)
+            {
+                logger.Warning("BACKUP_RESTORE", string.IsNullOrWhiteSpace(restoreSafetySnapshot)
+                    ? "Applied a validated staged restore before opening SQLite; no prior database existed."
+                    : $"Applied a validated staged restore before opening SQLite; safety_snapshot={Path.GetFileName(restoreSafetySnapshot)}.");
+            }
+
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
+            _window.BackupRequested += async destinationPath =>
+            {
+                await backupService.CreateBackupAsync(connectionString, destinationPath, applicationCancellation.Token);
+                logger.Info("BACKUP", $"Created a validated local SQLite backup; file_name={Path.GetFileName(destinationPath)}.");
+            };
+            _window.RestoreRequested += async archivePath =>
+            {
+                await backupService.StageRestoreAsync(archivePath, dataDirectory, applicationCancellation.Token);
+                logger.Warning("BACKUP_RESTORE", $"Validated and staged a database restore; file_name={Path.GetFileName(archivePath)}. Scrobblix will close so the next launch can safely apply it.");
+                return true;
+            };
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
             var historyReader = new SqliteHistoryReader(connectionString);
