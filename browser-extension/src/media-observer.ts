@@ -13,11 +13,40 @@ type ExtendedMediaMetadata = MediaMetadata & {
 const attachedMedia = new WeakSet<HTMLMediaElement>();
 const minimumProgressReportMs = 2_500;
 
+function toHttpsArtworkUrl(candidate: string | undefined): string | undefined {
+  if (!candidate) return undefined;
+
+  try {
+    const url = new URL(candidate, document.baseURI);
+    return url.protocol === "https:" ? url.href : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function findArtworkUrl(media: HTMLMediaElement, metadata: ExtendedMediaMetadata | undefined): string | undefined {
+  const sessionArtwork = metadata?.artwork
+    ?.map((image) => toHttpsArtworkUrl(image.src))
+    .find((src): src is string => Boolean(src));
+  if (sessionArtwork) return sessionArtwork;
+
+  // Many web players don't populate MediaSession artwork. Prefer the active video poster,
+  // then same-page Open Graph/Twitter imagery. Only HTTPS URLs are sent to the desktop host.
+  const poster = media instanceof HTMLVideoElement ? media.poster : undefined;
+  const pageArtwork = [
+    poster,
+    document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content,
+    document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]')?.content,
+  ]
+    .map((candidate) => toHttpsArtworkUrl(candidate))
+    .find((src): src is string => Boolean(src));
+
+  return pageArtwork;
+}
+
 function send(media: HTMLMediaElement, state: PlaybackState): void {
   const metadata = navigator.mediaSession?.metadata as ExtendedMediaMetadata | undefined;
-  const artworkUrl = metadata?.artwork
-    ?.map((image) => image.src)
-    .find((src) => src.startsWith("https://"));
+  const artworkUrl = findArtworkUrl(media, metadata);
   scrobblixMediaApi.runtime.sendMessage({
     artist: metadata?.artist,
     title: metadata?.title,
