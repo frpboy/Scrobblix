@@ -113,3 +113,16 @@ This file contains the implementation brief and acceptance contract. It does not
 - The artwork frame keeps the fallback visible until local artwork successfully decodes, with a native Fluent glyph fallback if SVG placeholder rendering fails. Artwork remains local-cache-only; no runtime image URL or third-party logo was added.
 - App identity remains the theme-aware bundled Scrobblix mark and existing desktop icon. No Last.fm trademark was added because the asset ledger lists written permission as a prerequisite.
 - Windows runtime validation remains required for compact navigation, the Love/Unlove toggle, and real artwork decoding.
+
+
+## Artwork fallback order (2026-10-22)
+
+Artwork enrichment follows a best-available local-first strategy:
+
+1. Keep valid artwork already supplied by the active playback source.
+2. If its cache path is missing/weak and the source supplies an artwork URL, fetch and cache that URL.
+3. Match the track/release with MusicBrainz and fetch the release front image from Cover Art Archive when artwork is still missing or weak.
+4. Use Last.fm track metadata/artwork as a later fallback when a Last.fm API key is configured.
+5. Keep the bundled Scrobblix artwork placeholder visible if no usable cover can be found.
+
+All remote artwork is validated and cached locally; MusicBrainz queries stay globally serialized and spaced to respect its public-service request limit. Artwork UI must show its placeholder until a real local image has successfully decoded.
