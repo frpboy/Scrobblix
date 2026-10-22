@@ -54,7 +54,7 @@ public sealed class ProviderActionProcessor(
             return true;
         }
 
-        log?.Invoke($"Provider action submission started; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; started_utc={action.StartedUtc:O}.");
+        log?.Invoke($"Provider action submission started; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; attempt={action.AttemptCount}; started_utc={action.StartedUtc:O}.");
 
         var submission = new ScrobbleSubmission(
             action.Artist, action.Title, action.StartedUtc, sessionKey, action.Album,
@@ -87,7 +87,7 @@ public sealed class ProviderActionProcessor(
             ? GetRetryDelay(action.AttemptCount, result.RetryAfter)
             : null;
         await actionStore.CompleteAsync(action.ActionId, outcome, persistedReason, nowUtc, cancellationToken, retryAfter);
-        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; action_type={action.ActionType}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={persistedReason}; provider_reason={result.ReasonCode}; retry_after_seconds={retryAfter?.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)"}; response_utc={nowUtc:O}.");
+        log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; action_type={action.ActionType}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={persistedReason}; provider_reason={result.ReasonCode}; retry_after_seconds={retryAfter?.TotalSeconds.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "(none)"}; response_utc={nowUtc:O}.");
         PublishCompletion(action, outcome, persistedReason);
         return true;
     }
