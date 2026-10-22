@@ -37,7 +37,15 @@ Scrobblix has the main product flows implemented. The next milestone is **privat
 - [ ] Seed canary secrets into log/diagnostic test inputs and verify no archive entry contains them.
 - [ ] Verify archive is built atomically, temporary files are cleaned, the final hash/size is shown and the user chooses how to share it.
 
-## Track E — Windows distribution
+## Track E — UI/design qualification
+
+The lightweight Home design now exists in the Stitch project and the related handoff is recorded at [Stitch UI handoff](STITCH_UI_HANDOFF_2026-10-22.md). The native Home header/buttons/recent-track labels have been aligned in this branch while keeping live playback/status behavior and other pages.
+
+- [ ] Review the actual WinUI Home and Sources screens on Windows against the Stitch references at 100%, 150% and 200% scale.
+- [ ] Confirm the Home hierarchy remains simple while countdown, queue/retry, provider acceptance and tracking pause states stay visible and truthful.
+- [ ] Check keyboard focus, Narrator labels, contrast, resize behavior and no clipping of status strings. Stitch HTML/screenshot exports are references, not shipped application code.
+
+## Track F — Windows distribution
 
 - [ ] Tray minimize/restore/Exit, Explorer restart icon recovery, notification activation/privacy and clean shutdown.
 - [ ] Keyboard navigation, Narrator, contrast and 100–200% display scale.
