@@ -8,7 +8,6 @@ using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.ReadModels;
 using Scrobblix.Application.Tracking;
 using Scrobblix.Domain.History;
-using Scrobblix.Domain.Diagnostics;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
@@ -1067,116 +1066,12 @@ public sealed partial class MainWindow : Window
 
     private void UpdateScrobbleStatus()
     {
-        if (!_trackingMode.IsEnabled)
-        {
-            ScrobbleStatusText.Text = "Tracking paused";
-            return;
-        }
-
-        if (_displayedObservation is not { } observation || _displayedTrackingStatus is not { } trackingStatus)
-        {
-            ScrobbleStatusText.Text = "Waiting for supported playback";
-            return;
-        }
-
-        var playId = trackingStatus.PlayId;
-        var action = string.IsNullOrWhiteSpace(playId)
-            ? null
-            : _queueActions
-                .Where(item => string.Equals(item.PlayId, playId, StringComparison.Ordinal)
-                    && string.Equals(item.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
-                    && item.ActionType == ProviderActionType.Scrobble)
-                .OrderByDescending(item => item.AttemptCount)
-                .ThenByDescending(item => item.DueUtc)
-                .FirstOrDefault();
-
-        if (action is not null)
-        {
-            ScrobbleStatusText.Text = action.State switch
-            {
-                ProviderActionState.Accepted => "Sent to Last.fm",
-                ProviderActionState.Pending or ProviderActionState.InFlight or ProviderActionState.RetryScheduled
-                    => "Queued safely — waiting for Last.fm",
-                ProviderActionState.AuthBlocked
-                    => "Queued safely — reconnect Last.fm to resume delivery",
-                ProviderActionState.ProviderIgnored
-                    => "Not scrobbled — Last.fm ignored this track",
-                ProviderActionState.PermanentFailure or ProviderActionState.RetryExhausted
-                    => "Delivery needs attention — open Queue for recovery options",
-                ProviderActionState.SubmissionOutcomeUnknown
-                    => "Delivery uncertain — check Last.fm and review Queue before retrying",
-                ProviderActionState.Cancelled => "Queue action cancelled",
-                _ => "Last.fm delivery status is being checked",
-            };
-            return;
-        }
-
-        var decision = trackingStatus.Decision;
-        if (decision.IsEligible)
-        {
-            ScrobbleStatusText.Text = _isLastFmConnected
-                ? "Eligible — checking Last.fm delivery status"
-                : "Eligible — connect Last.fm to submit this play";
-            return;
-        }
-
-        if (decision.ReasonCode == ReasonCodes.Playback.Advertisement)
-        {
-            ScrobbleStatusText.Text = "Not eligible — advertisement playback is ignored";
-            return;
-        }
-
-        if (decision.ReasonCode == ReasonCodes.Playback.TrackTooShort)
-        {
-            ScrobbleStatusText.Text = "Not eligible — this track is too short to scrobble";
-            return;
-        }
-
-        if (decision.ReasonCode == ReasonCodes.Duplicate.ProviderActionExists)
-        {
-            ScrobbleStatusText.Text = "A Last.fm action already exists for this play — check Queue";
-            return;
-        }
-
-        if (decision.ThresholdMilliseconds is int threshold && threshold > 0)
-        {
-            var remaining = Math.Max(0L, threshold - trackingStatus.ConfirmedPlayedMilliseconds);
-            if (observation.PlaybackState == PlayState.Ended)
-            {
-                ScrobbleStatusText.Text = "Not eligible — played too briefly";
-            }
-            else if (observation.PlaybackState == PlayState.Paused)
-            {
-                ScrobbleStatusText.Text = $"Paused — eligible in {FormatDuration(remaining)}";
-            }
-            else if (observation.PlaybackState == PlayState.Playing)
-            {
-                ScrobbleStatusText.Text = $"Listening — eligible in {FormatDuration(remaining)}";
-            }
-            else
-            {
-                ScrobbleStatusText.Text = $"Eligibility needs {FormatDuration(remaining)} more confirmed listening";
-            }
-
-            return;
-        }
-
-        ScrobbleStatusText.Text = decision.ReasonCode switch
-        {
-            ReasonCodes.Metadata.MissingArtist or ReasonCodes.Metadata.MissingTitle
-                => "Waiting for track details — artist and title are required",
-            ReasonCodes.Playback.DurationUnknown or ReasonCodes.Metadata.InvalidDuration
-                => "Waiting for a valid track duration",
-            ReasonCodes.Playback.NonMusic
-                => "Not eligible — this playback is not classified as music",
-            ReasonCodes.Source.ExcludedByUser
-                => "Not eligible — this source is excluded in Settings",
-            ReasonCodes.Duplicate.MergedSources
-                => "Duplicate source event merged — no new scrobble created",
-            ReasonCodes.Playback.SourceLostBeforeEligibility
-                => "Playback source was lost before eligibility; waiting for another update",
-            _ => "Waiting for enough confirmed listening to determine eligibility",
-        };
+        ScrobbleStatusText.Text = PlaybackStatusPresenter.GetScrobbleStatus(
+            _displayedObservation,
+            _displayedTrackingStatus,
+            _trackingMode.IsEnabled,
+            _isLastFmConnected,
+            _queueActions);
     }
 
     private static string FormatDuration(long milliseconds) =>
