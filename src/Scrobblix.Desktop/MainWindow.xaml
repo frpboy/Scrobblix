@@ -62,7 +62,7 @@
                             <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
                                 <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                                 <TextBlock x:Name="CurrentTrackDetail" Text="Listening for supported media through Windows media controls." TextWrapping="Wrap" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center"><Image x:Name="CurrentTrackSourceLogo" Width="24" Height="24" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.Name="Current source logo" /><FontIcon x:Name="CurrentTrackSourceIcon" Glyph="&#xE189;" FontSize="16" AutomationProperties.Name="Detected playback source" /><TextBlock x:Name="CurrentTrackSource" Text="Source: not detected" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                                <TextBlock x:Name="CurrentTrackSource" Text="Source: not detected" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
                         </Grid>
                         <Border Padding="16" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">
@@ -195,8 +195,13 @@
                 </StackPanel>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="Observed source" Style="{StaticResource SubtitleTextBlockStyle}" />
-                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center"><Image x:Name="SourceIdentityLogo" Width="36" Height="36" Stretch="Uniform" Visibility="Collapsed" AutomationProperties.Name="Observed source logo" /><FontIcon x:Name="SourceIdentityIcon" Glyph="&#xE189;" FontSize="24" AutomationProperties.Name="Observed source" /><StackPanel Spacing="3" VerticalAlignment="Center"><TextBlock x:Name="SourceIdentityNameText" Text="No source detected" Style="{StaticResource BodyTextBlockStyle}" /><TextBlock x:Name="SourceIdentityStateText" Text="Waiting for an actual playback observation." Style="{StaticResource CaptionTextBlockStyle}" TextWrapping="Wrap" /></StackPanel></StackPanel>
+                        <TextBlock Text="Session source health" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="SourceHealthSummaryText" Text="No playback observation received this session." TextWrapping="Wrap" />
+                        <TextBlock x:Name="SourceLastObservationText" Text="The most recently observed source and event time will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Windows media controls" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock Text="GSMTC can observe supported desktop players without a browser extension. A recent observation proves an event was received; it does not certify continuous tracking during sleep or disconnection." TextWrapping="Wrap" />
+                        <TextBlock Text="Browser Companion" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock x:Name="BrowserCompanionSourceStatusText" Text="Optional. Waiting for an event from an installed and registered browser extension; manifest files alone do not prove connectivity." TextWrapping="Wrap" />
                         <TextBlock x:Name="SourceHealthSummaryText" Text="No playback observation received this session." TextWrapping="Wrap" Margin="0,8,0,0" />
                         <TextBlock x:Name="SourceLastObservationText" Text="The most recently observed source and event time will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Windows media controls" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
