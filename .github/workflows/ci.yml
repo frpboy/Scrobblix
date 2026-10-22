@@ -47,6 +47,9 @@ jobs:
         run: npm run build
         working-directory: browser-extension
 
+      - name: Validate Chromium and Firefox manifests
+        run: node scripts/validate-browser-manifests.mjs
+
       - name: Publish unpackaged Windows application
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
 
@@ -61,10 +64,12 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$bundle/browser-extension" | Out-Null
           New-Item -ItemType Directory -Force -Path "$bundle/scripts" | Out-Null
           Copy-Item -Path 'browser-extension/manifest.json' -Destination "$bundle/browser-extension/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$bundle/browser-extension/manifest.firefox.json" -Force
           Copy-Item -Path 'browser-extension/package.json' -Destination "$bundle/browser-extension/package.json" -Force
           Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension/" -Recurse -Force
           Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$bundle/scripts/" -Force
           Copy-Item -Path 'scripts/uninstall-native-host.ps1' -Destination "$bundle/scripts/" -Force
+          Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$bundle/scripts/" -Force
           Copy-Item -Path 'docs/OWNER_SETUP_GUIDE.md' -Destination "$bundle/OWNER_SETUP_GUIDE.md" -Force
           @(
             'Scrobblix Windows development test bundle'
