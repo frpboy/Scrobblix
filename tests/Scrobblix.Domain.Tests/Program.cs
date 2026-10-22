@@ -150,10 +150,10 @@ Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(null, null, false, false, Array.Empty<QueueActionSummary>()) == "Tracking paused",
     "Home status clearly reports tracking paused.");
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Listening — eligible in 1:12",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Listening: eligible in 1:12",
     "Home status displays remaining eligibility time without claiming provider delivery.");
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Paused }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Paused — eligible in 1:12",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Paused }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Paused: eligible in 1:12",
     "Home status distinguishes paused playback from active listening.");
 
 var pendingStatusAction = new QueueActionSummary(
@@ -168,26 +168,26 @@ var pendingStatusAction = new QueueActionSummary(
     "Artist",
     "Track");
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction }) == "Queued safely — waiting for Last.fm",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction }) == "Queued safely: waiting for Last.fm",
     "Home status shows a pending provider action as queued, not sent.");
 Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.InFlight } }) == "Sending to Last.fm…",
     "Home status distinguishes an active submission from a queue waiting for a retry.");
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.RetryScheduled } }) == "Queued safely — retry scheduled",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.RetryScheduled } }) == "Queued safely: retry scheduled",
     "Home status explains a scheduled retry without implying a successful submission.");
 Assert(
     PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.Accepted } }) == "Sent to Last.fm",
     "Home status only says sent when the matching scrobble action is provider-accepted.");
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Ended }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — played too briefly",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Ended }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible: played too briefly",
     "Home status explains a track that ended before eligibility.");
 var adTrackingStatus = countdownStatus with
 {
     Decision = new EligibilityDecision(false, null, ReasonCodes.Playback.Advertisement),
 };
 Assert(
-    PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — advertisement playback is ignored",
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible: advertisement playback is ignored",
     "Home status explains why advertisement playback is not eligible.");
 
 var supportBundleRoot = Path.Combine(Path.GetTempPath(), $"scrobblix-support-test-{Guid.NewGuid():N}");

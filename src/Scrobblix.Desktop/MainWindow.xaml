@@ -38,40 +38,48 @@
         </Grid>
 
         <ScrollViewer x:Name="HomeView" Grid.Column="1">
-            <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
+            <StackPanel Padding="32" Spacing="24" MaxWidth="1000" HorizontalAlignment="Left">
                 <StackPanel Spacing="4">
                     <TextBlock Text="Listening" Style="{StaticResource TitleTextBlockStyle}" />
-                    <TextBlock Text="Your track and scrobble status, clearly shown." Style="{StaticResource BodyTextBlockStyle}" />
+                    <TextBlock Text="Playback, confirmed listening, eligibility, and provider delivery are separate states." Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
                 </StackPanel>
 
                 <InfoBar x:Name="StartupInfo" IsOpen="True" IsClosable="False" Severity="Informational"
-                         Title="Starting Scrobblix"
+                         Title="Preparing playback"
                          Message="Preparing local listening history." />
 
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Spacing="16">
                         <TextBlock Text="NOW PLAYING" Style="{StaticResource CaptionTextBlockStyle}" />
-                        <StackPanel Orientation="Horizontal" Spacing="16">
-                            <Grid Width="88" Height="88" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
+                        <Grid ColumnSpacing="20">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="112" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+                            <Grid Grid.Column="0" Width="112" Height="112" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
                                 <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill" />
                                 <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
                             </Grid>
-                            <StackPanel Spacing="6" VerticalAlignment="Center">
-                                <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource SubtitleTextBlockStyle}" />
+                            <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
+                                <TextBlock x:Name="CurrentTrackTitle" Text="Nothing playing" Style="{StaticResource TitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                                 <TextBlock x:Name="CurrentTrackDetail" Text="Listening for supported media through Windows media controls." TextWrapping="Wrap" />
                                 <TextBlock x:Name="CurrentTrackSource" Text="Source: not detected" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
-                        </StackPanel>
+                        </Grid>
                         <Border Padding="16" CornerRadius="6" Background="{ThemeResource ControlFillColorDefaultBrush}">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Scrobble eligibility" Style="{StaticResource SubtitleTextBlockStyle}" />
-                                <ProgressBar x:Name="EligibilityProgressBar" Value="0" Maximum="100" />
+                                <ProgressBar x:Name="EligibilityProgressBar" Value="0" Maximum="100"
+                                             AutomationProperties.Name="Confirmed listening progress toward scrobble eligibility"
+                                             AutomationProperties.HelpText="Only confirmed listening time counts. Media position is separate." />
                                 <TextBlock x:Name="ScrobbleStatusText" Text="Waiting for supported playback." Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                                 <TextBlock x:Name="EligibilityDetailText" Text="Confirmed listening time is unavailable until a supported track is playing. Media position and confirmed listening time are tracked separately." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
-                                <Button x:Name="TrackingToggleButton" Content="Pause tracking" Click="TrackingToggleButton_Click" HorizontalAlignment="Left" />
-                                <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
-                                    <Button x:Name="CurrentTrackLoveButton" Content="Love" Click="CurrentTrackLoveButton_Click" IsEnabled="False" />
-                                    <Button x:Name="CurrentTrackUnloveButton" Content="Remove love" Click="CurrentTrackUnloveButton_Click" IsEnabled="False" />
+                                <StackPanel Spacing="8">
+                                    <Button x:Name="TrackingToggleButton" Content="Pause tracking" Click="TrackingToggleButton_Click" HorizontalAlignment="Left" />
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <Button x:Name="CurrentTrackLoveButton" Content="Love" Click="CurrentTrackLoveButton_Click" IsEnabled="False" />
+                                        <Button x:Name="CurrentTrackUnloveButton" Content="Remove love" Click="CurrentTrackUnloveButton_Click" IsEnabled="False" />
+                                    </StackPanel>
                                 </StackPanel>
                                 <TextBlock x:Name="CurrentTrackLoveStatusText" Text="Connect Last.fm to manage loved tracks." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
@@ -79,33 +87,33 @@
                     </StackPanel>
                 </Border>
 
-                <Grid ColumnSpacing="12" RowSpacing="12">
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="*" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto" />
-                        <RowDefinition Height="Auto" />
-                    </Grid.RowDefinitions>
-                    <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Today" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="TodayStateText" Text="Loading local listening summary" /><TextBlock x:Name="TodayDetailText" Text="Confirmed listening time, eligibility, and accepted scrobbles will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
-                    </Border>
-                    <Border Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Queue" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="QueueStateText" Text="Queue not configured" /><TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
-                    </Border>
-                    <Border Grid.Row="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="6"><TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock x:Name="LastFmHomeStatusText" Text="Checking local connection state" TextWrapping="Wrap" /><TextBlock x:Name="LastFmHomeDetailText" Text="Add API credentials and approve your account in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /><Button x:Name="OpenLastFmSettingsButton" Content="Configure API key / Login" Click="OpenLastFmSettingsButton_Click" HorizontalAlignment="Left" /></StackPanel>
-                    </Border>
-                    <Border Grid.Row="1" Grid.Column="1" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
-                        <StackPanel Spacing="4"><TextBlock Text="Sources" Style="{StaticResource SubtitleTextBlockStyle}" /><TextBlock Text="Checking Windows media controls" /><TextBlock x:Name="BrowserCompanionHomeStatusText" Text="Browser companion awaits packaged registration." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
-                    </Border>
-                </Grid>
+                <Border Padding="20" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="Last.fm delivery" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="LastFmHomeStatusText" Text="Checking Last.fm connection" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                        <TextBlock x:Name="LastFmHomeDetailText" Text="Add API credentials and approve your account in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="Queue" Style="{StaticResource CaptionTextBlockStyle}" />
+                            <TextBlock x:Name="QueueStateText" Text="Checking queued provider actions" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
+                            <TextBlock x:Name="QueueDetailText" Text="Pending, blocked, and failed provider actions will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
+                        <Button x:Name="OpenLastFmSettingsButton" Content="Configure Last.fm" Click="OpenLastFmSettingsButton_Click" HorizontalAlignment="Left" />
+                    </StackPanel>
+                </Border>
+
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Today" Style="{StaticResource SubtitleTextBlockStyle}" />
+                    <TextBlock x:Name="TodayStateText" Text="Loading local listening summary" />
+                    <TextBlock x:Name="TodayDetailText" Text="Confirmed listening time, eligibility, and accepted scrobbles will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                </StackPanel>
 
                 <StackPanel Spacing="8">
                     <TextBlock Text="Recent tracks" Style="{StaticResource SubtitleTextBlockStyle}" />
                     <Border Padding="16" CornerRadius="8" Background="{ThemeResource ControlFillColorDefaultBrush}">
-                        <StackPanel x:Name="RecentActivityList" Spacing="4"><TextBlock Text="No recent activity" /><TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" /></StackPanel>
+                        <StackPanel x:Name="RecentActivityList" Spacing="4">
+                            <TextBlock Text="No recent activity" />
+                            <TextBlock Text="Detected plays and provider outcomes will be listed here once tracking begins." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
                     </Border>
                 </StackPanel>
             </StackPanel>

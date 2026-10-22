@@ -49,7 +49,7 @@ Scrobblix has the main product flows implemented. Recent local evidence shows a 
 
 ## Track E — UI/design qualification
 
-The lightweight Home design now exists in the Stitch project and the related handoff is recorded at [Stitch UI handoff](STITCH_UI_HANDOFF_2026-10-22.md). The native Home header/buttons/recent-track labels have been aligned in this branch while keeping live playback/status behavior and other pages.
+The lightweight Home hierarchy from the Stitch handoff is now reflected in native WinUI: current track and eligibility are primary, Last.fm and queue state share one delivery section, Today is concise, and Home shows three recent tracks. The separate Sources and Queue pages remain intact. The live InfoBar title also follows startup, playback, pause/resume and storage-error states. See [Stitch UI handoff](STITCH_UI_HANDOFF_2026-10-22.md). This is a source implementation update, not a claim of completed Windows visual qualification.
 
 - [ ] Review the actual WinUI Home and Sources screens on Windows against the Stitch references at 100%, 150% and 200% scale.
 - [ ] Confirm the Home hierarchy remains simple while countdown, queue/retry, provider acceptance and tracking pause states stay visible and truthful.

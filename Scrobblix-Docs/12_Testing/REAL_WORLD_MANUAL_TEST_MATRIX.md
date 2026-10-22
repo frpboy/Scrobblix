@@ -111,6 +111,7 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | UX-07 | Toggle tracking off while a track plays, then on. | “Tracking paused” is explicit; no listening time accrued during pause; queue worker state remains separate. | NOT RUN | |
 
 | UX-08 | Open Sources before playback, then play in Spotify desktop and a supported browser player if installed. Compare the displayed source and time with actual event delivery. | Empty state stays honest; GSMTC/browser changes only after an observed event. Presence of extension files or a listener is not reported as connected playback. | NOT RUN | |
+| UX-09 | Review Home with no playback, active playback, tracking paused, queued delivery, retry, provider acceptance and Last.fm disconnected. Resize and test at 100%, 150% and 200% scale. | Now Playing is the primary focal point; eligibility progress reflects confirmed listening; queue/provider states stay distinct and truthful; Home shows no more than three recent tracks; no clipping or duplicate Sources/Queue tiles. | NOT RUN | |
 
 ## G. Support bundle safety and usability
 

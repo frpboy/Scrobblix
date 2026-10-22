@@ -206,7 +206,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             await new SqliteProviderActionStore(connectionString)
                 .RecoverExpiredLeasesAsync(DateTimeOffset.UtcNow, CancellationToken.None);
             var historyReader = new SqliteHistoryReader(connectionString);
-            var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
+            var recentHistory = await historyReader.GetRecentAsync(3, CancellationToken.None);
             _window.SetRecentHistory(recentHistory);
             _window.SetHistoryPage(await historyReader.GetRecentAsync(500, CancellationToken.None));
             _window.SetStatisticsSummary(await new SqliteStatisticsReader(connectionString).GetAsync(CancellationToken.None));
@@ -294,7 +294,7 @@ public partial class App : Microsoft.UI.Xaml.Application
             var observation = await source.GetCurrentAsync(CancellationToken.None);
             if (observation is null)
             {
-                _window.SetStartupStatus("Ready. No supported playback is active.", InfoBarSeverity.Informational);
+                _window.SetStartupStatus("Ready. No supported playback is active.", InfoBarSeverity.Informational, "Waiting for playback");
                 logger.Info("PLAYBACK_SOURCE", "No active Windows media session was returned at startup.");
             }
             else
@@ -338,7 +338,7 @@ public partial class App : Microsoft.UI.Xaml.Application
         catch (Exception exception)
         {
             fileLogger?.Error("STARTUP", $"Application initialization failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
-            _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error);
+            _window.SetStartupStatus($"Local storage could not start: {exception.Message}", InfoBarSeverity.Error, "Storage unavailable");
         }
     }
 

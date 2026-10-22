@@ -50,19 +50,19 @@ public static class PlaybackStatusPresenter
             {
                 ProviderActionState.Accepted => "Sent to Last.fm",
                 ProviderActionState.Pending
-                    => "Queued safely — waiting for Last.fm",
+                    => "Queued safely: waiting for Last.fm",
                 ProviderActionState.InFlight
                     => "Sending to Last.fm…",
                 ProviderActionState.RetryScheduled
-                    => "Queued safely — retry scheduled",
+                    => "Queued safely: retry scheduled",
                 ProviderActionState.AuthBlocked
-                    => "Queued safely — reconnect Last.fm to resume delivery",
+                    => "Queued safely: reconnect Last.fm to resume delivery",
                 ProviderActionState.ProviderIgnored
-                    => "Not scrobbled — Last.fm ignored this track",
+                    => "Not scrobbled: Last.fm ignored this track",
                 ProviderActionState.PermanentFailure or ProviderActionState.RetryExhausted
-                    => "Delivery needs attention — open Queue for recovery options",
+                    => "Delivery needs attention: open Queue for recovery options",
                 ProviderActionState.SubmissionOutcomeUnknown
-                    => "Delivery uncertain — check Last.fm and review Queue before retrying",
+                    => "Delivery uncertain: check Last.fm and review Queue before retrying",
                 ProviderActionState.Cancelled => "Queue action cancelled",
                 _ => "Last.fm delivery status is being checked",
             };
@@ -72,23 +72,23 @@ public static class PlaybackStatusPresenter
         if (decision.IsEligible)
         {
             return lastFmConnected
-                ? "Eligible — checking Last.fm delivery status"
-                : "Eligible — connect Last.fm to submit this play";
+                ? "Eligible: checking Last.fm delivery status"
+                : "Eligible: connect Last.fm to submit this play";
         }
 
         if (decision.ReasonCode == ReasonCodes.Playback.Advertisement)
         {
-            return "Not eligible — advertisement playback is ignored";
+            return "Not eligible: advertisement playback is ignored";
         }
 
         if (decision.ReasonCode == ReasonCodes.Playback.TrackTooShort)
         {
-            return "Not eligible — this track is too short to scrobble";
+            return "Not eligible: this track is too short to scrobble";
         }
 
         if (decision.ReasonCode == ReasonCodes.Duplicate.ProviderActionExists)
         {
-            return "A Last.fm action already exists for this play — check Queue";
+            return "A Last.fm action already exists for this play: check Queue";
         }
 
         if (decision.ThresholdMilliseconds is int threshold && threshold > 0)
@@ -96,17 +96,17 @@ public static class PlaybackStatusPresenter
             var remaining = Math.Max(0L, threshold - trackingStatus.ConfirmedPlayedMilliseconds);
             if (observation.PlaybackState == PlayState.Ended)
             {
-                return "Not eligible — played too briefly";
+                return "Not eligible: played too briefly";
             }
 
             if (observation.PlaybackState == PlayState.Paused)
             {
-                return $"Paused — eligible in {FormatDuration(remaining)}";
+                return $"Paused: eligible in {FormatDuration(remaining)}";
             }
 
             if (observation.PlaybackState == PlayState.Playing)
             {
-                return $"Listening — eligible in {FormatDuration(remaining)}";
+                return $"Listening: eligible in {FormatDuration(remaining)}";
             }
 
             return $"Eligibility needs {FormatDuration(remaining)} more confirmed listening";
@@ -115,15 +115,15 @@ public static class PlaybackStatusPresenter
         return decision.ReasonCode switch
         {
             ReasonCodes.Metadata.MissingArtist or ReasonCodes.Metadata.MissingTitle
-                => "Waiting for track details — artist and title are required",
+                => "Waiting for track details: artist and title are required",
             ReasonCodes.Playback.DurationUnknown or ReasonCodes.Metadata.InvalidDuration
                 => "Waiting for a valid track duration",
             ReasonCodes.Playback.NonMusic
-                => "Not eligible — this playback is not classified as music",
+                => "Not eligible: this playback is not classified as music",
             ReasonCodes.Source.ExcludedByUser
-                => "Not eligible — this source is excluded in Settings",
+                => "Not eligible: this source is excluded in Settings",
             ReasonCodes.Duplicate.MergedSources
-                => "Duplicate source event merged — no new scrobble created",
+                => "Duplicate source event merged; no new scrobble created",
             ReasonCodes.Playback.SourceLostBeforeEligibility
                 => "Playback source was lost before eligibility; waiting for another update",
             _ => "Waiting for enough confirmed listening to determine eligibility",

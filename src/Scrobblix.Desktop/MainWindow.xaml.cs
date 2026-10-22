@@ -89,8 +89,15 @@ public sealed partial class MainWindow : Window
         appWindow.Resize(new global::Windows.Graphics.SizeInt32(1080, 780));
     }
 
-    public void SetStartupStatus(string message, InfoBarSeverity severity)
+    public void SetStartupStatus(string message, InfoBarSeverity severity, string? title = null)
     {
+        StartupInfo.Title = title ?? (severity switch
+        {
+            InfoBarSeverity.Success => "Playback detected",
+            InfoBarSeverity.Warning => "Attention needed",
+            InfoBarSeverity.Error => "Scrobblix needs attention",
+            _ => "Listening status",
+        });
         StartupInfo.Message = message;
         StartupInfo.Severity = severity;
     }
@@ -113,7 +120,7 @@ public sealed partial class MainWindow : Window
         SourceHealthSummaryText.Text = $"{sourceLabel} event received this session.";
         SourceLastObservationText.Text = $"Last observation: {observation.ObservedAtUtc.ToLocalTime().ToString("t", CultureInfo.CurrentCulture)} · playback state: {observation.PlaybackState}.";
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, observation.ArtworkPath);
-        DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
+        DiagnosticsPlaybackText.Text = $"{observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"} from {observation.SourceName} ({observation.PlaybackState}).";
         var threshold = trackingStatus.Decision.ThresholdMilliseconds;
         EligibilityProgressBar.Value = threshold is > 0
             ? Math.Min(100, trackingStatus.ConfirmedPlayedMilliseconds * 100d / threshold.Value)
@@ -124,11 +131,12 @@ public sealed partial class MainWindow : Window
         UpdateScrobbleStatus();
         SetStartupStatus(
             observation.PlaybackState == PlayState.Playing
-                ? $"Tracking {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}."
-                : $"Last observed {observation.Artist ?? "Unknown artist"} — {observation.Title ?? "Unknown title"}.",
+                ? $"Tracking {observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"}."
+                : $"Last observed {observation.Artist ?? "Unknown artist"} · {observation.Title ?? "Unknown title"}.",
             observation.PlaybackState == PlayState.Playing
                 ? InfoBarSeverity.Success
-                : InfoBarSeverity.Informational);
+                : InfoBarSeverity.Informational,
+            observation.PlaybackState == PlayState.Playing ? "Playback detected" : "Playback updated");
     }
 
     public void SetEnrichedMetadata(string playId, PlayObservation observation, PlayMetadataEnrichment metadata)
@@ -339,7 +347,7 @@ public sealed partial class MainWindow : Window
         row.Children.Add(artFrame);
 
         var details = new StackPanel { Spacing = 3, VerticalAlignment = VerticalAlignment.Center };
-        details.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} — {play.Title ?? "Unknown title"}", FontSize = 15, TextWrapping = TextWrapping.Wrap });
+        details.Children.Add(new TextBlock { Text = $"{play.Artist ?? "Unknown artist"} · {play.Title ?? "Unknown title"}", FontSize = 15, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(play.Album))
             details.Children.Add(new TextBlock { Text = play.Album, FontSize = 12, TextWrapping = TextWrapping.Wrap });
         if (!string.IsNullOrWhiteSpace(play.AlbumArtist) && !string.Equals(play.AlbumArtist, play.Artist, StringComparison.OrdinalIgnoreCase))
@@ -709,7 +717,7 @@ public sealed partial class MainWindow : Window
             var content = new StackPanel { Spacing = 6 };
             var track = string.IsNullOrWhiteSpace(action.Artist) && string.IsNullOrWhiteSpace(action.Title)
                 ? "Unknown track"
-                : $"{action.Artist ?? "Unknown artist"} — {action.Title ?? "Unknown title"}";
+                : $"{action.Artist ?? "Unknown artist"} · {action.Title ?? "Unknown title"}";
             content.Children.Add(new TextBlock { Text = track, FontSize = 15, TextWrapping = TextWrapping.Wrap });
             content.Children.Add(new TextBlock
             {
@@ -784,7 +792,7 @@ public sealed partial class MainWindow : Window
     {
         ProviderActionState.RetryScheduled => "Retry scheduled",
         ProviderActionState.RetryExhausted => "Automatic retries exhausted",
-        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown — review required",
+        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown: review required",
         ProviderActionState.AuthBlocked => "Authentication blocked",
         ProviderActionState.PermanentFailure => "Failed",
         ProviderActionState.ProviderIgnored => "Ignored by provider",
@@ -943,7 +951,7 @@ public sealed partial class MainWindow : Window
             var content = new StackPanel { Spacing = 5 };
             content.Children.Add(new TextBlock
             {
-                Text = $"{track.Artist ?? "Unknown artist"} — {track.Title ?? "Unknown title"}",
+                Text = $"{track.Artist ?? "Unknown artist"} · {track.Title ?? "Unknown title"}",
                 FontSize = 15,
                 TextWrapping = TextWrapping.Wrap,
             });
@@ -1086,7 +1094,6 @@ public sealed partial class MainWindow : Window
     public void SetBrowserCompanionObservation(string sourceName)
     {
         var status = $"Browser Companion received playback from {sourceName}.";
-        BrowserCompanionHomeStatusText.Text = status;
         BrowserCompanionSourceStatusText.Text = status;
     }
 
@@ -1147,7 +1154,8 @@ public sealed partial class MainWindow : Window
             _trackingMode.IsEnabled
                 ? "Tracking resumed. Checking Windows media controls."
                 : "Tracking paused. Local history and queued actions are unchanged.",
-            InfoBarSeverity.Informational);
+            InfoBarSeverity.Informational,
+            _trackingMode.IsEnabled ? "Tracking resumed" : "Tracking paused");
         UpdateScrobbleStatus();
         TrackingModeChanged?.Invoke(_trackingMode.IsEnabled);
     }
