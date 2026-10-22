@@ -21,7 +21,7 @@ public static class DiagnosticMessageSanitizer
             @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+",
             "[AUTHORIZATION_URL_REDACTED]");
         normalized = Regex.Replace(normalized,
-            @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*[^;,|]+",
+            @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*.*?(?=;\s*[a-z][a-z0-9_]*\s*[=:]|$)",
             "$1=[REDACTED]");
         return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
     }
