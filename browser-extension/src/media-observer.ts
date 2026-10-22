@@ -1,3 +1,5 @@
+const extensionApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
+
 type PlaybackState = "playing" | "paused" | "ended" | "unknown";
 
 type ExtendedMediaMetadata = MediaMetadata & {
@@ -16,7 +18,7 @@ function send(media: HTMLMediaElement, state: PlaybackState): void {
   const artworkUrl = metadata?.artwork
     ?.map((image) => image.src)
     .find((src) => src.startsWith("https://"));
-  chrome.runtime.sendMessage({
+  extensionApi.runtime.sendMessage({
     artist: metadata?.artist,
     title: metadata?.title,
     album: metadata?.album,
