@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Active development; v1 release gates remain open  
-> **Last updated:** 2026-10-21
+> **Last updated:** 2026-10-22
 
 
 Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
@@ -67,7 +67,10 @@ git pull --ff-only origin feat/scrobblix-v1-complete
 ```
 
 The script restores and builds the solution, runs the assertion suite, checks
-and builds the browser companion, and then launches the WinUI desktop app.
+and builds the browser companion, and then launches the WinUI desktop app. It
+detects an already-running desktop process before rebuilding to avoid repeated
+MSB3021/MSB3027 DLL-lock failures. Close Scrobblix first or explicitly use
+-StopRunningApp to request shutdown.
 When the app exits, PowerShell returns to the terminal. To build/run the desktop
 app manually after fetching the branch:
 
@@ -122,8 +125,10 @@ See `Scrobblix-Docs/00_Project/SCOPE.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHE
 - [`02_Research`](Scrobblix-Docs/02_Research/README.md): competitor research, pain points, validation plan, and source notes.
 - [`03_Requirements`](Scrobblix-Docs/03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
 - [`04_UserExperience`](Scrobblix-Docs/04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
-- [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPLEMENTATION_HANDOFF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
+- [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPORT_BRIEF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
 - [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): latest branch state, validation links, and exact continue/build/run commands.
+- [Master implementation plan and recommendations](docs/MASTER_IMPLEMENTATION_PLAN.md): capability status, recommendations, acceptance tests and release gates.
+- [Local development and troubleshooting](docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md): DLL-lock recovery, build/test/run commands and credential safety.
 - [`05_Architecture`](Scrobblix-Docs/05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
 - [`06_Data`](Scrobblix-Docs/06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
 - [`07_Interfaces`](Scrobblix-Docs/07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.
