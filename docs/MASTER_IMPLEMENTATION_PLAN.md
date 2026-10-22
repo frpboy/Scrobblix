@@ -18,7 +18,7 @@ Scrobblix is a local-first Windows listening companion. It must answer **what is
 |---|---|---|
 | Windows desktop shell/navigation | Builds in Windows CI; owner screenshots show Home, History, Queue, Sources, Diagnostics and Settings | DPI, minimum width, keyboard, screen reader, high contrast, tray and cold-start tests |
 | GSMTC playback detection | Owner recording shows track changes and confirmed-time progress | Multi-player/session replacement, stale/empty metadata, seek/pause/resume/end, long-run CPU/memory |
-| Browser companion/Native Messaging | TypeScript/manifest/host checks pass; install scripts exist | Actual Chrome/Edge and Firefox installation, exact IDs, event delivery, restart/uninstall, sender rejection |
+| Browser companion/Native Messaging | TypeScript/manifest/host checks pass; one-command PowerShell packager, multi-ID Chromium allow-list, standalone ZIP and CI artifact added | Actual Chrome/Edge and Firefox installation, exact IDs, event delivery, restart/uninstall, sender rejection |
 | Canonical play/source arbitration | Assertions cover arbitration, late metadata and concurrent observations | Soak with real GSMTC/browser overlap, replay/restart, ads and same-title/different-artist tracks |
 | Eligibility | Progress visible in screenshots; domain assertions run | Threshold boundaries, monotonic clock behavior across sleep/resume and no double-counted intervals |
 | SQLite history/Today/search/export | Persisted totals/history visible; migrations/assertions in CI | Old DB upgrades, DST/time zone, export correctness and retention/delete |
