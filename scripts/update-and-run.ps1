@@ -40,23 +40,60 @@ try {
 
     $currentBranch = (git branch --show-current).Trim()
     if ([string]::IsNullOrWhiteSpace($currentBranch)) {
-        throw 'A branch must be checked out before updating. Switch to main or pass -Branch <name>.'
+        throw 'A branch must be checked out before updating. Switch to a feature branch or pass -Branch <name>.'
     }
 
-    if (-not [string]::IsNullOrWhiteSpace($Branch) -and $currentBranch -ne $Branch) {
-        $localBranch = git branch --list $Branch
-        if ($localBranch) {
-            git switch $Branch
+    $sourceBranch = if ([string]::IsNullOrWhiteSpace($Branch)) { $currentBranch } else { $Branch }
+    if ($sourceBranch -ne 'main') {
+        git show-ref --verify --quiet "refs/remotes/origin/$sourceBranch"
+        if ($LASTEXITCODE -ne 0) { throw "Remote branch origin/$sourceBranch was not found." }
+
+        if ($currentBranch -ne $sourceBranch) {
+            $localBranch = git branch --list $sourceBranch
+            if ($localBranch) {
+                git switch $sourceBranch
+            }
+            else {
+                git switch --track "origin/$sourceBranch"
+            }
+            if ($LASTEXITCODE -ne 0) { throw "Could not switch to $sourceBranch." }
         }
-        else {
-            git switch --track "origin/$Branch"
+
+        git merge --no-edit "origin/$sourceBranch"
+        if ($LASTEXITCODE -ne 0) {
+            $gitDirectory = (git rev-parse --git-dir).Trim()
+            $mergeHead = Join-Path $gitDirectory 'MERGE_HEAD'
+            if (Test-Path -LiteralPath $mergeHead) {
+                git merge --abort
+            }
+            throw "Could not integrate origin/$sourceBranch. The merge was aborted; resolve the conflict manually, then rerun the script."
         }
-        if ($LASTEXITCODE -ne 0) { throw "Could not switch to $Branch." }
-        $currentBranch = $Branch
     }
 
-    git pull --ff-only origin $currentBranch
-    if ($LASTEXITCODE -ne 0) { throw "Could not fast-forward $currentBranch." }
+    git switch main
+    if ($LASTEXITCODE -ne 0) { throw 'Could not switch to main.' }
+
+    git merge --no-edit origin/main
+    if ($LASTEXITCODE -ne 0) {
+        $gitDirectory = (git rev-parse --git-dir).Trim()
+        $mergeHead = Join-Path $gitDirectory 'MERGE_HEAD'
+        if (Test-Path -LiteralPath $mergeHead) {
+            git merge --abort
+        }
+        throw 'Could not integrate origin/main. The merge was aborted; resolve the conflict manually, then rerun the script.'
+    }
+
+    if ($sourceBranch -ne 'main') {
+        git merge --no-ff --no-edit $sourceBranch
+        if ($LASTEXITCODE -ne 0) {
+            $gitDirectory = (git rev-parse --git-dir).Trim()
+            $mergeHead = Join-Path $gitDirectory 'MERGE_HEAD'
+            if (Test-Path -LiteralPath $mergeHead) {
+                git merge --abort
+            }
+            throw "Could not merge $sourceBranch into main. The merge was aborted; resolve the conflict manually, then rerun the script."
+        }
+    }
 
     $runningApps = @(Get-Process -Name 'Scrobblix.Desktop' -ErrorAction SilentlyContinue)
     if ($runningApps.Count -gt 0) {

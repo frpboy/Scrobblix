@@ -14,15 +14,12 @@ The current phase is proving that this implementation is correct and installable
 
 The latest `main` head verified during this pass was `1aab53b6e3871e4d53c6f27b3a496087a8cc29ae`, with the matching Windows CI workflow [run 39730929297](https://github.com/frpboy/Scrobblix/actions/runs/39730929297) completing successfully on that exact SHA. PR #7 (`feat/private-beta-readiness`) remains an unmerged draft; validate its own current head and matching run before relying on any continuation-branch change. Always fetch current `main` and its latest relevant Actions run rather than relying on historical statuses.
 
-## Continue from the private-beta readiness branch
+## Merge a feature branch and rebuild main
 
-The `scripts/update-and-run.ps1` helper targets `feat/private-beta-readiness`, not the stale `feat/scrobblix-v1-complete` branch. It refuses to build while any `Scrobblix.Desktop` process is running. Close the main window and the minimized-to-tray instance before rebuilding; the helper will not terminate processes automatically.
+The `scripts/update-and-run.ps1` helper integrates the remote feature branch (or `-Branch <name>`) into the local feature branch, switches to `main`, integrates remote `main`, merges the feature branch with a merge commit, then rebuilds. It refuses dirty worktrees and aborts an unresolved merge rather than leaving partial Git state. It also refuses to build while any `Scrobblix.Desktop` process is running; close the main window and minimized-to-tray instance first.
 
 ```powershell
 git status --short
-git fetch origin --prune
-git switch feat/private-beta-readiness
-git pull --ff-only origin feat/private-beta-readiness
 .\scripts\update-and-run.ps1
 ```
 
