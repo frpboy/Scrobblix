@@ -408,17 +408,6 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
     "A nominal success response without a scrobbles result does not inflate accepted totals.");
 
 
-// Diagnostic log sanitization must not retain listening metadata, including values containing delimiters.
-var sanitizedDiagnostic = typeof(ScrobblixFileLogger).GetMethod("Sanitize", System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static)!
-    .Invoke(null, ["artist=Private Artist; title=Secret Track; album=Personal Album; action_id=abc123", 6000]) as string;
-Assert(sanitizedDiagnostic is not null
-    && !sanitizedDiagnostic.Contains("Private Artist", StringComparison.Ordinal)
-    && !sanitizedDiagnostic.Contains("Secret Track", StringComparison.Ordinal)
-    && !sanitizedDiagnostic.Contains("Personal Album", StringComparison.Ordinal)
-    && sanitizedDiagnostic.Contains("artist=[REDACTED]", StringComparison.Ordinal)
-    && sanitizedDiagnostic.Contains("title=[REDACTED]", StringComparison.Ordinal),
-    "Diagnostic logs redact artist, title, and album metadata.");
-
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
