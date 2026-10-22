@@ -167,7 +167,7 @@ public sealed partial class MainWindow : Window
         AppNavigationView.OpenPaneLength = 216;
         // LeftMinimal renders only each navigation glyph, avoiding a collapsed pane
         // that reserves space for labels but leaves the icons visually absent.
-        AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftMinimal : NavigationViewPaneDisplayMode.Left;
+        AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
         AppNavigationView.IsPaneOpen = !compact;
         foreach (var item in AppNavigationView.MenuItems.OfType<NavigationViewItem>())
         {
