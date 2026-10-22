@@ -17,6 +17,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Changed
 
+- Bounded Browser Companion named-pipe I/O retries and throttled repetitive warnings while retaining suppressed-warning counts.
+- Updated the local build/run helper to target the private-beta readiness branch and refuse to rebuild while an existing desktop/tray process holds output DLLs.
 - Reframed Scrobblix from a basic Last.fm utility into a local-first Windows listening companion with transparent diagnostics.
 - Windows notifications now expire automatically: 5 seconds for accepted-scrobble confirmations and 10 seconds for delivery warnings that need attention.
 

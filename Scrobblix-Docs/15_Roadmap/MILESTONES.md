@@ -29,6 +29,7 @@ Home, History, Statistics, Loved, Queue, Sources, Diagnostics, Settings, backup/
 
 ## M5 — Private beta readiness — current milestone
 
+1. Resolve crash/launch stability first: throttle Browser Companion pipe I/O warnings, back off retries, correct the stale launcher branch target, and refuse rebuilds while the desktop/tray process is alive. Keep the crash cause open until exact-candidate CI and Windows exit evidence exist.
 1. Reconcile roadmap and release docs with the code that exists on `main`.
 2. Run the manual real-world matrix over several days with Spotify desktop and a dedicated Last.fm test account; record actual results instead of assuming success.
 3. Complete an 8–24 hour soak and fault/restart recovery pass.

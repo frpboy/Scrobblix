@@ -19,6 +19,13 @@ The following capability surfaces or implementation paths exist in the codebase.
 - Chromium / Firefox development manifests and Native Messaging installation helpers.
 - Windows CI for .NET, assertion checks, browser extension build, manifest validation, publishing and development artifacts.
 
+## P0 — Crash and launch stability
+
+- [ ] Validate the process exit against the exact candidate build: capture exit code, Windows Application event and timestamp-aligned sanitized log tail. Supplied logs do not prove an unhandled exception; leave root cause unresolved until evidence exists.
+- [ ] Prevent Browser Companion pipe-busy retry storms with bounded exponential backoff, one warning per interval plus suppressed count, and backoff reset after successful connection.
+- [ ] Use the current `feat/private-beta-readiness` launcher target and refuse builds while `Scrobblix.Desktop` owns output DLLs. Never terminate processes automatically.
+- [ ] Run CR-01 to CR-04 in the real-world manual test matrix and verify history/queue continuity through shutdown and restart.
+
 ## P0 — Stabilize the working version
 
 - [ ] Fetch `main` and check the exact HEAD SHA and latest Actions run before citing CI status.

@@ -14,6 +14,7 @@
 
 ## Delivery order
 
+1. **Crash and launch stabilization:** reproduce the supplied process exit, throttle/back off native-pipe failures, correct the launcher target, add the safe process-lock guard, and capture Windows exit evidence.
 1. **Mainline truth and test matrix:** update roadmap/release docs; create the real-world test record. Check exact `main` SHA and associated Windows Actions result.
 2. **Manual listening pass:** multi-day Spotify desktop runs with change, pause, resume, seek, repeated track, ads, sleep/wake, network interruption and Last.fm outage/recovery.
 3. **Browser companion:** Chrome, Edge, Firefox install/reload/restart/delivery, sender-rejection and uninstall. Keep it optional for Spotify desktop.
