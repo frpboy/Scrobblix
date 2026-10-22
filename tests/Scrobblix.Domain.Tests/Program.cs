@@ -408,15 +408,19 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
     "A nominal success response without a scrobbles result does not inflate accepted totals.");
 
 
-// Logger sanitizer regression: canary listening metadata must not persist in diagnostic messages.
+// Logger sanitizer regression: metadata must remain redacted when values contain field delimiters.
 var sanitizedDiagnostic = Scrobblix.Infrastructure.Diagnostics.DiagnosticMessageSanitizer.Sanitize(
-    "artist=Private Artist; title=Secret Track; album=Personal Album; action_id=abc123");
-Assert(!sanitizedDiagnostic.Contains("Private Artist", StringComparison.Ordinal)
-    && !sanitizedDiagnostic.Contains("Secret Track", StringComparison.Ordinal)
-    && !sanitizedDiagnostic.Contains("Personal Album", StringComparison.Ordinal)
+    "artist=Earth, Wind & Fire; title=\"Hello, World; Part 2\"; album=Re-Load | Remaster; action_id=abc123");
+Assert(!sanitizedDiagnostic.Contains("Earth", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Wind & Fire", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Hello, World", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Part 2", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Re-Load", StringComparison.Ordinal)
+    && !sanitizedDiagnostic.Contains("Remaster", StringComparison.Ordinal)
+    && sanitizedDiagnostic.Contains("action_id=abc123", StringComparison.Ordinal)
     && sanitizedDiagnostic.Contains("artist=[REDACTED]", StringComparison.Ordinal)
     && sanitizedDiagnostic.Contains("title=[REDACTED]", StringComparison.Ordinal),
-    "Diagnostic logs redact artist, title, and album metadata.");
+    "Diagnostic logs fully redact artist/title/album values containing commas, semicolons, pipes and quotes.");
 
 // Verify local calendar-day boundaries around daylight-saving transitions independently of the CI machine's time zone.
 static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) GetLocalDayUtcBounds(DateTimeOffset now, TimeZoneInfo timeZone)
