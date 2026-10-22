@@ -11,6 +11,7 @@ using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
 using Scrobblix.Domain.Queue;
+using Scrobblix.Infrastructure.Diagnostics;
 
 namespace Scrobblix.Desktop;
 
@@ -348,6 +349,64 @@ public sealed partial class MainWindow : Window
     {
         _logDirectory = directory;
         LogDirectoryText.Text = directory;
+    }
+
+    private async void ExportSupportBundleButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (string.IsNullOrWhiteSpace(_logDirectory))
+        {
+            SupportBundleStatusText.Text = "The diagnostic log directory is not ready. Restart Scrobblix and try again.";
+            return;
+        }
+
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Export a privacy-safe support bundle?",
+            Content = "The ZIP contains manifest.json, event-summary.txt, operational-events.tsv and README.txt. It includes app/Windows version metadata and event timestamps, levels, categories, plus constrained exception/reason codes. It does not contain raw log messages, artist/title/album, listening history, the SQLite database, artwork, full URLs, usernames, file paths or Last.fm credentials/session keys. Nothing is uploaded automatically; review the ZIP before sharing.",
+            PrimaryButtonText = "Choose ZIP location",
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary)
+        {
+            return;
+        }
+
+        try
+        {
+            var picker = new global::Windows.Storage.Pickers.FileSavePicker
+            {
+                SuggestedStartLocation = global::Windows.Storage.Pickers.PickerLocationId.DocumentsLibrary,
+                SuggestedFileName = $"Scrobblix-Support-{DateTime.Now:yyyyMMdd-HHmmss}",
+            };
+            picker.FileTypeChoices.Add("ZIP archive", new List<string> { ".zip" });
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, WinRT.Interop.WindowNative.GetWindowHandle(this));
+            var file = await picker.PickSaveFileAsync();
+            if (file is null)
+            {
+                return;
+            }
+
+            ExportSupportBundleButton.IsEnabled = false;
+            SupportBundleStatusText.Text = "Building a diagnostics-only ZIP. Listening history and raw log messages are excluded.";
+            var result = await SupportBundleExporter.CreateAsync(
+                file.Path,
+                _logDirectory,
+                typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown",
+                Environment.OSVersion.Version.ToString());
+            SupportBundleStatusText.Text =
+                $"Created {Path.GetFileName(result.ArchivePath)}. Included {result.OperationalEventsIncluded:N0} operational event row(s) from {result.SourceLogFilesInspected:N0} recent log file(s). SHA-256: {result.Sha256}. Review the ZIP before sharing.";
+        }
+        catch (Exception exception)
+        {
+            SupportBundleStatusText.Text = $"Support bundle export failed ({exception.GetType().Name}). Your local history and logs were not uploaded.";
+            DiagnosticLogRequested?.Invoke($"Support bundle export failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            ExportSupportBundleButton.IsEnabled = true;
+        }
     }
 
     private void OpenLogFolderButton_Click(object sender, RoutedEventArgs args)
