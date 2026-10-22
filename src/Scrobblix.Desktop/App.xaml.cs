@@ -11,6 +11,7 @@ using System.Text.Json;
 using Scrobblix.Domain.History;
 using Scrobblix.Domain.Metadata;
 using Scrobblix.Domain.Playback;
+using Scrobblix.Domain.Queue;
 using Scrobblix.Application.Ingestion;
 using Scrobblix.Application.Queue;
 using Scrobblix.Infrastructure.Providers;
