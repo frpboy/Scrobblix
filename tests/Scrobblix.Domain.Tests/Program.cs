@@ -536,6 +536,52 @@ var lovedReader = new SqliteQueueReader(connectionString);
 var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
 Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
     "The Loved read model reflects the newest persisted intent for the same track.");
+var nowPlayingDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-nowplaying-{Guid.NewGuid():N}.db");
+var nowPlayingConnectionString = $"Data Source={nowPlayingDatabasePath};Pooling=False";
+await new SqliteDatabase(nowPlayingConnectionString).InitializeAsync(CancellationToken.None);
+var nowPlayingPlayStore = new SqliteLocalPlayStore(nowPlayingConnectionString);
+var nowPlayingWriter = new SqliteNowPlayingActionWriter(nowPlayingConnectionString);
+var firstNowPlayingPlay = historyRecord with
+{
+    PlayId = "nowplaying-first",
+    FirstObservedUtc = observation.ObservedAtUtc,
+    LastObservedUtc = observation.ObservedAtUtc,
+};
+await nowPlayingPlayStore.UpsertAsync(firstNowPlayingPlay, CancellationToken.None);
+Assert(await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
+    "The first confirmed playing track is durably queued for Last.fm now-playing.");
+Assert(!await nowPlayingWriter.TryQueueAsync(firstNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+    "Repeated polls for the same play do not create duplicate now-playing actions.");
+
+var incompleteNowPlayingPlay = firstNowPlayingPlay with
+{
+    PlayId = "nowplaying-incomplete",
+    Artist = null,
+};
+await nowPlayingPlayStore.UpsertAsync(incompleteNowPlayingPlay, CancellationToken.None);
+Assert(!await nowPlayingWriter.TryQueueAsync(incompleteNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None),
+    "Now-playing is not sent when track metadata is missing.");
+
+var secondNowPlayingPlay = firstNowPlayingPlay with
+{
+    PlayId = "nowplaying-second",
+    Title = "Next Track",
+    FirstObservedUtc = observation.ObservedAtUtc.AddMinutes(1),
+    LastObservedUtc = observation.ObservedAtUtc.AddMinutes(1),
+};
+await nowPlayingPlayStore.UpsertAsync(secondNowPlayingPlay, CancellationToken.None);
+Assert(await nowPlayingWriter.TryQueueAsync(secondNowPlayingPlay.PlayId, "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None),
+    "A newly started track can replace a stale pending now-playing update.");
+var nowPlayingActions = await new SqliteQueueReader(nowPlayingConnectionString).GetRecentActionsAsync(20, CancellationToken.None);
+Assert(nowPlayingActions.Any(action => action.PlayId == firstNowPlayingPlay.PlayId
+        && action.ActionType == ProviderActionType.NowPlaying
+        && action.State == ProviderActionState.Cancelled
+        && action.LastReasonCode == "nowplaying.superseded")
+    && nowPlayingActions.Any(action => action.PlayId == secondNowPlayingPlay.PlayId
+        && action.ActionType == ProviderActionType.NowPlaying
+        && action.State == ProviderActionState.Pending),
+    "A track change cancels the older unsent now-playing action and leaves the newest one pending.");
+File.Delete(nowPlayingDatabasePath);
 File.Delete(databasePath);
 
 return;
