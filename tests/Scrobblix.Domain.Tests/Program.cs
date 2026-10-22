@@ -127,6 +127,51 @@ var observation = new PlayObservation(
     PlayState.Playing,
     MetadataNormalizer.Normalize("Artist"),
     MetadataNormalizer.Normalize("Track"));
+
+var countdownStatus = new PlaybackTrackingStatus(
+    ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 78_000),
+    78_000,
+    false,
+    false,
+    "play-1");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(null, null, false, false, Array.Empty<QueueActionSummary>()) == "Tracking paused",
+    "Home status clearly reports tracking paused.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Listening — eligible in 1:12",
+    "Home status displays remaining eligibility time without claiming provider delivery.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Paused }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Paused — eligible in 1:12",
+    "Home status distinguishes paused playback from active listening.");
+
+var pendingStatusAction = new QueueActionSummary(
+    "action-pending",
+    "play-1",
+    "lastfm",
+    ProviderActionType.Scrobble,
+    ProviderActionState.Pending,
+    0,
+    observation.ObservedAtUtc,
+    ReasonCodes.Playback.WaitingForEligibility,
+    "Artist",
+    "Track");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction }) == "Queued safely — waiting for Last.fm",
+    "Home status shows a pending provider action as queued, not sent.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, countdownStatus, true, true, new[] { pendingStatusAction with { State = ProviderActionState.Accepted } }) == "Sent to Last.fm",
+    "Home status only says sent when the matching scrobble action is provider-accepted.");
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation with { PlaybackState = PlayState.Ended }, countdownStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — played too briefly",
+    "Home status explains a track that ended before eligibility.");
+var adTrackingStatus = countdownStatus with
+{
+    Decision = new ScrobbleEligibilityDecision(false, null, ReasonCodes.Playback.Advertisement),
+};
+Assert(
+    PlaybackStatusPresenter.GetScrobbleStatus(observation, adTrackingStatus, true, true, Array.Empty<QueueActionSummary>()) == "Not eligible — advertisement playback is ignored",
+    "Home status explains why advertisement playback is not eligible.");
+
 var historyRecord = new LocalPlayRecord(
     "play-1",
     observation.CapturedAtUtc,
