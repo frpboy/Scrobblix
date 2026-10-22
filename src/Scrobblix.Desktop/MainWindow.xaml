@@ -188,10 +188,13 @@
                 </StackPanel>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                     <StackPanel Spacing="8">
-                        <TextBlock Text="Windows media controls" Style="{StaticResource SubtitleTextBlockStyle}" />
-                        <TextBlock Text="Active and future supported media sessions are checked while tracking is running." TextWrapping="Wrap" />
+                        <TextBlock Text="Session source health" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock x:Name="SourceHealthSummaryText" Text="No playback observation received this session." TextWrapping="Wrap" />
+                        <TextBlock x:Name="SourceLastObservationText" Text="The most recently observed source and event time will appear here." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock Text="Windows media controls" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                        <TextBlock Text="GSMTC can observe supported desktop players without a browser extension. A recent observation proves an event was received; it does not certify continuous tracking during sleep or disconnection." TextWrapping="Wrap" />
                         <TextBlock Text="Browser Companion" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
-                        <TextBlock x:Name="BrowserCompanionSourceStatusText" Text="Optional. The app is listening for the native host, but packaged browser registration is not installed yet." TextWrapping="Wrap" />
+                        <TextBlock x:Name="BrowserCompanionSourceStatusText" Text="Optional. Waiting for an event from an installed and registered browser extension; manifest files alone do not prove connectivity." TextWrapping="Wrap" />
                     </StackPanel>
                 </Border>
             </StackPanel>
