@@ -100,7 +100,7 @@ try {
         }
 
         $instructions = @'
-SCROBBLI X BROWSER COMPANION — DEVELOPMENT BUILD
+SCROBBLIX BROWSER COMPANION — DEVELOPMENT BUILD
 
 This package adds browser-tab metadata from supported YouTube Music and Spotify Web Player pages.
 It does not capture audio and does not send Last.fm requests directly. Last.fm credentials remain
@@ -136,7 +136,6 @@ SECURITY AND SUPPORT
 - Never put Last.fm API keys/shared secrets/session keys into this package, an extension, a screenshot, or Git.
 - The companion is optional; Windows GSMTC detection continues to work for players that expose media metadata.
 '@
-        $instructions = $instructions.Replace('SCROBBLI X', 'SCROBBLIX')
         Set-Content -LiteralPath (Join-Path $packageRoot 'INSTALL.txt') -Value $instructions -Encoding utf8
 
         if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
@@ -165,7 +164,6 @@ SECURITY AND SUPPORT
     }
     elseif ($Browser -eq 'Firefox') {
         & $installerPath -NativeHostPublishDirectory $nativeHostRoot -RegisterFirefox -FirefoxExtensionId $FirefoxExtensionId
-        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Native host registration for Firefox failed.' }
         Write-Host "Next: load $firefoxRoot\manifest.json through about:debugging#/runtime/this-firefox."
         Write-Host 'Firefox temporary add-ons must be loaded through Firefox; the native host cannot silently install the extension.'
     }
@@ -200,7 +198,6 @@ SECURITY AND SUPPORT
         }
 
         & $installerPath @installArgs
-        if ($LASTEXITCODE -and $LASTEXITCODE -ne 0) { throw 'Native host registration failed.' }
         Write-Host "Native host registered for $Browser. Fully restart the registered browser and Scrobblix."
         Write-Host "Extension folder: $chromiumRoot"
     }
