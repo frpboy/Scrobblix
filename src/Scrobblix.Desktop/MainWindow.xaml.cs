@@ -514,6 +514,60 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void QueueRetryUnknownOutcomeButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueRetryNowRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Retry an uncertain Last.fm scrobble?",
+            Content = "Last.fm may already have accepted this request. Retrying can create a duplicate scrobble. Check your Last.fm profile first; continue only if you accept that risk.",
+            PrimaryButtonText = "Retry anyway",
+            CloseButtonText = "Go back",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueRetryNowRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "Manual retry queued. A duplicate may result if Last.fm accepted the earlier request."
+                : "This action changed before it could be retried.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"Manual retry could not be scheduled ({exception.GetType().Name}).";
+        }
+    }
+
+    private async void QueueConfirmOutcomeAcceptedButton_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is not Button { Tag: string actionId } button || QueueConfirmOutcomeAcceptedRequested is null) return;
+        var confirmation = new ContentDialog
+        {
+            XamlRoot = Content.XamlRoot,
+            Title = "Confirm this scrobble was accepted?",
+            Content = "Use this only after checking your Last.fm profile and confirming the exact track is present. Scrobblix will stop attempting delivery for this action.",
+            PrimaryButtonText = "Confirm accepted",
+            CloseButtonText = "Go back",
+            DefaultButton = ContentDialogButton.Close,
+        };
+        if (await confirmation.ShowAsync() != ContentDialogResult.Primary) return;
+        button.IsEnabled = false;
+        try
+        {
+            var changed = await QueueConfirmOutcomeAcceptedRequested.Invoke(actionId);
+            QueuePageActionFeedbackText.Text = changed
+                ? "The action is marked accepted locally based on your confirmation."
+                : "This action changed before it could be resolved.";
+        }
+        catch (Exception exception) when (exception is InvalidOperationException or IOException or OperationCanceledException)
+        {
+            QueuePageActionFeedbackText.Text = $"The action could not be resolved ({exception.GetType().Name}).";
+        }
+    }
+
     private async void QueueCancelButton_Click(object sender, RoutedEventArgs args)
     {
         if (sender is not Button { Tag: string actionId } button || QueueCancelRequested is null) return;
