@@ -104,7 +104,7 @@ public sealed partial class MainWindow : Window
         CurrentTrackTitle.Text = observation.Title ?? "Unknown title";
         CurrentTrackDetail.Text = BuildTrackDetail(observation);
         CurrentTrackSource.Text = $"Source: {observation.SourceName}";
-        var sourceLabel = observation.Source switch
+        var sourceLabel = observation.SourceName switch
         {
             "gsmtc" => "Windows media controls (GSMTC)",
             "browser" => "Browser Companion",
