@@ -740,6 +740,19 @@ public partial class App : Microsoft.UI.Xaml.Application
                     PipeTransmissionMode.Byte,
                     PipeOptions.Asynchronous | PipeOptions.CurrentUserOnly);
                 await pipe.WaitForConnectionAsync(cancellationToken);
+
+                var expectedNativeHostPath = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Scrobblix", "NativeHost", "Scrobblix.NativeHost.exe");
+                if (!NamedPipePeerVerifier.IsTrustedBrowserNativeHost(
+                    pipe.SafePipeHandle.DangerousGetHandle(),
+                    expectedNativeHostPath,
+                    out var peerRejectionReason))
+                {
+                    logger.Warning("BROWSER_INGRESS", $"Rejected connected pipe peer before reading playback data; reason={peerRejectionReason}.");
+                    continue;
+                }
+
                 var header = new byte[sizeof(int)];
                 if (!await ReadExactlyAsync(pipe, header, cancellationToken))
                 {
