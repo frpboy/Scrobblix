@@ -42,7 +42,7 @@ public sealed class ScrobblixFileLogger
         {
             var entry = Interlocked.Increment(ref _entryNumber);
             var timestamp = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
-            var safeCategory = Sanitize(category, 32);
+            var safeCategory = DiagnosticMessageSanitizer.Sanitize(category, 32);
             var safeMessage = DiagnosticMessageSanitizer.Sanitize(message, 6000);
             var line = $"{entry:D6} | {timestamp} | {level} | {safeCategory} | {safeMessage}{Environment.NewLine}";
             try
