@@ -37,10 +37,12 @@ public partial class App : Microsoft.UI.Xaml.Application
         CancellationTokenSource? trackingCancellation = null;
         var applicationCancellation = new CancellationTokenSource();
         ScrobblixFileLogger? fileLogger = null;
+        TrayIconService? trayIcon = null;
         _window.Closed += (_, _) =>
         {
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
+            trayIcon?.Dispose();
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
@@ -56,6 +58,15 @@ public partial class App : Microsoft.UI.Xaml.Application
             _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
             _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
+            try
+            {
+                trayIcon = new TrayIconService(_window);
+                logger.Info("TRAY", "Notification-area icon installed. Minimizing hides the window; double-click the icon to restore it, or right-click to exit.");
+            }
+            catch (Exception exception)
+            {
+                logger.Warning("TRAY", $"Notification-area icon could not be installed; exception={exception.GetType().Name}; hresult={exception.HResult}. Normal window operation remains available.");
+            }
             var databasePath = Path.Combine(dataDirectory, "scrobblix.db");
             var connectionString = $"Data Source={databasePath}";
             var restoreSafetySnapshot = await ScrobblixBackupService.ApplyStagedRestoreAsync(
