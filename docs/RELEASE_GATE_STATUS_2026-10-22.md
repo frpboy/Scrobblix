@@ -19,7 +19,7 @@ The prior observed workflow failed at `.NET solution build` with CA1001 because 
 ### Exact-head validation
 
 - Fix commit: `94d23991e96f4480b59853db18f79ce9c7bd6036` (`fix: dispose App-owned lifecycle resources`). Follow-up commits add tests/docs and trigger a new full Windows workflow.
-- Exact-head run [39764682027](https://github.com/frpboy/Scrobblix/actions/runs/39764682027) on SHA `b3b4aef20a34a8a4a8c3c39dc3d0fb7dd579b314` failed at build with `CS1729` because `App.xaml.cs` called `TrayIconService` with two arguments while this branch exposes a one-argument constructor. Fixed in commit `b626a16d76e04d5e26ee8bf8880de1407b186823`; matching full Windows CI is pending. Do not treat older run 39762602955 as validation for the lifecycle changes.
+- Exact-head run [39764682027](https://github.com/frpboy/Scrobblix/actions/runs/39764682027) on SHA `b3b4aef20a34a8a4a8c3c39dc3d0fb7dd579b314` failed at build with `CS1729` because `App.xaml.cs` called `TrayIconService` with two arguments while this branch exposes a one-argument constructor. Fixed in commit `b626a16d76e04d5e26ee8bf8880de1407b186823`; the .NET build passed but the lifecycle contract step failed on exact whitespace in a startup-cleanup assertion. Fixed in test commit `5c018e2085f7567df2a8e813bd19f55414e27bb7`; full workflow on the current head is pending. Do not treat older run 39762602955 as validation for the lifecycle changes.
 - Windows duplicate-start/close/relaunch retest: `NOT RUN`.
 - Issue #6 should only be closed after exact-head CI succeeds and the manual lifecycle check is recorded or explicitly accepted as an outstanding Windows-only gate.
 
