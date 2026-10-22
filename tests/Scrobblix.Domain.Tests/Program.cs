@@ -610,9 +610,8 @@ var playBeforeBackup = historyRecord with
     LastObservedUtc = backupTime.AddMinutes(-2),
 };
 await backupPlayStore.UpsertAsync(playBeforeBackup, CancellationToken.None);
-var backupService = new ScrobblixBackupService();
 var backupArchivePath = Path.Combine(backupTestDirectory, "test.scrobblix-backup");
-await backupService.CreateBackupAsync(backupConnectionString, backupArchivePath, CancellationToken.None);
+await ScrobblixBackupService.CreateBackupAsync(backupConnectionString, backupArchivePath, CancellationToken.None);
 Assert(File.Exists(backupArchivePath) && new FileInfo(backupArchivePath).Length > 0,
     "A database-consistent Scrobblix backup archive is created on disk.");
 
@@ -625,8 +624,8 @@ var playAfterBackup = playBeforeBackup with
 await backupPlayStore.UpsertAsync(playAfterBackup, CancellationToken.None);
 Assert((await new SqliteHistoryReader(backupConnectionString).GetRecentAsync(10, CancellationToken.None)).Count == 2,
     "A new local history session is recorded after the backup snapshot.");
-await backupService.StageRestoreAsync(backupArchivePath, backupTestDirectory, CancellationToken.None);
-var safetySnapshotPath = await backupService.ApplyStagedRestoreAsync(
+await ScrobblixBackupService.StageRestoreAsync(backupArchivePath, backupTestDirectory, CancellationToken.None);
+var safetySnapshotPath = await ScrobblixBackupService.ApplyStagedRestoreAsync(
     backupTestDirectory, backupDatabasePath, CancellationToken.None);
 Assert(!string.IsNullOrWhiteSpace(safetySnapshotPath) && File.Exists(safetySnapshotPath),
     "Applying a staged restore first creates a separate safety snapshot of the current database.");
