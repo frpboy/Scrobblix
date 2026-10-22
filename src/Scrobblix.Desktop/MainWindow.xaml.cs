@@ -1,5 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using System.Diagnostics;
@@ -160,7 +161,7 @@ public sealed partial class MainWindow : Window
         NavigationToggleButton.IsEnabled = !_isWidthConstrained;
         CompactNavigationToggleButton.IsEnabled = !_isWidthConstrained;
         AppNavigationView.CompactPaneLength = 64;
-        AppNavigationView.ExpandedPaneLength = 216;
+        AppNavigationView.OpenPaneLength = 216;
         AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
         AppNavigationView.IsPaneOpen = !compact;
         NavigationPreferenceStatusText.Text = _isWidthConstrained
