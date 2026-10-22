@@ -40,8 +40,8 @@
         <ScrollViewer x:Name="HomeView" Grid.Column="1">
             <StackPanel Padding="32" Spacing="24" MaxWidth="1200" HorizontalAlignment="Left">
                 <StackPanel Spacing="4">
-                    <TextBlock Text="Home" Style="{StaticResource TitleTextBlockStyle}" />
-                    <TextBlock Text="See what Scrobblix can confirm about playback and delivery." Style="{StaticResource BodyTextBlockStyle}" />
+                    <TextBlock Text="Live listening" Style="{StaticResource TitleTextBlockStyle}" />
+                    <TextBlock Text="Playback, confirmed listening, eligibility, and Last.fm delivery are shown separately." Style="{StaticResource BodyTextBlockStyle}" />
                 </StackPanel>
 
                 <InfoBar x:Name="StartupInfo" IsOpen="True" IsClosable="False" Severity="Informational"

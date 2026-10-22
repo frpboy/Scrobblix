@@ -9,6 +9,11 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 - Initial product, engineering, UI/UX, security, testing, operations, and AI-agent documentation baseline.
 - Selected .NET 10, WinUI 3, GSMTC, TypeScript WebExtensions, Native Messaging, and SQLite architecture.
 
+### Design
+- Created the private Stitch **Live listening dashboard** handoff screen in the Scrobblix project (`projects/7036359710720803750`, screen `39ba08667751486282f9c8a87b038bd4`) using the established Fluent Listening Dashboard design system.
+- Recorded the Stitch project, design-system, screen, HTML-export, and screenshot-export identifiers in `docs/STITCH_UI_HANDOFF_2026-10-22.md` so the visual work remains reproducible without treating generated sample content as production data.
+- Updated the native Home heading and explanatory copy to make playback observation, confirmed listening, eligibility, and Last.fm delivery visibly distinct; no tracking, queue, or provider behavior changed.
+
 ### Changed
 
 - Reframed Scrobblix from a basic Last.fm utility into a local-first Windows listening companion with transparent diagnostics.
