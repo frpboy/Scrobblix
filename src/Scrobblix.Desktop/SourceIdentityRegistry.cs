@@ -1,4 +1,4 @@
-using Scrobblix.Application.Ingestion;
+using Scrobblix.Domain.History;
 using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Desktop;
