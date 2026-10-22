@@ -88,7 +88,7 @@ reporting an issue; remove credentials from screenshots.
 The browser companion is optional; desktop playback continues through Windows
 media controls without it. The current extension targets Chromium (Chrome and
 Edge) and the supported sites declared in browser-extension/manifest.json.
-Firefox packaging is not part of this current development build.
+Firefox development support is now present as `browser-extension/manifest.firefox.json`, with a fixed development add-on ID and optional native-host registration. To load it, copy the companion folder, use the Firefox manifest as the copied folder's `manifest.json`, load it temporarily from `about:debugging#/runtime/this-firefox`, and run the native-host installer with `-RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in"`. CI verifies the manifest/build/host hooks, but real Firefox installation and delivery still require a manual Windows test; this is not a signed Firefox release package.
 
 From the repository root, build the extension and publish the native host:
 

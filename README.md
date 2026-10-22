@@ -88,21 +88,29 @@ registration is optional and is not required for desktop GSMTC detection.
 
 ### Current implementation status
 
-The current feature branch contains SQLite-backed local history, canonical
-playback tracking and source arbitration, an idempotent durable scrobble queue,
-Last.fm API signing/authentication flows, MusicBrainz/Cover Art Archive/Last.fm
-metadata and artwork fallback, an in-app Last.fm credential form, local numbered
-diagnostic logs, and initial Chromium Native Messaging registration.
+**Implemented in the current development baseline**
 
-This is still a development build, **not a claim that every normative v1
-requirement is finished**. Current release gaps include live Last.fm end-to-end
-verification, retry/backoff and provider batch hardening, same-user IPC peer
-authentication, Firefox support, full queue action controls, Statistics/Loved
-flows, export/backup, tray and notifications, a signed installer/updater,
-and accessibility qualification. The latest clean-branch CI run has passed, but those remaining release gates are still open.
-See `Scrobblix-Docs/00_Project/SCOPE.md` and
-`Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` before treating a build as
-release-ready.
+- SQLite-backed listening history, Today totals, search/filter history and CSV export.
+- Canonical playback sessions that tolerate late metadata, GSMTC/browser source arbitration, and an idempotent durable queue with leases, bounded retry/backoff and recovery.
+- Last.fm API signing, desktop authorization, secure Credential Locker storage, scrobbling, Now Playing, Love and Unlove action processing.
+- MusicBrainz/Cover Art Archive/Last.fm metadata and artwork fallback with local cache and a bundled missing-art placeholder.
+- Queue management, Statistics, Loved, Sources, Diagnostics, local numbered UTC logs and user-controlled Last.fm setup.
+- Consistent SQLite backup, checksum/schema/integrity validation, staged restore and an automatic pre-restore safety snapshot. API keys, session keys and cached artwork are excluded from backup archives.
+- Notification-area tray prototype: minimize hides the window while tracking continues; double-click restores the window and the context menu offers Open and Exit.
+- Opt-in Windows app notifications. Notifications are off by default, provider acceptance is required before a success notice is shown, and artist/title details are hidden unless separately enabled.
+- Chromium companion (Chrome/Edge) and a separate Firefox Manifest V3 development manifest, host allow-list and install/uninstall path.
+- A clean-branch Windows CI pipeline for .NET, assertion tests, browser type-check/build, Chromium/Firefox manifest checks, desktop/native-host publishing and a downloadable test bundle.
+
+The latest green integration CI run for the code baseline is [run 39717582856](https://github.com/frpboy/Scrobblix/actions/runs/39717582856), at commit `f6dffd5cf95e6266c4b7aa58cdf4576077dbd6ab`. Documentation and status reconciliation are being committed after that run; check the latest [PR #4](https://github.com/frpboy/Scrobblix/pull/4) check before using its newest artifact.
+
+This is a **development build, not a signed production release**. Remaining release gates include:
+- Real on-device GUI checks for tray behavior, Explorer/taskbar restart, notification activation and privacy, and clean shutdown.
+- Live Last.fm authorization/scrobble validation with the user's account, plus real Chrome/Edge and Firefox extension installation/bridge tests.
+- Signed MSIX/App Installer and updater, install/upgrade/rollback/uninstall qualification, code-signing provenance and dependency/license/SBOM review.
+- Further same-user IPC threat review; the current pipe peer check is an extra gate, not cryptographic proof of an executable's identity or a replacement for signed binaries.
+- Accessibility, performance/long-run soak, backup migration across supported schema versions, and formal release/security review.
+
+See `Scrobblix-Docs/00_Project/SCOPE.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md`, and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
 
 ## Documentation map
 
@@ -115,6 +123,7 @@ release-ready.
 - [`03_Requirements`](Scrobblix-Docs/03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
 - [`04_UserExperience`](Scrobblix-Docs/04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
 - [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPLEMENTATION_HANDOFF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
+- [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): latest branch state, validation links, and exact continue/build/run commands.
 - [`05_Architecture`](Scrobblix-Docs/05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
 - [`06_Data`](Scrobblix-Docs/06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
 - [`07_Interfaces`](Scrobblix-Docs/07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.

@@ -1,46 +1,27 @@
-# Native Host
+# Native Messaging Host
 
-> **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (frpboy)  
-> **Status:** Development implementation; release review still required
+> **Status:** Chromium + Firefox development implementation; release security review and browser-side qualification remain open
 
-## Executable role
+## Executable role and framing
 
-Scrobblix.NativeHost.exe is a minimal Chromium Native Messaging broker. It
-reads length-prefixed JSON on standard input, bounds each frame to 256 KiB,
-validates the message type and protocol version, forwards playback observations
-to the desktop app's current-user named pipe, and returns a bounded acknowledgement
-or error frame. Standard output is reserved for native messaging only.
+`Scrobblix.NativeHost.exe` reads length-prefixed JSON from stdin, caps frames at 256 KiB, validates the protocol version/message envelope and forwards only supported playback observation messages to the desktop app's current-user named pipe. Native-messaging stdout is reserved for bounded protocol responses. The host does not contain Last.fm credentials.
 
-## Trust rules
+## Browser identity
 
-- The host does not contain Last.fm credentials.
-- Extension IDs must be 32 lowercase Chromium ID characters and must appear in
-  the current user's AllowedChromeExtensionIds allow-list.
-- The companion installer writes the same ID to the browser native-host manifest
-  allowed_origins and to HKCU\Software\Scrobblix\NativeMessaging.
-- An empty allow-list rejects forwarding. The command-line origin alone is not
-  treated as authentication.
-- Frames have a strict maximum size. Malformed envelopes and unsupported message
-  types receive errors and are not forwarded.
-- The host never executes commands supplied by browser messages, accepts file
-  paths for arbitrary local reads, stores provider credentials, or opens a
-  general localhost service.
-- EOF after the last complete frame exits normally. Partial frames are rejected.
+- **Chrome/Edge:** the native manifest uses `allowed_origins` with the exact Chromium extension origin. The same 32-character extension ID must be present in `AllowedChromeExtensionIds` under `HKCU\Software\Scrobblix\NativeMessaging`.
+- **Firefox:** `browser-extension/manifest.firefox.json` is a separate Manifest V3 development manifest, with Gecko add-on ID `scrobblix@frpboy.in`. Firefox manifests use `allowed_extensions`, and Windows registration is under `HKCU\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix`. The ID must match the manifest, installer allow-list and running extension. A signed/distributed add-on must use the stable ID belonging to that signed package.
 
-## Current limitations
+Run `scripts/install-native-host.ps1` after publishing the host. The script can register Chrome/Edge using `-ExtensionId` and can register Firefox-only using `-RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in"`. Use `scripts/uninstall-native-host.ps1` to remove registration. Restart a registered browser after changes.
 
-- The installed development host supports Chrome and Edge origins only.
-- The desktop side restricts the named pipe to the current Windows user. That
-  does not by itself authenticate a process running as the same user; a hardened
-  release should add an application instance challenge and stronger peer identity
-  validation before claiming production-grade IPC authentication.
-- Firefox registration, signed host packaging, installer rollback, browser
-  auto-start, and formal security review remain release work.
+## Desktop pipe peer check
 
-## Development installation
+The desktop pipe is current-user-only and now rejects a connected peer unless Windows reports the client image as the installed `%LOCALAPPDATA%\Scrobblix\NativeHost\Scrobblix.NativeHost.exe`, and the native host's parent image is named `chrome.exe`, `msedge.exe` or `firefox.exe`. The check runs before any incoming message bytes are consumed and the rejection reason is logged.
 
-Use scripts/install-native-host.ps1 and scripts/uninstall-native-host.ps1.
-The install script requires a built/published host folder and the exact extension
-ID displayed by Chrome or Edge. Never guess or hard-code an ID from a different
-extension installation.
+This is additional defense-in-depth, **not cryptographic process identity**. It does not replace a signed native host, controlled installation directory ACLs, a stronger process/package publisher check, race/handle review, or a formal threat assessment. A same-user attacker may tamper with per-user files/registration; do not claim production-grade local IPC authentication on the basis of the path/parent-name check alone.
+
+## Remaining validation
+
+- Install and test the unpacked companion in Chrome, Edge and Firefox on Windows with the actual registered extension IDs.
+- Verify malformed/oversized frames, allow-list failure, host unavailable, desktop unavailable, browser restart, Firefox temporary add-on reload and uninstall cleanup.
+- Firefox source/manifest/type/build validation is included in CI, but a live Firefox browser install has not been claimed as completed.
+- Signed distributable host packaging, installer rollback, support for host upgrades and formal security review remain release gates.
