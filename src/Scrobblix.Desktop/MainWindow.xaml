@@ -43,7 +43,7 @@
                     <TextBlock Text="Playback, confirmed listening, eligibility, and provider delivery are separate states." Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" />
                 </StackPanel>
 
-                <InfoBar x:Name="StartupInfo" IsOpen="True" IsClosable="False" Severity="Informational"
+                <InfoBar x:Name="StartupInfo" IsOpen="False" IsClosable="True" Severity="Informational"
                          Title="Preparing playback"
                          Message="Preparing local listening history." />
 
