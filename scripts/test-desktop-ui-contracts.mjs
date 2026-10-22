@@ -102,7 +102,7 @@ for (const resource of ["Semaphore? _singleInstanceSemaphore", "EventWaitHandle?
   assert.ok(app.includes(resource), `App-owned disposable field missing: ${resource}`);
 }
 assert.ok(app.includes("if (!TryAcquireSingleInstance())") && app.includes("Exit();"), "Duplicate-instance startup must signal the existing instance and exit.");
-assert.ok(app.includes("catch\n        {\n            Dispose();\n            throw;\n        }"), "Window construction failure must clean up owned lifecycle resources.");
+assert.ok(/catch\s*\{\s*Dispose\(\);\s*throw;\s*\}/.test(app), "Window construction failure must clean up owned lifecycle resources.");
 assert.ok(app.includes("StopSingleInstanceActivationListener();") && app.includes("public void Dispose()"), "Normal close and Dispose must share deterministic cleanup.");
 for (const cleanup of ["_singleInstanceActivationEvent?.Dispose();", "_singleInstanceListenerCancellation?.Dispose();", "_singleInstanceSemaphore.Dispose();", "_trayIcon?.Dispose();"]) {
   assert.ok(app.includes(cleanup), `Missing deterministic cleanup: ${cleanup}`);
