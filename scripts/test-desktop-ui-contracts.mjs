@@ -96,4 +96,16 @@ assert.ok(xaml.includes('Border Padding="20" CornerRadius="8"') && !xaml.include
 
 assert.ok(!xaml.includes("<Storyboard") && !xaml.includes("AcrylicBrush"), "The utility rail must not introduce decorative motion or unsupported new surface treatments.");
 
-console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");
+// P0 lifecycle ownership regression: App owns disposable synchronization handles and a tray icon.
+assert.ok(/partial class App : Microsoft\.UI\.Xaml\.Application, IDisposable/.test(app), "App must implement IDisposable for owned disposable resources.");
+for (const resource of ["Semaphore? _singleInstanceSemaphore", "EventWaitHandle? _singleInstanceActivationEvent", "CancellationTokenSource? _singleInstanceListenerCancellation", "TrayIconService? _trayIcon"]) {
+  assert.ok(app.includes(resource), \`App-owned disposable field missing: \${resource}\`);
+}
+assert.ok(app.includes("if (!TryAcquireSingleInstance())") && app.includes("Exit();"), "Duplicate-instance startup must signal the existing instance and exit.");
+assert.ok(app.includes("catch\n        {\n            Dispose();\n            throw;\n        }"), "Window construction failure must clean up owned lifecycle resources.");
+assert.ok(app.includes("StopSingleInstanceActivationListener();") && app.includes("public void Dispose()"), "Normal close and Dispose must share deterministic cleanup.");
+for (const cleanup of ["_singleInstanceActivationEvent?.Dispose();", "_singleInstanceListenerCancellation?.Dispose();", "_singleInstanceSemaphore.Dispose();", "_trayIcon?.Dispose();"]) {
+  assert.ok(app.includes(cleanup), \`Missing deterministic cleanup: \${cleanup}\`);
+}
+
+console.log("Desktop UI and App lifecycle contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");
