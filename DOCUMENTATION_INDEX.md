@@ -2,11 +2,19 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Generated:** 2026-08-01
+> **Updated:** 2026-10-22
 
 This file is the repository-wide catalogue. Section README files provide guided reading paths; this index provides a file-by-file inventory.
 
+## Current implementation hand-off documents
+
+- [Master Implementation Plan](docs/MASTER_IMPLEMENTATION_PLAN.md) — capability matrix, recommendations, acceptance cases and release gates.
+- [Implementation Resume Guide](docs/IMPLEMENTATION_RESUME.md) — branch, baseline and continuation commands.
+- [Local Development and Troubleshooting](docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md) — build locks, validation, credential safety and browser checks.
+
 ## Repository statistics
+
+> Counts below are the last generated snapshot from 2026-08-01 and have not yet been recalculated with the current source tree.
 
 - Total files: **233**
 - Markdown documents: **226**
