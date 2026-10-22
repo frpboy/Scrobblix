@@ -57,6 +57,7 @@ dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj 
 npm --prefix browser-extension ci
 npm --prefix browser-extension run check
 npm --prefix browser-extension run build
+node scripts/test-browser-security.mjs
 node scripts/validate-browser-manifests.mjs
 dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
 ```
@@ -77,13 +78,12 @@ dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj 
 npm --prefix browser-extension ci
 npm --prefix browser-extension run check
 npm --prefix browser-extension run build
+node scripts/test-browser-security.mjs
 node scripts/validate-browser-manifests.mjs
 ```
 
 If WinUI reports `0x80040154 Class not registered`, install/register the
-matching Windows App Runtime for this build and try again. The current local
-browser-native-host installer requires the built extension ID; browser
-registration is optional and is not required for desktop GSMTC detection.
+matching Windows App Runtime for this build and try again. The local browser-native-host installer requires the actual ID shown by each browser; Chrome and Edge IDs may differ, so pass both using `-ExtensionId @("CHROME_ID", "EDGE_ID")`. Browser registration is optional and is not required for desktop GSMTC detection.
 
 ### Current implementation status
 

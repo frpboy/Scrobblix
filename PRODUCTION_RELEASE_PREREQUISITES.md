@@ -53,9 +53,11 @@ The intended topology is:
 Browser extension -> Native Messaging host -> authenticated per-user named pipe -> desktop playback ingress
 ```
 
-Before release, prove on Windows that native registrations are per-user and removable; only configured extension/add-on identities are accepted; the host and desktop reject malformed, oversized, forged, replayed or unexpected protocol messages; stdout contains protocol frames only; named-pipe ACLs and process-identity assumptions are reviewed; and browser restart, host restart, extension reload and reconnect/snapshot behavior recover without duplicate canonical plays.
+The current code and CI include automated checks for exact supported page origins, bounded payload fields, HTTPS-only artwork URLs, fail-closed extension allow-lists, rejection of an untrusted sender before message dispatch (including ping), and registration for multiple Chrome/Edge IDs. The Windows installer writes HKCU registrations under the per-user host directory; uninstall attempts to remove those registrations, trust entries and dedicated host files.
 
-The peer check is defense-in-depth, not proof of signed executable identity. Inspect installation paths and registry permissions on a clean Windows account.
+Before release, still prove on Windows that browser registrations and filesystem permissions are safe; the actual installed Chrome, Edge and Firefox IDs work; real event delivery reaches desktop ingress; forged/malformed/oversized input is rejected; stdout contains protocol frames only; restart/reconnect is correct; and uninstall is complete. Automated checks are evidence for source/build behavior, not a replacement for real-browser qualification.
+
+The current-user named pipe and peer-image checks are defense-in-depth, not cryptographic process identity. Inspect installation paths, registry permissions and same-user process assumptions on a clean Windows account; signed binaries and formal threat review remain release gates.
 
 ## Required real-world qualification
 

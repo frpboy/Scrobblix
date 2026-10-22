@@ -81,12 +81,12 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 
 | ID | Scenario and steps | Expected result | Result | Evidence / defect |
 |---|---|---|---|---|
-| BR-01 | Load extension and register exact ID; restart extension/browser/desktop app. | Native host connects; no manual assumptions about IDs; source state reflects successful events, not manifest presence. | NOT RUN | |
-| BR-02 | Play/pause/seek/skip in a supported player and compare page events to desktop history. | Metadata/state reaches Scrobblix with reasonable latency; one canonical play. | NOT RUN | |
-| BR-03 | Reload tab/extension, close/reopen browser, suspend tab, revoke permission. | Reconnect/snapshot recovery works or Source page explains the offline/unavailable state. | NOT RUN | |
-| BR-04 | Use a forged/wrong extension identity and malformed/oversized message. | Native host/desktop reject it; app remains responsive; logs redact untrusted payloads. | NOT RUN | |
-| BR-05 | Uninstall host registration and remove extension/add-on. | Per-user registration is removed; no stale host process continues accepting messages. | NOT RUN | |
-| BR-06 | Use Spotify desktop with browser extension not installed. | GSMTC still works; UI explains the browser companion is optional. | NOT RUN | |
+| BR-01 | Load the unpacked extension in Chrome and Edge separately; record both actual IDs; register using `-ExtensionId @("CHROME_ID","EDGE_ID")`; restart both browsers and Scrobblix. | Each browser's exact origin is allow-listed; neither browser is assumed to share the other's ID; source state reflects actual events, not manifest presence. | NOT RUN | |
+| BR-02 | Play/pause/seek/skip/end in a supported player; compare page events to desktop History. | Valid metadata and playback state reach Scrobblix with reasonable latency; one canonical play. | NOT RUN | |
+| BR-03 | Reload tab/extension, close/reopen browser, suspend tab, revoke permission, restart native host and restart Scrobblix. | Reconnect/re-observation works or Sources explains the offline/unavailable state; no duplicate canonical play. | NOT RUN | |
+| BR-04 | Use an unsupported origin, forged/wrong extension identity, forged ping, malformed/oversized frame, invalid field types, oversized strings and non-HTTPS artwork. | Service worker/native host reject invalid input before forwarding/responding; app remains responsive and raw untrusted payloads are not logged. | NOT RUN | |
+| BR-05 | Run the uninstall script after closing browsers, then inspect HKCU registration, allow-list values and `%LOCALAPPDATA%\Scrobblix\NativeHost`. | Browser registration and trust IDs are removed; the dedicated host directory is deleted when not locked; history and logs remain untouched. | NOT RUN | |
+| BR-06 | Use Spotify desktop with the browser extension not installed. | GSMTC still works; UI explains the Browser Companion is optional. | NOT RUN | |
 
 ## F. Windows UX, notifications and privacy
 
