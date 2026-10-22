@@ -35,7 +35,7 @@ CI builds and tests the code paths included in that workflow. It does not certif
 - [ ] Chrome, Edge and temporary Firefox tested separately with actual IDs and event-delivery proof.
 - [ ] Browser reload/restart, native host restart, disconnected port, malicious/forged IDs, malformed/oversized frames and uninstall path verified.
 - [ ] Native host install is per-user; registry and manifest permissions, executable paths and extension allow-lists reviewed.
-- [ ] Source health shows which playback source is observed/trusted and exposes recent contact/errors without claiming an installed browser that is not installed.
+- [ ] On Windows, verify the Sources page reports only actual observation events and their source/time; it must not claim that a manifest or waiting listener proves browser connectivity. Richer reconnect/error diagnostics remain future work.
 - [ ] Support ZIP has a preview and excludes secrets/session keys/history database/artwork; seeded canary values cannot appear in any archive file.
 - [ ] Explorer restart, tray restore, notification activation/privacy/lock-screen and clean app shutdown tested on Windows.
 - [ ] Keyboard-only, Narrator, focus, contrast and scaling checks passed.
