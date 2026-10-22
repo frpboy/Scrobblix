@@ -439,6 +439,76 @@ var fallBounds = GetLocalDayUtcBounds(fallBackNow, easternTimeZone);
 Assert((fallBounds.EndUtc - fallBounds.StartUtc) == TimeSpan.FromHours(25),
     "Today summary bounds cover a 25-hour local day across fall-back.");
 
+// Startup must reject a database with a future migration marker before applying this build's migrations.
+var futureMigrationDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-future-migration-{Guid.NewGuid():N}.db");
+var futureMigrationConnectionString = $"Data Source={futureMigrationDatabasePath};Pooling=False";
+await using (var futureConnection = new SqliteConnection(futureMigrationConnectionString))
+{
+    await futureConnection.OpenAsync(CancellationToken.None);
+    await using var futureSetup = futureConnection.CreateCommand();
+    futureSetup.CommandText = """
+        CREATE TABLE schema_migrations (
+            migration_id TEXT PRIMARY KEY,
+            checksum TEXT NOT NULL,
+            applied_utc TEXT NOT NULL
+        );
+        INSERT INTO schema_migrations (migration_id, checksum, applied_utc)
+        VALUES ('0006_future_schema', 'future-checksum', '2026-10-22T00:00:00.0000000+00:00');
+        """;
+    await futureSetup.ExecuteNonQueryAsync(CancellationToken.None);
+}
+var futureMigrationRejected = false;
+try
+{
+    await new SqliteDatabase(futureMigrationConnectionString).InitializeAsync(CancellationToken.None);
+}
+catch (InvalidOperationException exception) when (exception.Message.Contains("not recognized", StringComparison.Ordinal))
+{
+    futureMigrationRejected = true;
+}
+Assert(futureMigrationRejected, "Startup rejects a database with an unknown future migration instead of running an older binary against it.");
+await using (var verifyFutureConnection = new SqliteConnection(futureMigrationConnectionString))
+{
+    await verifyFutureConnection.OpenAsync(CancellationToken.None);
+    await using var verifyFutureCommand = verifyFutureConnection.CreateCommand();
+    verifyFutureCommand.CommandText = "SELECT COUNT(*) FROM schema_migrations WHERE migration_id = '0001_initial';";
+    Assert(Convert.ToInt32(await verifyFutureCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 0,
+        "The future-schema guard runs before any migrations are applied.");
+}
+File.Delete(futureMigrationDatabasePath);
+
+// Startup must also reject a known migration list with a missing middle step.
+var gapMigrationDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-gap-migration-{Guid.NewGuid():N}.db");
+var gapMigrationConnectionString = $"Data Source={gapMigrationDatabasePath};Pooling=False";
+await using (var gapConnection = new SqliteConnection(gapMigrationConnectionString))
+{
+    await gapConnection.OpenAsync(CancellationToken.None);
+    await using var gapSetup = gapConnection.CreateCommand();
+    gapSetup.CommandText = """
+        CREATE TABLE schema_migrations (
+            migration_id TEXT PRIMARY KEY,
+            checksum TEXT NOT NULL,
+            applied_utc TEXT NOT NULL
+        );
+        INSERT INTO schema_migrations (migration_id, checksum, applied_utc)
+        VALUES
+            ('0001_initial', 'checksum-one', '2026-10-22T00:00:00.0000000+00:00'),
+            ('0003_local_history_artwork', 'checksum-three', '2026-10-22T00:00:00.0000000+00:00');
+        """;
+    await gapSetup.ExecuteNonQueryAsync(CancellationToken.None);
+}
+var gapMigrationRejected = false;
+try
+{
+    await new SqliteDatabase(gapMigrationConnectionString).InitializeAsync(CancellationToken.None);
+}
+catch (InvalidOperationException exception) when (exception.Message.Contains("valid prefix", StringComparison.Ordinal))
+{
+    gapMigrationRejected = true;
+}
+Assert(gapMigrationRejected, "Startup rejects gaps in the recorded migration sequence instead of applying migrations over an inconsistent schema.");
+File.Delete(gapMigrationDatabasePath);
+
 var databasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-{Guid.NewGuid():N}.db");
 var connectionString = $"Data Source={databasePath};Pooling=False";
 var database = new SqliteDatabase(connectionString);
