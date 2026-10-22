@@ -893,6 +893,53 @@ Assert(nowPlayingOnlyToday.AcceptedScrobbleCount == 0,
     "Accepted now-playing updates are not reported as accepted Last.fm scrobbles.");
 File.Delete(nowPlayingDatabasePath);
 
+// Restore replacement must not replace the main database when its WAL sidecar cannot be detached.
+var restoreSwapTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-restore-swap-{Guid.NewGuid():N}");
+Directory.CreateDirectory(restoreSwapTestDirectory);
+var restoreSwapActivePath = Path.Combine(restoreSwapTestDirectory, "active.db");
+var restoreSwapReplacementPath = Path.Combine(restoreSwapTestDirectory, "replacement.db");
+File.WriteAllText(restoreSwapActivePath, "original-main-db");
+File.WriteAllText(restoreSwapActivePath + "-wal", "original-wal");
+File.WriteAllText(restoreSwapActivePath + "-shm", "original-shm");
+File.WriteAllText(restoreSwapReplacementPath, "replacement-main-db");
+var restoreSwapRejectedLockedWal = false;
+using (var lockedWal = new FileStream(
+    restoreSwapActivePath + "-wal",
+    FileMode.Open,
+    FileAccess.ReadWrite,
+    FileShare.None))
+{
+    try
+    {
+        ScrobblixBackupService.ReplaceActiveDatabaseFilesForRestore(restoreSwapActivePath, restoreSwapReplacementPath);
+    }
+    catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+    {
+        restoreSwapRejectedLockedWal = true;
+    }
+
+    Assert(restoreSwapRejectedLockedWal,
+        "Restore replacement fails closed when the WAL sidecar is locked instead of silently continuing.");
+    Assert(File.ReadAllText(restoreSwapActivePath) == "original-main-db"
+        && File.Exists(restoreSwapActivePath + "-wal")
+        && File.Exists(restoreSwapActivePath + "-shm"),
+        "A locked-WAL failure leaves the active database and sidecars at their original paths.");
+    Assert(File.ReadAllText(restoreSwapReplacementPath) == "replacement-main-db",
+        "A failed restore leaves the fully prepared replacement untouched for safe retry.");
+}
+
+Assert(File.ReadAllText(restoreSwapActivePath + "-wal") == "original-wal"
+    && File.ReadAllText(restoreSwapActivePath + "-shm") == "original-shm",
+    "After releasing the lock, the restored WAL/SHM contents are unchanged.");
+
+ScrobblixBackupService.ReplaceActiveDatabaseFilesForRestore(restoreSwapActivePath, restoreSwapReplacementPath);
+Assert(File.ReadAllText(restoreSwapActivePath) == "replacement-main-db"
+    && !File.Exists(restoreSwapActivePath + "-wal")
+    && !File.Exists(restoreSwapActivePath + "-shm")
+    && !File.Exists(restoreSwapReplacementPath),
+    "A successful restore activates the replacement and leaves no old WAL/SHM at SQLite's active paths.");
+Directory.Delete(restoreSwapTestDirectory, recursive: true);
+
 var backupTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-backup-{Guid.NewGuid():N}");
 Directory.CreateDirectory(backupTestDirectory);
 var backupDatabasePath = Path.Combine(backupTestDirectory, "scrobblix.db");
