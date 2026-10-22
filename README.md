@@ -2,8 +2,8 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Active development; v1 release gates remain open  
-> **Last updated:** 2026-10-21
+> **Status:** Private-beta readiness; core surfaces implemented, real-world qualification pending  
+> **Last updated:** 2026-10-22
 
 
 Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
@@ -49,27 +49,26 @@ Open PowerShell:
 ```powershell
 git clone https://github.com/frpboy/Scrobblix.git
 Set-Location Scrobblix
-git fetch origin
-git switch --track origin/feat/scrobblix-v1-complete
-.\scripts\update-and-run.ps1
+git switch main
+git pull --ff-only origin main
+dotnet restore Scrobblix.slnx
+dotnet build Scrobblix.slnx --configuration Release
+dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release
+npm --prefix browser-extension ci
+npm --prefix browser-extension run check
+npm --prefix browser-extension run build
+node scripts/validate-browser-manifests.mjs
+dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
 ```
 
 ### Existing clone
 
-Make sure any local changes are committed or stashed first. The script refuses
-to update a dirty working tree.
+Make sure any local changes are committed or stashed first. Use the same mainline
+commands above for a reproducible build. Close Scrobblix before rebuilding to avoid
+MSBuild assembly-lock errors. The `update-and-run.ps1` helper belongs to the
+continuation workflow and should only be used when intentionally working on that branch.
 
-```powershell
-git fetch origin
-git switch feat/scrobblix-v1-complete
-git pull --ff-only origin feat/scrobblix-v1-complete
-.\scripts\update-and-run.ps1
-```
-
-The script restores and builds the solution, runs the assertion suite, checks
-and builds the browser companion, and then launches the WinUI desktop app.
-When the app exits, PowerShell returns to the terminal. To build/run the desktop
-app manually after fetching the branch:
+For manual validation without launching, omit the final `dotnet run` command.
 
 ```powershell
 dotnet restore Scrobblix.slnx
@@ -101,16 +100,17 @@ registration is optional and is not required for desktop GSMTC detection.
 - Chromium companion (Chrome/Edge) and a separate Firefox Manifest V3 development manifest, host allow-list and install/uninstall path.
 - A clean-branch Windows CI pipeline for .NET, assertion tests, browser type-check/build, Chromium/Firefox manifest checks, desktop/native-host publishing and a downloadable test bundle.
 
-The latest green integration CI run for the code baseline is [run 39717582856](https://github.com/frpboy/Scrobblix/actions/runs/39717582856), at commit `f6dffd5cf95e6266c4b7aa58cdf4576077dbd6ab`. Documentation and status reconciliation are being committed after that run; check the latest [PR #4](https://github.com/frpboy/Scrobblix/pull/4) check before using its newest artifact.
+The exact current-main commit and its matching workflow must be checked before treating a build as validated. See [main](https://github.com/frpboy/Scrobblix/tree/main) and [GitHub Actions](https://github.com/frpboy/Scrobblix/actions); a green run on an earlier SHA or an unmerged branch does not validate current main.
 
 This is a **development build, not a signed production release**. Remaining release gates include:
+- Multi-day Spotify manual test matrix and an 8–24 hour reliability soak, with duplicates/lost plays explicitly reconciled against a dedicated Last.fm test profile.
 - Real on-device GUI checks for tray behavior, Explorer/taskbar restart, notification activation and privacy, and clean shutdown.
 - Live Last.fm authorization/scrobble validation with the user's account, plus real Chrome/Edge and Firefox extension installation/bridge tests.
 - Signed MSIX/App Installer and updater, install/upgrade/rollback/uninstall qualification, code-signing provenance and dependency/license/SBOM review.
 - Further same-user IPC threat review; the current pipe peer check is an extra gate, not cryptographic proof of an executable's identity or a replacement for signed binaries.
-- Accessibility, performance/long-run soak, backup migration across supported schema versions, and formal release/security review.
+- Support-bundle export with canary-secret redaction tests; accessibility, performance/long-run soak, backup migration across supported schema versions, and formal release/security review.
 
-See `Scrobblix-Docs/00_Project/SCOPE.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md`, and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
+See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
 
 ## Documentation map
 
@@ -123,7 +123,9 @@ See `Scrobblix-Docs/00_Project/SCOPE.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHE
 - [`03_Requirements`](Scrobblix-Docs/03_Requirements/README.md): functional and non-functional requirements, use cases, user stories, and traceability.
 - [`04_UserExperience`](Scrobblix-Docs/04_UserExperience/README.md): UI/UX vision, navigation, design system, screen specifications, accessibility, and content rules.
 - [Stitch implementation handoff](Scrobblix-Docs/04_UserExperience/STITCH_IMPLEMENTATION_HANDOFF.md): reusable prompt, screen inventory, and design-to-XAML checklist for the external Stitch project.
-- [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): latest branch state, validation links, and exact continue/build/run commands.
+- [Implementation resume guide](docs/IMPLEMENTATION_RESUME.md): current-main status, validation discipline and continue/build/run commands.
+- [Private beta readiness](docs/PRIVATE_BETA_READINESS.md): ordered acceptance tracks and beta entry criteria.
+- [Real-world manual test matrix](Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md): Spotify, Last.fm, recovery, soak, browser, Windows UX and beta decision record.
 - [`05_Architecture`](Scrobblix-Docs/05_Architecture/README.md): system architecture, components, event flows, state machines, concurrency, and ADRs.
 - [`06_Data`](Scrobblix-Docs/06_Data/README.md): database schema, retention, migrations, backup, and analytics data model.
 - [`07_Interfaces`](Scrobblix-Docs/07_Interfaces/README.md): Last.fm integration, internal contracts, Native Messaging, schemas, and error model.
