@@ -89,7 +89,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
             try
             {
-                _trayIcon = new TrayIconService(_window, message => logger.Warning("TRAY", message));
+                _trayIcon = new TrayIconService(_window);
                 logger.Info("TRAY", "Notification-area icon installed. Minimizing hides the window; double-click the icon to restore it, or right-click to exit.");
             }
             catch (Exception exception)

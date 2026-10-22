@@ -418,10 +418,10 @@ public sealed class SqliteLovedTrackStore(string connectionString)
         SqliteTransaction transaction,
         string trackKey,
         ProviderActionType actionType,
-        IReadOnlyList<ProviderActionState> states,
+        ProviderActionState[] states,
         CancellationToken cancellationToken)
     {
-        if (states.Count == 0)
+        if (states.Length == 0)
         {
             return null;
         }
@@ -439,7 +439,7 @@ public sealed class SqliteLovedTrackStore(string connectionString)
             """;
         command.Parameters.AddWithValue("$trackKey", trackKey);
         command.Parameters.AddWithValue("$actionType", (int)actionType);
-        for (var index = 0; index < states.Count; index++)
+        for (var index = 0; index < states.Length; index++)
         {
             command.Parameters.AddWithValue(stateParameters[index], (int)states[index]);
         }
