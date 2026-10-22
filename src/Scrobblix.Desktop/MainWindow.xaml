@@ -57,6 +57,7 @@
                             </Grid.ColumnDefinitions>
                             <Grid Grid.Column="0" Width="112" Height="112" Background="{ThemeResource ControlFillColorDefaultBrush}" VerticalAlignment="Top">
                                 <Image x:Name="CurrentTrackArtworkFallback" Stretch="UniformToFill" />
+                                <FontIcon Tag="artwork-fallback" Glyph="&#xE189;" FontSize="42" HorizontalAlignment="Center" VerticalAlignment="Center" Visibility="Collapsed" IsHitTestVisible="False" AutomationProperties.Name="No album artwork available" />
                                 <Image x:Name="CurrentTrackArtwork" Stretch="UniformToFill" Visibility="Collapsed" />
                             </Grid>
                             <StackPanel Grid.Column="1" Spacing="6" VerticalAlignment="Center">
@@ -75,8 +76,7 @@
                                 <TextBlock x:Name="EligibilityDetailText" Text="Confirmed listening time is unavailable until a supported track is playing. Media position and confirmed listening time are tracked separately." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                                 <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Left">
                                     <Button x:Name="TrackingToggleButton" Content="Pause tracking" Click="TrackingToggleButton_Click" HorizontalAlignment="Left" />
-                                    <Button x:Name="CurrentTrackLoveButton" Content="Love" Click="CurrentTrackLoveButton_Click" IsEnabled="False" />
-                                    <Button x:Name="CurrentTrackUnloveButton" Content="Remove love" Click="CurrentTrackUnloveButton_Click" IsEnabled="False" />
+                                    <Button x:Name="CurrentTrackLoveButton" Width="40" Height="40" MinWidth="40" Padding="0" Click="CurrentTrackLoveButton_Click" IsEnabled="False" AutomationProperties.Name="Love this track" AutomationProperties.HelpText="Queue a Love or Unlove action for the current track." ToolTipService.ToolTip="Love track"><FontIcon x:Name="CurrentTrackLoveIcon" Glyph="&#xEB51;" FontSize="18" /></Button>
                                 </StackPanel>
                                 <TextBlock x:Name="CurrentTrackLoveStatusText" Text="Connect Last.fm to manage loved tracks." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                             </StackPanel>
