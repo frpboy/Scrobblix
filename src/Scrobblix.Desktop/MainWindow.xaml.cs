@@ -359,6 +359,26 @@ public sealed partial class MainWindow : Window
         LogDirectoryText.Text = directory;
     }
 
+    private SupportSourceStatus CreateSupportSourceStatus()
+    {
+        var observation = _displayedObservation;
+        var sourceName = observation?.SourceName switch
+        {
+            "gsmtc" => "windows-media-controls",
+            "browser" => "browser-companion",
+            null => "none",
+            _ => "other",
+        };
+
+        // Deliberately pass only a small operational snapshot. Never pass track fields,
+        // site URLs, extension IDs, app IDs, or filesystem paths to the exporter.
+        return new SupportSourceStatus(
+            sourceName,
+            observation?.PlaybackState.ToString() ?? "unknown",
+            observation?.ObservedAtUtc,
+            _trackingMode.IsEnabled);
+    }
+
     private async void ExportSupportBundleButton_Click(object sender, RoutedEventArgs args)
     {
         if (string.IsNullOrWhiteSpace(_logDirectory))
@@ -371,7 +391,7 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Content.XamlRoot,
             Title = "Export a privacy-safe support bundle?",
-            Content = "The ZIP contains manifest.json, event-summary.txt, operational-events.tsv and README.txt. It includes app/Windows version metadata and event timestamps, levels, categories, plus constrained exception/reason codes. It does not contain raw log messages, artist/title/album, listening history, the SQLite database, artwork, full URLs, usernames, file paths or Last.fm credentials/session keys. Nothing is uploaded automatically; review the ZIP before sharing.",
+            Content = "The ZIP contains manifest.json, event-summary.txt, operational-events.tsv and README.txt. It includes app/Windows version metadata, a normalized source snapshot (source type, playback state, last-observation time and tracking enabled/paused), and sanitized operational event fields. It does not contain artist/title/album, listening history, the SQLite database, artwork, full URLs, usernames, file paths or Last.fm credentials/session keys. Nothing is uploaded automatically; review the ZIP before sharing.",
             PrimaryButtonText = "Choose ZIP location",
             CloseButtonText = "Cancel",
             DefaultButton = ContentDialogButton.Close,
@@ -402,7 +422,8 @@ public sealed partial class MainWindow : Window
                 file.Path,
                 _logDirectory,
                 typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown",
-                Environment.OSVersion.Version.ToString());
+                Environment.OSVersion.Version.ToString(),
+                sourceStatus: CreateSupportSourceStatus());
             SupportBundleStatusText.Text =
                 $"Created {Path.GetFileName(result.ArchivePath)}. Included {result.OperationalEventsIncluded:N0} operational event row(s) from {result.SourceLogFilesInspected:N0} recent log file(s). SHA-256: {result.Sha256}. Review the ZIP before sharing.";
         }

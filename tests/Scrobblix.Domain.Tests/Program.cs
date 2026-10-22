@@ -207,7 +207,8 @@ try
         supportLogDirectory,
         "1.2.3-test",
         "10.0.26100",
-        CancellationToken.None);
+        CancellationToken.None,
+        new SupportSourceStatus("browser", "Playing", new DateTimeOffset(2026, 10, 22, 12, 0, 0, TimeSpan.Zero), true));
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
@@ -219,6 +220,29 @@ try
         var names = archive.Entries.Select(entry => entry.FullName).OrderBy(name => name, StringComparer.Ordinal).ToArray();
         Assert(names.SequenceEqual(new[] { "README.txt", "event-summary.txt", "manifest.json", "operational-events.tsv" }),
             "Support bundle contains only the explicit diagnostics allow-list, never a database or artwork.");
+
+        var manifestEntry = archive.GetEntry("manifest.json")!;
+        using (var manifestReader = new StreamReader(manifestEntry.Open(), Encoding.UTF8))
+        using (var manifestJson = JsonDocument.Parse(await manifestReader.ReadToEndAsync()))
+        {
+            var root = manifestJson.RootElement;
+            var sourceStatus = root.GetProperty("sourceStatus");
+            Assert(root.GetProperty("formatVersion").GetInt32() == 2,
+                "Support bundle schema version changes when the source snapshot is added.");
+            Assert(sourceStatus.GetProperty("source").GetString() == "browser-companion"
+                && sourceStatus.GetProperty("playbackState").GetString() == "playing"
+                && sourceStatus.GetProperty("trackingEnabled").GetBoolean()
+                && sourceStatus.GetProperty("lastObservationUtc").GetString() == "2026-10-22T12:00:00+00:00",
+                "Support bundle includes only the normalized source snapshot and UTC observation time.");
+
+            var summaryEntry = archive.GetEntry("event-summary.txt")!;
+            using var summaryReader = new StreamReader(summaryEntry.Open(), Encoding.UTF8);
+            var summary = await summaryReader.ReadToEndAsync();
+            Assert(summary.Contains("Source: browser-companion", StringComparison.Ordinal)
+                && summary.Contains("Playback state: playing", StringComparison.Ordinal)
+                && summary.Contains("Tracking enabled: yes", StringComparison.Ordinal),
+                "The human-readable summary includes the same privacy-reduced source status.");
+        }
 
         var archiveContents = new StringBuilder();
         foreach (var entry in archive.Entries)
@@ -240,6 +264,26 @@ try
         Assert(exportedText.Contains("HttpRequestException", StringComparison.Ordinal)
             && exportedText.Contains("provider.temporary_unavailable", StringComparison.Ordinal),
             "Support bundle retains a constrained exception type and machine-readable reason code.");
+    }
+
+    var untrustedSnapshotPath = Path.Combine(supportBundleRoot, "support-untrusted-source.zip");
+    await SupportBundleExporter.CreateAsync(
+        untrustedSnapshotPath,
+        supportLogDirectory,
+        "1.2.3-test",
+        "10.0.26100",
+        CancellationToken.None,
+        new SupportSourceStatus("CANARY_TRACK", "CANARY_API_SECRET", null, true));
+    using (var untrustedArchive = ZipFile.OpenRead(untrustedSnapshotPath))
+    using (var reader = new StreamReader(untrustedArchive.GetEntry("manifest.json")!.Open(), Encoding.UTF8))
+    using (var manifest = JsonDocument.Parse(await reader.ReadToEndAsync()))
+    {
+        var sourceStatus = manifest.RootElement.GetProperty("sourceStatus");
+        Assert(sourceStatus.GetProperty("source").GetString() == "other"
+            && sourceStatus.GetProperty("playbackState").GetString() == "unknown",
+            "Unrecognized source/state input is reduced to fixed allow-list values.");
+        Assert(!manifest.RootElement.GetProperty("sourceStatus").ToString().Contains("CANARY", StringComparison.Ordinal),
+            "Untrusted source/status strings cannot leak into the support bundle.");
     }
 }
 finally

@@ -16,7 +16,7 @@ CI builds and tests the code paths included in that workflow. It does not certif
 - Last.fm auth/provider actions/queue, backup/restore path, tray behavior and opt-in privacy-aware notifications: **implementation exists; test with real provider/Windows and disposable test data**.
 - Chromium/Firefox manifests and native-host scripts: **development integration exists; real installed browser delivery remains pending**.
 - Explorer/taskbar restart recovery: **not established on the mainline code snapshot reviewed here**; test it and add recovery if absent.
-- Support bundle: diagnostics-only ZIP export and confirmation UI are implemented on this branch; **canary-redaction CI and Windows Save/export/accessibility qualification must pass before private beta**.
+- Support bundle: diagnostics-only ZIP export and confirmation UI are implemented on this branch; the versioned manifest includes only normalized source kind/state/last-observation time/tracking enabled plus sanitized operational events. **Canary-redaction CI and Windows Save/export/accessibility qualification must pass before private beta**.
 - Signed MSIX/App Installer and updater: **not delivered/qualified**.
 
 ## P0 — manual correctness and recovery

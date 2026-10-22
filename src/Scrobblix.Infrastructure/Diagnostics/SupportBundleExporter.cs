@@ -15,6 +15,16 @@ public sealed record SupportBundleExportResult(
     int OperationalEventsIncluded);
 
 /// <summary>
+/// Privacy-reduced snapshot of the latest playback source event shown by the desktop UI.
+/// Source and state values are allow-listed again by the exporter before serialization.
+/// </summary>
+public sealed record SupportSourceStatus(
+    string? SourceName,
+    string? PlaybackState,
+    DateTimeOffset? LastObservationUtc,
+    bool? TrackingEnabled);
+
+/// <summary>
 /// Builds a diagnostics-only ZIP. It never opens the listening database, preferences,
 /// Credential Locker, artwork folder, or raw crash dumps. Raw log messages are parsed
 /// only to extract a strict allow-list of operational fields; they are never exported.
@@ -35,7 +45,8 @@ public static class SupportBundleExporter
         string logDirectory,
         string applicationVersion,
         string windowsVersion,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        SupportSourceStatus? sourceStatus = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(destinationPath);
         ArgumentException.ThrowIfNullOrWhiteSpace(logDirectory);
@@ -55,7 +66,7 @@ public static class SupportBundleExporter
         try
         {
             var snapshot = await Task.Run(
-                () => Collect(logDirectory, applicationVersion, windowsVersion, cancellationToken),
+                () => Collect(logDirectory, applicationVersion, windowsVersion, sourceStatus, cancellationToken),
                 cancellationToken).ConfigureAwait(false);
 
             await using (var stream = new FileStream(
@@ -104,6 +115,7 @@ public static class SupportBundleExporter
         string logDirectory,
         string applicationVersion,
         string windowsVersion,
+        SupportSourceStatus? sourceStatus,
         CancellationToken cancellationToken)
     {
         var events = new List<OperationalEvent>();
@@ -169,14 +181,26 @@ public static class SupportBundleExporter
         var safeWindowsVersion = Regex.IsMatch(windowsVersion, @"^[A-Za-z0-9.+_-]{1,80}$", RegexOptions.CultureInvariant)
             ? windowsVersion
             : "unknown";
+        var safeSourceName = NormalizeSourceName(sourceStatus?.SourceName);
+        var safePlaybackState = NormalizePlaybackState(sourceStatus?.PlaybackState);
+        var safeLastObservationUtc = sourceStatus?.LastObservationUtc?.ToUniversalTime();
+        var safeTrackingEnabled = sourceStatus?.TrackingEnabled;
+
         var manifest = new
         {
-            formatVersion = 1,
+            formatVersion = 2,
             generatedAtUtc = DateTimeOffset.UtcNow,
             applicationVersion = safeAppVersion,
             windowsVersion = safeWindowsVersion,
             framework = RuntimeInformation.FrameworkDescription,
             processArchitecture = RuntimeInformation.ProcessArchitecture.ToString(),
+            sourceStatus = new
+            {
+                source = safeSourceName,
+                playbackState = safePlaybackState,
+                lastObservationUtc = safeLastObservationUtc,
+                trackingEnabled = safeTrackingEnabled,
+            },
             logFilesInspected = inspected,
             operationalEventsIncluded = events.Count,
             includedFiles = new[] { "manifest.json", "event-summary.txt", "operational-events.tsv", "README.txt" },
@@ -190,6 +214,12 @@ public static class SupportBundleExporter
         summary.AppendLine(CultureInfo.InvariantCulture, $"Windows version: {safeWindowsVersion}");
         summary.AppendLine(CultureInfo.InvariantCulture, $"Log files inspected: {inspected.ToString(CultureInfo.InvariantCulture)}");
         summary.AppendLine(CultureInfo.InvariantCulture, $"Operational events included: {events.Count.ToString(CultureInfo.InvariantCulture)}");
+        summary.AppendLine();
+        summary.AppendLine("Latest playback source snapshot (normalized; no track metadata):");
+        summary.AppendLine($"Source: {safeSourceName}");
+        summary.AppendLine($"Playback state: {safePlaybackState}");
+        summary.AppendLine($"Last observation (UTC): {safeLastObservationUtc?.ToString("O", CultureInfo.InvariantCulture) ?? "unknown"}");
+        summary.AppendLine($"Tracking enabled: {(safeTrackingEnabled.HasValue ? (safeTrackingEnabled.Value ? "yes" : "no") : "unknown")}");
         summary.AppendLine();
         summary.AppendLine("Counts by level and category (no original messages are included):");
         foreach (var group in events.GroupBy(item => (item.Level, item.Category)).OrderBy(group => group.Key.Level).ThenBy(group => group.Key.Category, StringComparer.Ordinal))
@@ -215,6 +245,27 @@ public static class SupportBundleExporter
             inspected,
             events);
     }
+
+    private static string NormalizeSourceName(string? sourceName) =>
+        sourceName?.Trim().ToLowerInvariant() switch
+        {
+            "gsmtc" or "windows-media-controls" => "windows-media-controls",
+            "browser" or "browser-companion" => "browser-companion",
+            "none" => "none",
+            null or "" => "unknown",
+            _ => "other",
+        };
+
+    private static string NormalizePlaybackState(string? playbackState) =>
+        playbackState?.Trim().ToLowerInvariant() switch
+        {
+            "playing" => "playing",
+            "paused" => "paused",
+            "ended" => "ended",
+            "stopped" => "stopped",
+            "unknown" or null or "" => "unknown",
+            _ => "unknown",
+        };
 
     private static bool TryParseOperationalEvent(string line, out OperationalEvent operationalEvent)
     {
@@ -278,8 +329,11 @@ public static class SupportBundleExporter
 Scrobblix privacy-safe support bundle
 
 This bundle was created locally at the user's request. It includes version/runtime
-metadata plus operational event timestamps, level, category and constrained
-exception/HRESULT/reason codes. Original free-form log messages are never exported.
+metadata, a normalized source snapshot (source kind, playback state, last-observation
+time and whether tracking is enabled), plus operational event timestamps, level,
+category and constrained exception/HRESULT/reason codes. Original free-form log
+messages are never exported. Source values are allow-listed; arbitrary values are
+reduced to "other"/"unknown".
 
 It does not include the listening database/history, artist/title/album metadata,
 artwork, API credentials, session keys, full URLs, usernames, full local paths,
