@@ -1,5 +1,4 @@
 using System.Runtime.InteropServices;
-using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace Scrobblix.Desktop;
@@ -126,15 +125,15 @@ internal static class NamedPipePeerVerifier
 
     private static bool TryGetProcessImagePath(SafeProcessHandle process, out string imagePath)
     {
-        var buffer = new StringBuilder(2048);
-        uint length = (uint)buffer.Capacity;
-        if (!QueryFullProcessImageName(process, 0, buffer, ref length) || length == 0)
+        var buffer = new char[32768];
+        uint length = (uint)buffer.Length;
+        if (!QueryFullProcessImageName(process, 0, buffer, ref length) || length == 0 || length > buffer.Length)
         {
             imagePath = string.Empty;
             return false;
         }
 
-        imagePath = buffer.ToString(0, checked((int)length));
+        imagePath = new string(buffer, 0, checked((int)length));
         return true;
     }
 
@@ -158,7 +157,7 @@ internal static class NamedPipePeerVerifier
 
     [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode, SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder imageName, ref uint size);
+    private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, [Out] char[] imageName, ref uint size);
 
     [DllImport("ntdll.dll", EntryPoint = "NtQueryInformationProcess")]
     private static extern int NtQueryInformationProcess(
