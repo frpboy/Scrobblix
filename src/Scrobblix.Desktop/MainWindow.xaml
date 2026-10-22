@@ -243,6 +243,13 @@
                     </StackPanel>
                 </Border>
                 <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Background and notification area" Style="{StaticResource SubtitleTextBlockStyle}" />
+                        <TextBlock Text="Minimizing Scrobblix hides its window in the Windows notification area while playback tracking and the durable queue keep running. Double-click the tray icon to reopen Scrobblix; right-click it to open or explicitly exit the app." TextWrapping="Wrap" />
+                        <TextBlock Text="If the notification-area icon cannot be created on this PC, Scrobblix keeps running as a normal window and records the reason in Diagnostics." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                    </StackPanel>
+                </Border>
+                <Border Padding="24" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Local data backup and restore" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock Text="Create a consistent SQLite snapshot you can keep offline. Restore is staged, Scrobblix closes, and the backup is applied on the next launch after an automatic safety snapshot." TextWrapping="Wrap" />
