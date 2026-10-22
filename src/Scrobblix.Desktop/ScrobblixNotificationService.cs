@@ -79,7 +79,8 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
             "Scrobbled to Last.fm",
             _includeTrackDetailsInNotifications ? FormatTrack(artist, title) : "A listening record was accepted by Last.fm.",
             "The provider accepted this listening record. Open Scrobblix to review your local history.",
-            "scrobble.accepted");
+            "scrobble.accepted",
+            TimeSpan.FromSeconds(5));
     }
 
     public void NotifyDeliveryNeedsAttention(string? artist, string? title, ProviderActionState state, string reasonCode)
@@ -96,10 +97,11 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
             "Scrobble needs attention",
             _includeTrackDetailsInNotifications ? FormatTrack(artist, title) : "Track details are hidden by your notification privacy setting.",
             $"Delivery status: {FriendlyState(state)}. Open Scrobblix Queue to review the recorded reason ({LimitText(reasonCode, 100)}).",
-            "scrobble.attention");
+            "scrobble.attention",
+            TimeSpan.FromSeconds(10));
     }
 
-    private void Show(string title, string track, string detail, string category)
+    private void Show(string title, string track, string detail, string category, TimeSpan lifetime)
     {
         if (!_enabled || !_registered || _disposed)
         {
@@ -115,6 +117,7 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
                 .AddText(LimitText(track, 240))
                 .AddText(LimitText(detail, 250))
                 .BuildNotification();
+            notification.Expiration = DateTimeOffset.Now.Add(lifetime);
             _manager.Show(notification);
         }
         catch (Exception exception)
