@@ -85,6 +85,8 @@ reporting an issue; remove credentials from screenshots.
 
 ## 6. Browser companion and native host
 
+For public browser-store release and desktop-installer handoff, follow [the browser-store release checklist](BROWSER_STORE_RELEASE_CHECKLIST.md). It identifies the store-owned values that must be supplied before release wiring can be completed.
+
 The browser companion is optional; desktop playback continues through Windows
 media controls without it. The current extension targets Chromium (Chrome and
 Edge) and the supported sites declared in browser-extension/manifest.json.

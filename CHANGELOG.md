@@ -21,6 +21,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 - Windows notifications now expire automatically: 5 seconds for accepted-scrobble confirmations and 10 seconds for delivery warnings that need attention.
 - Browser Companion permissions now include standard YouTube, so its media observer can report YouTube playback when the companion is installed and connected.
 - The Browser Companion now has a compact control panel for pause/resume, native-host connection checks, and user-approved custom playback sites.
+- Added an owner checklist for Chrome Web Store, Edge Add-ons, Firefox AMO, native-host identities, and installer verification.
 
 ### Security
 
