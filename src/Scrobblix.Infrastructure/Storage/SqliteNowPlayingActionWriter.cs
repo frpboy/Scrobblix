@@ -42,7 +42,6 @@ public sealed class SqliteNowPlayingActionWriter(string connectionString)
                 || string.IsNullOrWhiteSpace(reader.GetString(0))
                 || string.IsNullOrWhiteSpace(reader.GetString(1)))
             {
-                await transaction.CommitAsync(cancellationToken);
                 return false;
             }
         }
