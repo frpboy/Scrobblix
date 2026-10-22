@@ -595,6 +595,51 @@ var nowPlayingOnlyToday = await new SqliteHistoryReader(nowPlayingConnectionStri
 Assert(nowPlayingOnlyToday.AcceptedScrobbleCount == 0,
     "Accepted now-playing updates are not reported as accepted Last.fm scrobbles.");
 File.Delete(nowPlayingDatabasePath);
+
+var backupTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-backup-{Guid.NewGuid():N}");
+Directory.CreateDirectory(backupTestDirectory);
+var backupDatabasePath = Path.Combine(backupTestDirectory, "scrobblix.db");
+var backupConnectionString = $"Data Source={backupDatabasePath};Pooling=False";
+await new SqliteDatabase(backupConnectionString).InitializeAsync(CancellationToken.None);
+var backupPlayStore = new SqliteLocalPlayStore(backupConnectionString);
+var backupTime = DateTimeOffset.Now;
+var playBeforeBackup = historyRecord with
+{
+    PlayId = "backup-before",
+    FirstObservedUtc = backupTime.AddMinutes(-2),
+    LastObservedUtc = backupTime.AddMinutes(-2),
+};
+await backupPlayStore.UpsertAsync(playBeforeBackup, CancellationToken.None);
+var backupService = new ScrobblixBackupService();
+var backupArchivePath = Path.Combine(backupTestDirectory, "test.scrobblix-backup");
+await backupService.CreateBackupAsync(backupConnectionString, backupArchivePath, CancellationToken.None);
+Assert(File.Exists(backupArchivePath) && new FileInfo(backupArchivePath).Length > 0,
+    "A database-consistent Scrobblix backup archive is created on disk.");
+
+var playAfterBackup = playBeforeBackup with
+{
+    PlayId = "backup-after",
+    FirstObservedUtc = backupTime.AddMinutes(-1),
+    LastObservedUtc = backupTime.AddMinutes(-1),
+};
+await backupPlayStore.UpsertAsync(playAfterBackup, CancellationToken.None);
+Assert((await new SqliteHistoryReader(backupConnectionString).GetRecentAsync(10, CancellationToken.None)).Count == 2,
+    "A new local history session is recorded after the backup snapshot.");
+await backupService.StageRestoreAsync(backupArchivePath, backupTestDirectory, CancellationToken.None);
+var safetySnapshotPath = await backupService.ApplyStagedRestoreAsync(
+    backupTestDirectory, backupDatabasePath, CancellationToken.None);
+Assert(!string.IsNullOrWhiteSpace(safetySnapshotPath) && File.Exists(safetySnapshotPath),
+    "Applying a staged restore first creates a separate safety snapshot of the current database.");
+var restoredHistory = await new SqliteHistoryReader(backupConnectionString).GetRecentAsync(10, CancellationToken.None);
+Assert(restoredHistory.Count == 1
+    && restoredHistory.Any(play => play.PlayId == playBeforeBackup.PlayId)
+    && restoredHistory.All(play => play.PlayId != playAfterBackup.PlayId),
+    "Restore recovers the exact backup snapshot without importing history recorded afterward.");
+var safetyHistory = await new SqliteHistoryReader($"Data Source={safetySnapshotPath};Pooling=False")
+    .GetRecentAsync(10, CancellationToken.None);
+Assert(safetyHistory.Count == 2,
+    "The safety snapshot still contains the pre-restore live database including later listening history.");
+Directory.Delete(backupTestDirectory, recursive: true);
 File.Delete(databasePath);
 
 return;
