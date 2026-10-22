@@ -917,12 +917,16 @@ using (var lockedWal = new FileStream(
     Assert(restoreSwapRejectedLockedWal,
         "Restore replacement fails closed when the WAL sidecar is locked instead of silently continuing.");
     Assert(File.ReadAllText(restoreSwapActivePath) == "original-main-db"
-        && File.ReadAllText(restoreSwapActivePath + "-wal") == "original-wal"
-        && File.ReadAllText(restoreSwapActivePath + "-shm") == "original-shm",
-        "A locked-WAL failure restores the active database and every sidecar to its original path.");
+        && File.Exists(restoreSwapActivePath + "-wal")
+        && File.Exists(restoreSwapActivePath + "-shm"),
+        "A locked-WAL failure leaves the active database and sidecars at their original paths.");
     Assert(File.ReadAllText(restoreSwapReplacementPath) == "replacement-main-db",
         "A failed restore leaves the fully prepared replacement untouched for safe retry.");
 }
+
+Assert(File.ReadAllText(restoreSwapActivePath + "-wal") == "original-wal"
+    && File.ReadAllText(restoreSwapActivePath + "-shm") == "original-shm",
+    "After releasing the lock, the restored WAL/SHM contents are unchanged.");
 
 ScrobblixBackupService.ReplaceActiveDatabaseFilesForRestore(restoreSwapActivePath, restoreSwapReplacementPath);
 Assert(File.ReadAllText(restoreSwapActivePath) == "replacement-main-db"
