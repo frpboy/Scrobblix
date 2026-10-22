@@ -15,8 +15,24 @@ for (const destination of ["home", "history", "statistics", "loved", "queue", "s
   assert.ok(xaml.includes(`Tag="${destination}"`), `Navigation destination missing: ${destination}`);
 }
 assert.ok(xaml.includes('x:Name="NavigationToggleButton"') && xaml.includes('x:Name="CompactNavigationToggleButton"'), "Both rail toggle states must exist.");
+assert.ok(xaml.includes('x:Name="NavigationToggleButton" Grid.Column="2" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click"') && xaml.includes('x:Name="CompactNavigationToggleButton" Width="40" Height="40" Padding="0" Click="NavigationToggleButton_Click"'), "Both hamburger toggles must remain interactive 40x40 buttons.");
+assert.ok((xaml.match(/Glyph="&#xE700;"/g) ?? []).length >= 2 && !xaml.includes('Glyph="&#xE76B;"') && !xaml.includes('Glyph="&#xE76C;"'), "Both sidebar toggles must use the three-line hamburger glyph instead of chevrons.");
+assert.ok(xaml.includes('x:Name="CompactNavigationButtons" Grid.Row="2" Visibility="Collapsed"'), "Collapsed navigation must use a dedicated visible icon rail.");
+for (const [name, destination, tooltip] of [
+  ["CompactHomeButton", "home", "Home"], ["CompactHistoryButton", "history", "History"],
+  ["CompactStatisticsButton", "statistics", "Statistics"], ["CompactLovedButton", "loved", "Loved tracks"],
+  ["CompactQueueButton", "queue", "Queue"], ["CompactSourcesButton", "sources", "Sources"],
+  ["CompactDiagnosticsButton", "diagnostics", "Diagnostics"], ["CompactSettingsButton", "settings", "Settings"],
+]) {
+  const button = xaml.match(new RegExp('<Button\\b[^>]*x:Name="' + name + '"[^>]*>'))?.[0];
+  assert.ok(button && button.includes('Tag="' + destination + '"') && button.includes('Click="CompactNavigationItem_Click"'), `Collapsed navigation button must open ${destination}.`);
+  assert.ok(button.includes('ToolTipService.ToolTip="' + tooltip + '"') && button.includes('AutomationProperties.Name="' + tooltip + '"'), `Collapsed ${destination} icon needs a hover tooltip and accessible name.`);
+}
+
 assert.ok(xaml.includes('AutomationProperties.Name="Collapse navigation"') && xaml.includes('AutomationProperties.Name="Expand navigation"'), "Rail toggles need accessible names.");
-assert.ok(code.includes("NavigationViewPaneDisplayMode.LeftCompact") && code.includes("NavigationViewPaneDisplayMode.Left"), "Responsive layout must use WinUI navigation display modes.");
+assert.ok(code.includes("NavigationViewPaneDisplayMode.LeftCompact") && code.includes("NavigationViewPaneDisplayMode.Left"), "Expanded navigation must retain WinUI navigation display modes.");
+assert.ok(code.includes("AppNavigationView.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;") && code.includes("CompactNavigationButtons.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;"), "Compact mode must swap in the explicit clickable icon rail.");
+assert.ok(code.includes("private void CompactNavigationItem_Click") && code.includes("ShowDestination(destination);"), "Compact navigation must switch views even with NavigationView hidden.");
 assert.ok(code.includes("_preferredNavigationCompact || _isWidthConstrained"), "Width constraint and saved preference must be separate.");
 assert.ok(prefs.includes("PreferCompactNavigation") && app.includes("NavigationCompactPreferenceChanged"), "Navigation preference must persist.");
 assert.ok(code.includes('SelectDestination("queue")') && code.includes("UpdateRailAttention") && code.includes("SubmissionOutcomeUnknown"), "Queue attention must be actionable and state-backed.");
