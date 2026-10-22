@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
+using Scrobblix.Infrastructure.Diagnostics;
 
 namespace Scrobblix.Desktop;
 
@@ -13,7 +13,6 @@ namespace Scrobblix.Desktop;
 public sealed class ScrobblixFileLogger
 {
     private const long MaximumFileBytes = 8 * 1024 * 1024;
-    private const int MaximumDiagnosticTextLength = 1024;
     private const int MaximumRetainedLogFiles = 20;
     private readonly object _gate = new();
     private long _entryNumber;
@@ -44,7 +43,7 @@ public sealed class ScrobblixFileLogger
             var entry = Interlocked.Increment(ref _entryNumber);
             var timestamp = DateTimeOffset.UtcNow.ToString("O", CultureInfo.InvariantCulture);
             var safeCategory = Sanitize(category, 32);
-            var safeMessage = Sanitize(message, 6000);
+            var safeMessage = DiagnosticMessageSanitizer.Sanitize(message, 6000);
             var line = $"{entry:D6} | {timestamp} | {level} | {safeCategory} | {safeMessage}{Environment.NewLine}";
             try
             {
@@ -57,22 +56,6 @@ public sealed class ScrobblixFileLogger
                 Debug.WriteLine($"Scrobblix log write failed: {exception.GetType().Name}");
             }
         }
-    }
-
-    internal static string SanitizeForTesting(string? value, int maximumLength = 6000) => Sanitize(value, maximumLength);
-
-    private static string Sanitize(string? value, int maximumLength)
-    {
-        var normalized = (value ?? string.Empty)
-            .Replace('\r', ' ')
-            .Replace('\n', ' ')
-            .Replace('\t', ' ');
-        normalized = Regex.Replace(normalized,
-            @"(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)\s*[=:]\s*[^&\s,;]+",
-            "$1=[REDACTED]");
-        normalized = Regex.Replace(normalized, @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+", "[AUTHORIZATION_URL_REDACTED]");
-        normalized = Regex.Replace(normalized, @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*[^;,|]+", "$1=[REDACTED]");
-        return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
     }
 
     private void RotateIfNeeded(int incomingBytes)
