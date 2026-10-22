@@ -9,9 +9,11 @@ public sealed class SqliteHistoryReader(string connectionString)
 {
     public async Task<TodaySummary> GetTodaySummaryAsync(DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var localDate = TimeZoneInfo.ConvertTime(now, TimeZoneInfo.Local).Date;
-        var localStart = new DateTimeOffset(localDate, TimeZoneInfo.Local.GetUtcOffset(localDate));
-        var localEnd = localStart.AddDays(1);
+        var timeZone = TimeZoneInfo.Local;
+        var localDate = TimeZoneInfo.ConvertTime(now, timeZone).Date;
+        var nextLocalDate = localDate.AddDays(1);
+        var localStart = new DateTimeOffset(localDate, timeZone.GetUtcOffset(localDate));
+        var localEnd = new DateTimeOffset(nextLocalDate, timeZone.GetUtcOffset(nextLocalDate));
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();
