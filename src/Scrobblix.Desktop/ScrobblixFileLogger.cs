@@ -13,6 +13,7 @@ namespace Scrobblix.Desktop;
 public sealed class ScrobblixFileLogger
 {
     private const long MaximumFileBytes = 8 * 1024 * 1024;
+    private const int MaximumDiagnosticTextLength = 1024;
     private const int MaximumRetainedLogFiles = 20;
     private readonly object _gate = new();
     private long _entryNumber;
@@ -68,6 +69,9 @@ public sealed class ScrobblixFileLogger
             @"(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)\s*[=:]\s*[^&\s,;]+",
             "$1=[REDACTED]");
         normalized = Regex.Replace(normalized, @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+", "[AUTHORIZATION_URL_REDACTED]");
+        // Logs should explain state transitions without retaining listening history or metadata.
+        // Keep the common metadata values out at the logger boundary, not only in support bundles.
+        normalized = Regex.Replace(normalized, @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*(?:\"[^\"]*\"|'[^']*'|[^;,|]+)", "$1=[REDACTED]");
         return normalized.Length <= maximumLength ? normalized : normalized[..maximumLength] + "…";
     }
 
