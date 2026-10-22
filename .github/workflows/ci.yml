@@ -43,48 +43,57 @@ jobs:
             foreach ($file in $files) {
               Write-Output "----- $($file.Name) ($($file.Length) bytes) -----"
               if ($file.Name -eq 'input.json') {
-                Write-Output "XAML input exists at $($file.FullName)."
+                Write-Output "XAML compiler input found: $($file.FullName)"
                 continue
               }
 
               $raw = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
-              if ($null -eq $raw) { continue }
-              foreach ($needle in @('error', 'exception', 'lineNumber', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
-                $offset = 0
-                $shown = 0
-                while (($index = $raw.IndexOf($needle, $offset, [StringComparison]::OrdinalIgnoreCase)) -ge 0 -and $shown -lt 5) {
-                  $start = [Math]::Max(0, $index - 240)
-                  $length = [Math]::Min(680, $raw.Length - $start)
-                  Write-Output ("MATCH [{0}] {1}" -f $needle, $raw.Substring($start, $length))
-                  $offset = $index + $needle.Length
-                  $shown++
+              if ($raw) {
+                foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                  $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                  if ($index -ge 0) {
+                    $startAt = [Math]::Max(0, $index - 240)
+                    $length = [Math]::Min(1200, $raw.Length - $startAt)
+                    Write-Output ("MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
+                  }
                 }
               }
             }
 
             $compiler = Get-ChildItem -Path "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk.winui" -Recurse -Filter 'XamlCompiler.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
-            $input = Get-ChildItem -Path $searchRoot -Recurse -Filter 'input.json' -ErrorAction SilentlyContinue | Select-Object -First 1
-            if ($null -ne $compiler -and $null -ne $input) {
-              $replay = Join-Path $input.DirectoryName 'output-diagnostic-replay.json'
-              $log = Join-Path $input.DirectoryName 'xaml-compiler-replay.log'
-              Write-Output "Replaying XAML compiler from $($compiler.FullName)"
-              & $compiler.FullName $input.FullName $replay 2>&1 | Tee-Object -FilePath $log
-              Write-Output "Replay exit code: $LASTEXITCODE"
+            $inputFile = Get-ChildItem -Path $searchRoot -Recurse -Filter 'input.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $compiler -and $null -ne $inputFile) {
+              $replay = Join-Path $inputFile.DirectoryName 'output-diagnostic-replay.json'
+              $stdout = Join-Path $inputFile.DirectoryName 'xaml-compiler-stdout.txt'
+              $stderr = Join-Path $inputFile.DirectoryName 'xaml-compiler-stderr.txt'
+              Write-Output "Replaying compiler with redirected stdout/stderr."
+              $process = Start-Process -FilePath $compiler.FullName -ArgumentList @($inputFile.FullName, $replay) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+              Write-Output "Replay exit code: $($process.ExitCode)"
+              foreach ($logPath in @($stdout, $stderr)) {
+                if (Test-Path $logPath) {
+                  $text = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
+                  if ($text) {
+                    Write-Output "----- $([System.IO.Path]::GetFileName($logPath)) -----"
+                    Write-Output $text.Substring(0, [Math]::Min(8000, $text.Length))
+                  }
+                }
+              }
               if (Test-Path $replay) {
                 $raw = Get-Content -LiteralPath $replay -Raw -ErrorAction SilentlyContinue
                 if ($raw) {
                   foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
                     $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
                     if ($index -ge 0) {
-                      $start = [Math]::Max(0, $index - 240)
-                      $length = [Math]::Min(1200, $raw.Length - $start)
-                      Write-Output ("REPLAY MATCH [{0}] {1}" -f $needle, $raw.Substring($start, $length))
+                      $startAt = [Math]::Max(0, $index - 240)
+                      $length = [Math]::Min(1600, $raw.Length - $startAt)
+                      Write-Output ("REPLAY MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
                     }
                   }
                 }
               }
             }
           }
+          exit 0
       - name: Validate desktop UI contracts
         run: node scripts/test-desktop-ui-contracts.mjs
 
