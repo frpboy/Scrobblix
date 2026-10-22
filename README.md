@@ -108,7 +108,7 @@ This is a **development build, not a signed production release**. Remaining rele
 - Live Last.fm authorization/scrobble validation with the user's account, plus real Chrome/Edge and Firefox extension installation/bridge tests.
 - Signed MSIX/App Installer and updater, install/upgrade/rollback/uninstall qualification, code-signing provenance and dependency/license/SBOM review.
 - Further same-user IPC threat review; the current pipe peer check is an extra gate, not cryptographic proof of an executable's identity or a replacement for signed binaries.
-- Support-bundle export with canary-secret redaction tests; accessibility, performance/long-run soak, backup migration across supported schema versions, and formal release/security review.
+- Privacy-safe support-bundle export is implemented on the private-beta readiness branch; exact-head CI canary assertions and real Windows export/accessibility qualification remain pending, alongside the soak, backup-migration and formal release/security review.
 
 See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
 
