@@ -13,6 +13,7 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
     private readonly AppNotificationManager _manager = AppNotificationManager.Default;
     private bool _registered;
     private bool _enabled;
+    private bool _includeTrackDetailsInNotifications;
     private bool _disposed;
 
     public bool IsEnabled => _enabled;
@@ -63,11 +64,20 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
         log("Windows app notifications are disabled.");
     }
 
+    public void SetIncludeTrackDetails(bool includeTrackDetails)
+    {
+        ObjectDisposedException.ThrowIf(_disposed, this);
+        _includeTrackDetailsInNotifications = includeTrackDetails;
+        log(includeTrackDetails
+            ? "Track and artist details are enabled for Windows notifications by the user."
+            : "Track and artist details are hidden in Windows notifications.");
+    }
+
     public void NotifyScrobbleAccepted(string? artist, string? title)
     {
         Show(
             "Scrobbled to Last.fm",
-            FormatTrack(artist, title),
+            _includeTrackDetailsInNotifications ? FormatTrack(artist, title) : "A listening record was accepted by Last.fm.",
             "The provider accepted this listening record. Open Scrobblix to review your local history.",
             "scrobble.accepted");
     }
@@ -84,7 +94,7 @@ internal sealed class ScrobblixNotificationService(Action<string> log, Action ac
 
         Show(
             "Scrobble needs attention",
-            FormatTrack(artist, title),
+            _includeTrackDetailsInNotifications ? FormatTrack(artist, title) : "Track details are hidden by your notification privacy setting.",
             $"Delivery status: {FriendlyState(state)}. Open Scrobblix Queue to review the recorded reason ({LimitText(reasonCode, 100)}).",
             "scrobble.attention");
     }
