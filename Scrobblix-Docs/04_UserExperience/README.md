@@ -1,5 +1,7 @@
 # 04 — User Experience
 
+The editable screen inventory, interaction contract, design tokens and external design handoff are in [STITCH_IMPORT_BRIEF.md](STITCH_IMPORT_BRIEF.md). Stitch MCP was unavailable, so this is a Git handoff—not proof that an external Stitch project was updated.
+
 This section defines the full desktop and companion experience.
 
 - `UX_VISION.md`

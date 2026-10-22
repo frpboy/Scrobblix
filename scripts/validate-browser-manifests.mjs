@@ -14,6 +14,7 @@ const requireCondition = (condition, message) => {
 
 requireCondition(chromium.manifest_version === 3, "Chromium companion must use Manifest V3.");
 requireCondition(chromium.background?.service_worker === "dist/service-worker.js", "Chromium service worker is missing.");
+requireCondition(!chromium.background?.scripts, "Chromium Manifest V3 must use service_worker, not background.scripts.");
 requireCondition(chromium.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Chromium media observer is missing.");
 requireCondition(firefox.manifest_version === 3, "Firefox companion must use Manifest V3.");
 requireCondition(firefox.background?.scripts?.includes("dist/service-worker.js"), "Firefox background script is missing.");

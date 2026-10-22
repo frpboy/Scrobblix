@@ -3,12 +3,12 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Development implementation underway; release gates remain open  
-> **Last updated:** 2026-08-01
+> **Last updated:** 2026-10-22
 
 
 ## Current implementation snapshot
 
-The development branch now contains the Home/History/Statistics/Loved/Queue/Sources/Diagnostics/Settings surfaces, source arbitration, durable queue processing, Last.fm action flows, artwork fallback, a backup/staged-restore path, a minimize-to-tray prototype, opt-in local Windows notifications with a separate track-detail privacy toggle, Chromium/Firefox companion manifests and an additional named-pipe peer check. See `docs/IMPLEMENTATION_RESUME.md` for the exact branch, last green CI baseline, and remaining manual release gates. These are development implementations; not all have been validated against a live Windows shell, real browser installation, or signed distribution.
+The development branch now contains the Home/History/Statistics/Loved/Queue/Sources/Diagnostics/Settings surfaces, source arbitration, durable queue processing, Last.fm action flows, artwork fallback, a backup/staged-restore path, a minimize-to-tray prototype, opt-in local Windows notifications with a separate track-detail privacy toggle, Chromium/Firefox companion manifests and an additional named-pipe peer check. See `docs/IMPLEMENTATION_RESUME.md`, `docs/MASTER_IMPLEMENTATION_PLAN.md`, and `docs/LOCAL_DEVELOPMENT_TROUBLESHOOTING.md` for branch state, evidence-based status, recommendations, acceptance tests and recovery steps. These are development implementations; not all have been validated against a live Windows shell, real browser installation, or signed distribution.
 
 ## v1 in scope
 

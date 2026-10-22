@@ -53,6 +53,16 @@ that exposure:
 Those values apply only to the PowerShell session from which the app is started.
 The in-app credential form is the preferred workflow.
 
+Never paste a real environment-variable assignment into an issue, screenshot,
+shared terminal transcript, chat, or tracked file. If an API shared secret
+appears in any of those places, treat it as exposed: replace/reissue Last.fm
+application credentials where the account portal permits it (otherwise create
+a replacement API application credential set), update Scrobblix Settings,
+disconnect/re-authorize if required and remove the old process environment
+variables. Do not put replacements into Git or this guide. See
+https://www.last.fm/api/desktopauth for authorization-token expiry and one-use
+session creation.
+
 ## 4. Approve the Last.fm account
 
 1. Start Scrobblix and confirm that API credentials are configured in Settings.
@@ -62,7 +72,8 @@ The in-app credential form is the preferred workflow.
 4. Return to Scrobblix and select **Finish approval**.
 5. Confirm the status says `Connected as <your username>`.
 6. The resulting session key is stored in Windows Credential Locker; it is not
-   written to the SQLite database or Git.
+   written to the SQLite database or Git. The browser token is short-lived and
+   single-use; do not save/share an approval URL containing token=.
 
 Use **Disconnect** to remove the locally stored session key. It intentionally
 keeps local listening history and queued actions on this device.
