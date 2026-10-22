@@ -45,10 +45,12 @@ public sealed class ProviderActionProcessor(IProviderActionStore actionStore, IS
             ? ProviderActionState.Accepted
             : result.ReasonCode == ReasonCodes.Provider.AuthInvalidSession
                 ? ProviderActionState.AuthBlocked
-                : result.IsTransient
-                    ? ProviderActionState.RetryScheduled
-                    : ProviderActionState.PermanentFailure;
-        await actionStore.CompleteAsync(action.ActionId, outcome, result.ReasonCode, nowUtc, cancellationToken);
+                : result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown
+                    ? ProviderActionState.SubmissionOutcomeUnknown
+                    : result.IsTransient
+                        ? ProviderActionState.RetryScheduled
+                        : ProviderActionState.PermanentFailure;
+        await actionStore.CompleteAsync(action.ActionId, outcome, result.ReasonCode, nowUtc, cancellationToken, result.RetryAfter);
         log?.Invoke($"Scrobble delivery finished; action_id={action.ActionId}; play_id={action.PlayId}; provider={action.Provider}; account={action.AccountId}; artist={action.Artist}; title={action.Title}; album={action.Album}; attempt={action.AttemptCount}; outcome={outcome}; accepted={result.Accepted}; transient={result.IsTransient}; reason={result.ReasonCode}; response_utc={nowUtc:O}.");
         return true;
     }

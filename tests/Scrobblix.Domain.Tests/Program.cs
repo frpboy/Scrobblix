@@ -243,6 +243,17 @@ Assert(queueActions.Count >= 2
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
+var unknownQueuePlay = retryRecord with { PlayId = "play-outcome-unknown" };
+Assert(await eligiblePlayStore.TryPersistAndQueueAsync(unknownQueuePlay, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
+    "An additional eligible action is persisted for the unknown-outcome queue test.");
+var unknownQueueLease = await actionStore.ClaimNextDueAsync("worker-unknown", observation.ObservedAtUtc.AddHours(1), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(unknownQueueLease is not null, "The additional action can be claimed for completion.");
+await actionStore.CompleteAsync(unknownQueueLease!.ActionId, ProviderActionState.SubmissionOutcomeUnknown,
+    ReasonCodes.Provider.SubmissionOutcomeUnknown, observation.ObservedAtUtc.AddHours(1), CancellationToken.None);
+var queueWithUnknownOutcome = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
+Assert(queueWithUnknownOutcome.SubmissionOutcomeUnknownCount == 1,
+    "The durable queue reader surfaces ambiguous submission outcomes separately from retryable and permanently failed actions.");
+
 var localMidday = new DateTimeOffset(DateTime.Today.AddHours(12)).AddMinutes(-10);
 var todayRecord = historyRecord with
 {
@@ -350,6 +361,23 @@ var recordingStore = new RecordingProviderActionStore(queuedLease);
 var processor = new ProviderActionProcessor(recordingStore, new AcceptingScrobbleProvider());
 Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
 Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
+
+var unknownOutcomeStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-ambiguous" });
+var unknownOutcomeProcessor = new ProviderActionProcessor(
+    unknownOutcomeStore,
+    new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false)));
+Assert(await unknownOutcomeProcessor.ProcessNextAsync("worker-unknown", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && unknownOutcomeStore.CompletedState == ProviderActionState.SubmissionOutcomeUnknown,
+    "An ambiguous Last.fm scrobble outcome is persisted for review instead of blindly retried.");
+
+var retryAfterStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-rate-limited" });
+var retryAfterProcessor = new ProviderActionProcessor(
+    retryAfterStore,
+    new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.RateLimited, true, TimeSpan.FromSeconds(27))));
+Assert(await retryAfterProcessor.ProcessNextAsync("worker-rate-limit", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+    && retryAfterStore.CompletedState == ProviderActionState.RetryScheduled
+    && retryAfterStore.CompletedRetryAfter == TimeSpan.FromSeconds(27),
+    "Provider Retry-After hints are passed to durable queue scheduling.");
 
 var loveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-love", ActionType = ProviderActionType.Love });
 var loveProvider = new AcceptingScrobbleProvider();
@@ -462,6 +490,7 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
     private ProviderActionLease? _lease = lease;
 
     public ProviderActionState? CompletedState { get; private set; }
+    public TimeSpan? CompletedRetryAfter { get; private set; }
 
     public Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(0);
 
@@ -476,11 +505,20 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
 
     public Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
 
-    public Task CompleteAsync(string actionId, ProviderActionState outcome, string reasonCode, DateTimeOffset completedUtc, CancellationToken cancellationToken)
+    public Task CompleteAsync(string actionId, ProviderActionState outcome, string reasonCode, DateTimeOffset completedUtc, CancellationToken cancellationToken, TimeSpan? retryAfter = null)
     {
         CompletedState = outcome;
+        CompletedRetryAfter = retryAfter;
         return Task.CompletedTask;
     }
+}
+
+sealed class ResultScrobbleProvider(ProviderSubmissionResult result) : IScrobbleProvider
+{
+    public Task<ProviderSubmissionResult> UpdateNowPlayingAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => Task.FromResult(result);
+    public Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => Task.FromResult(result);
+    public Task<ProviderSubmissionResult> LoveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => Task.FromResult(result);
+    public Task<ProviderSubmissionResult> UnloveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) => Task.FromResult(result);
 }
 
 sealed class AcceptingScrobbleProvider : IScrobbleProvider

@@ -151,7 +151,8 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         ProviderActionState outcome,
         string reasonCode,
         DateTimeOffset completedUtc,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        TimeSpan? retryAfter = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
         ArgumentException.ThrowIfNullOrWhiteSpace(reasonCode);
@@ -161,7 +162,10 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         }
 
         var completed = completedUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
-        var retryDue = completedUtc.Add(RetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        var effectiveRetryDelay = retryAfter is { } requestedDelay && requestedDelay > TimeSpan.Zero
+            ? requestedDelay
+            : RetryDelay;
+        var retryDue = completedUtc.Add(effectiveRetryDelay).UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var command = connection.CreateCommand();

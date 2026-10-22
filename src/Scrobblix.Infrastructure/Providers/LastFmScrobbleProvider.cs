@@ -37,10 +37,12 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             if (!response.IsSuccessStatusCode)
             {
                 // A response without a documented Last.fm API result is ambiguous: do not blindly resend it.
-                return new(false, response.StatusCode == HttpStatusCode.TooManyRequests
+                var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
+                return new(false, rateLimited
                     ? ReasonCodes.Provider.RateLimited
                     : ReasonCodes.Provider.SubmissionOutcomeUnknown,
-                    response.StatusCode == HttpStatusCode.TooManyRequests);
+                    rateLimited,
+                    rateLimited ? GetRetryAfter(response) : null);
             }
             using var json = JsonDocument.Parse(payload);
             if (json.RootElement.TryGetProperty("error", out var error))
@@ -79,7 +81,12 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         try
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
-            if (!response.IsSuccessStatusCode) return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
+            if (!response.IsSuccessStatusCode)
+            {
+                var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
+                return new(false, rateLimited ? ReasonCodes.Provider.RateLimited : ReasonCodes.Provider.TemporaryUnavailable, true,
+                    rateLimited ? GetRetryAfter(response) : null);
+            }
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
             return json.RootElement.TryGetProperty("error", out var error)
                 ? MapError(error.GetInt32())
@@ -119,9 +126,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             if (!response.IsSuccessStatusCode)
             {
-                return new(false, response.StatusCode == HttpStatusCode.TooManyRequests
-                    ? ReasonCodes.Provider.RateLimited
-                    : ReasonCodes.Provider.TemporaryUnavailable, true);
+                var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
+                return new(false, rateLimited ? ReasonCodes.Provider.RateLimited : ReasonCodes.Provider.TemporaryUnavailable, true,
+                    rateLimited ? GetRetryAfter(response) : null);
             }
 
             using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
@@ -141,6 +148,26 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             return new(false, ReasonCodes.Provider.ResponseInvalid, false);
         }
+    }
+
+    private static TimeSpan? GetRetryAfter(HttpResponseMessage response)
+    {
+        var header = response.Headers.RetryAfter;
+        TimeSpan? delay = header?.Delta
+            ?? (header?.Date is { } date ? date - DateTimeOffset.UtcNow : null);
+        if (delay is null)
+        {
+            return null;
+        }
+
+        if (delay.Value <= TimeSpan.Zero)
+        {
+            return TimeSpan.FromSeconds(1);
+        }
+
+        return delay.Value > TimeSpan.FromHours(24)
+            ? TimeSpan.FromHours(24)
+            : delay.Value;
     }
 
     private static string Sign(IReadOnlyDictionary<string, string> parameters, string secret)
