@@ -23,7 +23,7 @@ The last generated aggregate counts (233 files, 226 Markdown documents and appro
 | [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md) | **Code of Conduct.** Scrobblix uses the Contributor Covenant principles: be respectful, assume good intent while requiring technical rigor, reject harassment and discrimination, keep criticism focused on work, and protect... |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | **Contributing to Scrobblix.** Scrobblix accepts bug reports, documentation improvements, test cases, source adapters, browser-site adapters, accessibility fixes, translations, and implementation changes that follow the documented... |
 | [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md) | **Documentation Index.** Repository-wide file catalogue and navigation index. |
-| [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) | **Documentation Status.** This repository is a complete implementation baseline, not a claim that every future product decision is permanently settled. Documents are classified as follows: |
+| [`DOCUMENTATION_STATUS.md`](DOCUMENTATION_STATUS.md) | **Documentation Status.** Separates implementation inventory, exact-commit CI evidence and real-world qualification; points to private-beta readiness and the manual test matrix. |
 | [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md) | **Documentation Validation Report.** Generated static checks, repository counts, and validation limitations. |
 | [`GOVERNANCE.md`](GOVERNANCE.md) | **Governance.** Scrobblix is currently a maintainer-led personal open-source project. |
 | [`LICENSE`](LICENSE) | **LICENSE.** Repository configuration or non-Markdown project file. |
