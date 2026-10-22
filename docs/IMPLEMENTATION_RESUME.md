@@ -45,4 +45,4 @@ Record outcomes in `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`.
 - Live Last.fm delivery requires a dedicated test account and app credentials entered locally.
 - Browser event verification requires actual installed Chrome/Edge/Firefox and their real extension IDs/add-on identity.
 - Public signed distribution requires a publisher identity/certificate or a Microsoft Store identity.
-- Stitch MCP was unavailable during this review; an import brief is not evidence that a Stitch workspace changed.
+- The current `main` design handoff now records a real Stitch workspace revision: [Stitch UI handoff](STITCH_UI_HANDOFF_2026-10-22.md). The draft PR merges that latest mainline Home copy into the delivery-status and Sources changes. Remaining UI work is Windows visual/responsive/accessibility qualification; the Stitch HTML and screenshot exports are references, not shipped assets.
