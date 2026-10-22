@@ -86,3 +86,11 @@ node scripts/validate-browser-manifests.mjs
 ```
 
 Do not put Last.fm API secrets or session keys in source control, logs, screenshots or issue comments.
+
+
+## P0 issue #6 — App disposable-resource ownership (2026-10-22)
+
+- The current `main` implementation in `src/Scrobblix.Desktop/App.xaml.cs` already includes the CA1001 fix: `App` implements `IDisposable`, owns the single-instance semaphore, activation event, listener cancellation source and tray icon, and disposes them on duplicate-instance, window-construction failure and normal close paths. Normal close and explicit disposal share the listener cleanup method.
+- This candidate adds durable source-contract assertions for those paths and manual matrix case `P0-OWN-01`. The physical Windows duplicate-start/close/relaunch scenario is still `NOT RUN`.
+- The first current-main CI attempt built successfully but failed at the domain assertion because the migration test expected four rows while `SqliteDatabase` embeds five migrations (`0001`–`0005`). The test expectation is corrected to five in this candidate. This is a test-count correction, not a database migration change.
+- Candidate commit and matching full Windows workflow: pending. Keep issue #6 open until that exact-head workflow succeeds.

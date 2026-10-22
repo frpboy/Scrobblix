@@ -32,6 +32,7 @@ Fill before testing; do not include secrets.
 | CR-02 | Enable the Browser Companion and reproduce native-host connect attempts while Scrobblix is starting, stopping, or busy processing a message. | No hot loop; I/O retry uses bounded backoff; same-category warnings are throttled and include the suppressed count. Browser support remains optional for desktop Spotify. | NOT RUN | |
 | CR-03 | Restart Scrobblix and the browser/extension after a busy-pipe period. | The listener reconnects and the failure backoff resets after a successful connection; retries do not create a duplicate play or provider action. | NOT RUN | |
 | CR-04 | If the process exits unexpectedly, capture exact app SHA/build, exit code, Windows Application event and timestamp-aligned final 100 sanitized log lines; collect a crash dump only if produced. | A fatal exception or OS-level cause is recorded before root cause is declared; secrets and listening content are redacted from shared evidence. | NOT RUN | |
+| P0-OWN-01 | Launch normally, attempt a second launch, close the running instance, then relaunch. Exercise window-construction failure where feasible. | The second launch signals the first instance and disposes temporary handles; startup failure and normal close stop the listener, dispose the tray icon and synchronization handles, and allow a fresh launch to acquire the gate. | NOT RUN | |
 
 ## A. Spotify desktop playback — run across multiple days
 

@@ -4,6 +4,10 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ## [Unreleased]
 
+### Fixed
+
+- Added lifecycle contract assertions and a real-Windows acceptance case for App-owned single-instance resources. Corrected the database migration assertion to cover all five embedded migrations.
+
 ### Added
 
 - Initial product, engineering, UI/UX, security, testing, operations, and AI-agent documentation baseline.
