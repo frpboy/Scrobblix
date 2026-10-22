@@ -5,8 +5,14 @@
   "description": "Sends supported playback metadata to your local Scrobblix app.",
   "permissions": [
     "nativeMessaging",
-    "storage"
+    "storage",
+    "activeTab",
+    "scripting"
   ],
+  "action": {
+    "default_title": "Scrobblix Browser Companion",
+    "default_popup": "popup.html"
+  },
   "background": {
     "scripts": [
       "dist/service-worker.js"
@@ -22,6 +28,7 @@
   "content_scripts": [
     {
       "matches": [
+        "https://youtube.com/*",
         "https://www.youtube.com/*",
         "https://music.youtube.com/*",
         "https://open.spotify.com/*"
@@ -33,6 +40,9 @@
     }
   ],
   "optional_host_permissions": [
+    "http://*/*",
+    "https://*/*",
+    "https://youtube.com/*",
     "https://www.youtube.com/*",
     "https://music.youtube.com/*",
     "https://open.spotify.com/*"

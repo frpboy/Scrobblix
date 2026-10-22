@@ -1,0 +1,23 @@
+:root { color: #292733; font: 13px/1.4 "Segoe UI", system-ui, sans-serif; background: #fdf7fe; }
+body { margin: 0; min-width: 330px; }
+main { display: grid; gap: 14px; padding: 16px; }
+header { display: grid; gap: 1px; }
+header strong { font-size: 18px; }
+header span, footer { color: #625c71; }
+.status { margin: 0; color: #4e4a58; }
+.status[data-state="connected"] { color: #166534; }
+.status[data-state="unavailable"] { color: #a8364b; }
+section { border-top: 1px solid #d6d0db; padding-top: 12px; }
+h1, h2 { font-size: 13px; margin: 0 0 4px; }
+p { margin: 0 0 10px; overflow-wrap: anywhere; }
+button { border: 0; border-radius: 6px; background: #655789; color: #fff; cursor: pointer; font: inherit; min-height: 34px; padding: 0 12px; }
+button:hover { background: #594b7c; }
+button:focus-visible { outline: 2px solid #655789; outline-offset: 2px; }
+button:disabled { background: #e7e0ec; color: #625c71; cursor: default; }
+.secondary { background: #ece6f0; color: #34313a; justify-self: start; }
+.secondary:hover { background: #e1d9e7; }
+ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
+li { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li button { background: transparent; color: #655789; min-height: 28px; padding: 0; }
+footer { border-top: 1px solid #d6d0db; font-size: 12px; padding-top: 12px; }

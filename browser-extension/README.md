@@ -29,6 +29,12 @@ dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configurat
 
 Restart the browser completely after registration.
 
+## Companion controls
+
+Click the Scrobblix toolbar icon to open the companion panel. It can pause or resume browser tracking, test whether the registered native host replies, and add the current HTTP/HTTPS site. Adding a site requests access only for that site and uses its published media-session or media-element metadata; it does not invent song details. Reload the site once after adding it. Remove a custom site from the same list to revoke the granted permission.
+
+The panel can confirm that the native host is reachable. It cannot claim that the desktop app is running because the native protocol deliberately does not expose that state.
+
 ## Firefox
 
 The Firefox manifest has a stable development add-on ID of `scrobblix@frpboy.in` and uses Manifest V3 background scripts rather than relying on Chrome's service-worker-only field.

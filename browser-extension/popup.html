@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Scrobblix Browser Companion</title>
+    <link rel="stylesheet" href="popup.css">
+  </head>
+  <body>
+    <main>
+      <header><strong>Scrobblix</strong><span>Browser companion</span></header>
+      <p id="native-status" class="status" data-state="checking">Checking native host…</p>
+      <button id="test-connection" class="secondary" type="button">Test connection</button>
+      <section aria-labelledby="current-heading">
+        <h1 id="current-heading">Current site</h1>
+        <p id="current-site">Checking this tab…</p>
+        <button id="track-site" type="button">Track this site</button>
+      </section>
+      <button id="pause" class="secondary" type="button">Pause tracking</button>
+      <section aria-labelledby="sites-heading">
+        <h2 id="sites-heading">Your added sites</h2>
+        <ul id="custom-sites"></ul>
+      </section>
+      <footer>Supported by default: YouTube, YouTube Music, Spotify.</footer>
+    </main>
+    <script type="module" src="dist/popup.js"></script>
+  </body>
+</html>
