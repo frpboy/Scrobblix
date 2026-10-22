@@ -165,8 +165,10 @@ public sealed partial class MainWindow : Window
         CompactNavigationToggleButton.IsEnabled = !_isWidthConstrained;
         AppNavigationView.CompactPaneLength = 64;
         AppNavigationView.OpenPaneLength = 216;
-        // LeftMinimal renders only each navigation glyph, avoiding a collapsed pane
-        // that reserves space for labels but leaves the icons visually absent.
+        // Use a dedicated, ordinary button rail in compact mode so every destination
+        // remains visible, clickable, keyboard accessible, and independently tooltipped.
+        AppNavigationView.Visibility = compact ? Visibility.Collapsed : Visibility.Visible;
+        CompactNavigationButtons.Visibility = compact ? Visibility.Visible : Visibility.Collapsed;
         AppNavigationView.PaneDisplayMode = compact ? NavigationViewPaneDisplayMode.LeftCompact : NavigationViewPaneDisplayMode.Left;
         AppNavigationView.IsPaneOpen = !compact;
         foreach (var item in AppNavigationView.MenuItems.OfType<NavigationViewItem>())
@@ -240,10 +242,26 @@ public sealed partial class MainWindow : Window
     private void RailAttentionButton_Click(object sender, RoutedEventArgs args) => SelectDestination("queue");
     private void OpenSourcesButton_Click(object sender, RoutedEventArgs args) => SelectDestination("sources");
     private void OpenDiagnosticsButton_Click(object sender, RoutedEventArgs args) => SelectDestination("diagnostics");
+
+    private void CompactNavigationItem_Click(object sender, RoutedEventArgs args)
+    {
+        if (sender is Button { Tag: string destination })
+        {
+            SelectDestination(destination);
+        }
+    }
+
     private void SelectDestination(string destination)
     {
-        var selected = AppNavigationView.MenuItems.OfType<NavigationViewItem>().FirstOrDefault(item => string.Equals(item.Tag as string, destination, StringComparison.Ordinal));
-        if (selected is not null) AppNavigationView.SelectedItem = selected;
+        var selected = AppNavigationView.MenuItems.OfType<NavigationViewItem>()
+            .FirstOrDefault(item => string.Equals(item.Tag as string, destination, StringComparison.Ordinal));
+        if (selected is not null && !ReferenceEquals(AppNavigationView.SelectedItem, selected))
+        {
+            AppNavigationView.SelectedItem = selected;
+        }
+
+        // Also switch views directly so compact buttons work even when NavigationView is hidden.
+        ShowDestination(destination);
     }
 
     private void UpdateRailAttention()
@@ -848,19 +866,8 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args)
-    {
-        var settingsItem = AppNavigationView.MenuItems
-            .OfType<NavigationViewItem>()
-            .FirstOrDefault(item => string.Equals(item.Tag as string, "settings", StringComparison.Ordinal));
-        if (settingsItem is not null)
-        {
-            AppNavigationView.SelectedItem = settingsItem;
-            return;
-        }
-        HomeView.Visibility = Visibility.Collapsed;
-        SettingsView.Visibility = Visibility.Visible;
-    }
+    private void OpenLastFmSettingsButton_Click(object sender, RoutedEventArgs args) =>
+        SelectDestination("settings");
 
     private async void SaveLastFmCredentialsButton_Click(object sender, RoutedEventArgs args)
     {
@@ -888,6 +895,11 @@ public sealed partial class MainWindow : Window
     private void Navigation_SelectionChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
     {
         var destination = (args.SelectedItem as NavigationViewItem)?.Tag as string ?? "home";
+        ShowDestination(destination);
+    }
+
+    private void ShowDestination(string destination)
+    {
         Title = destination switch { "home" => "Scrobblix · Listening", "history" => "Scrobblix · History", "statistics" => "Scrobblix · Statistics", "loved" => "Scrobblix · Loved", "queue" => "Scrobblix · Queue", "sources" => "Scrobblix · Sources", "diagnostics" => "Scrobblix · Diagnostics", "settings" => "Scrobblix · Settings", _ => "Scrobblix" };
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
