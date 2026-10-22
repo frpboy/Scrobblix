@@ -95,7 +95,7 @@ States what is absent, why that may be normal, and the next relevant action. Avo
 ## Space-efficient desktop layout (2026-10-22)
 
 - Keep the same WinUI/Fluent appearance, existing icon-and-label navigation, subdued borders, and tonal-lavender mark. Density changes should not introduce a different visual language.
-- Core page content uses a 24 px outer inset and 16 px rhythm between major sections. Secondary bordered groups use 16 px padding; the primary Now Playing card keeps slightly more breathing room.
+- Core page content uses a 24 px outer inset and 16 px rhythm between major sections. Each page root stretches to the available workspace up to its readable max-width, so cards and grids do not leave a blank right column at normal window sizes. Secondary bordered groups use 16 px padding; the primary Now Playing card keeps slightly more breathing room.
 - The eligibility inset and repeated controls use tighter internal spacing. Tracking, Love, and Unlove share one row when the available content width permits.
 - Routine playback/startup status does not keep a green InfoBar row open when the Now Playing surface already communicates it. The banner is reserved for warning/error attention and explicit tracking pause/resume feedback.
 - Do not fill empty pages with decorative tiles or charts. Empty states can remain quiet; space efficiency means removing redundant gaps and duplicate status, not adding content for its own sake.
