@@ -499,6 +499,46 @@ public partial class App : Microsoft.UI.Xaml.Application
         }
     }
 
+    private static async Task QueueNowPlayingIfConnectedAsync(
+        string connectionString,
+        string playId,
+        ScrobblixFileLogger logger,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var account = await new SqliteProviderAccountStore(connectionString)
+                .GetConnectedAsync("lastfm", cancellationToken);
+            if (account is null)
+            {
+                return;
+            }
+
+            var sessionKey = await new WindowsCredentialStore()
+                .GetAsync(account.CredentialResource, account.UserName, cancellationToken);
+            if (string.IsNullOrWhiteSpace(sessionKey))
+            {
+                logger.Warning("LASTFM_NOW_PLAYING",
+                    $"Skipped now-playing update because the connected account has no local session credential; account={account.AccountId}; play_id={playId}.");
+                return;
+            }
+
+            var queued = await new SqliteNowPlayingActionWriter(connectionString).TryQueueAsync(
+                playId, "lastfm", account.AccountId, DateTimeOffset.UtcNow, cancellationToken);
+            logger.Info("LASTFM_NOW_PLAYING", queued
+                ? $"Queued current playback for Last.fm; account={account.AccountId}; play_id={playId}."
+                : $"No now-playing action was created because this play already has an action or required metadata is unavailable; account={account.AccountId}; play_id={playId}.");
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception exception)
+        {
+            logger.Error("LASTFM_NOW_PLAYING",
+                $"Could not queue now-playing metadata; play_id={playId}; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+    }
+
     private static async Task TrackUntilClosedAsync(
         GsmTcPlaybackObservationSource source,
         string connectionString,
@@ -657,6 +697,14 @@ public partial class App : Microsoft.UI.Xaml.Application
 
             var status = await tracking.ObserveAsync(observation, trackingClock.ElapsedMilliseconds, cancellationToken);
             var decision = status.Decision;
+            if (status.DidStartPlay
+                && observation.PlaybackState == PlayState.Playing
+                && !string.IsNullOrWhiteSpace(status.PlayId)
+                && !string.IsNullOrWhiteSpace(observation.Artist)
+                && !string.IsNullOrWhiteSpace(observation.Title))
+            {
+                await QueueNowPlayingIfConnectedAsync(connectionString, status.PlayId, logger, cancellationToken);
+            }
             logger.Info("PLAYBACK_TRACKING",
                 $"Processed {(status.DidStartPlay ? "new session" : "update")}; play_id={status.PlayId ?? "(none)"}; source={observation.SourceName}; artist={observation.Artist ?? "(missing)"}; title={observation.Title ?? "(missing)"}; confirmed_ms={status.ConfirmedPlayedMilliseconds}; threshold_ms={decision.ThresholdMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? "(unknown)"}; eligible={decision.IsEligible}; newly_eligible={status.DidPersistEligiblePlay}.");
 
