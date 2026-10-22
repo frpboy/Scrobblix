@@ -12,6 +12,7 @@ namespace Scrobblix.Desktop;
 internal sealed class TrayIconService : IDisposable
 {
     private const uint WmSize = 0x0005;
+    private static readonly uint WmTaskbarCreated = RegisterWindowMessage("TaskbarCreated");
     private const uint WmApp = 0x8000;
     private const uint TrayCallbackMessage = WmApp + 0x31;
     private const uint SizeMinimized = 1;
@@ -38,14 +39,16 @@ internal sealed class TrayIconService : IDisposable
     private readonly Window _window;
     private readonly IntPtr _windowHandle;
     private readonly SubclassProcedure _subclassProcedure;
+    private readonly Action<string>? _log;
     private readonly NotifyIconData _iconData;
     private bool _iconInstalled;
     private bool _disposed;
     private bool _restoring;
 
-    public TrayIconService(Window window)
+    public TrayIconService(Window window, Action<string>? log = null)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
+        _log = log;
         _windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _subclassProcedure = WindowSubclass;
         if (!SetWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId), UIntPtr.Zero))
@@ -68,14 +71,12 @@ internal sealed class TrayIconService : IDisposable
             InfoTitle = string.Empty,
         };
 
-        var iconData = _iconData;
-        if (!Shell_NotifyIcon(NimAdd, ref iconData))
+        if (!TryInstallIcon())
         {
+            var error = Marshal.GetLastWin32Error();
             RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
-            throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not add the Scrobblix notification-area icon.");
+            throw new Win32Exception(error, "Windows could not add the Scrobblix notification-area icon.");
         }
-
-        _iconInstalled = true;
     }
 
     private IntPtr WindowSubclass(
@@ -86,6 +87,23 @@ internal sealed class TrayIconService : IDisposable
         UIntPtr subclassId,
         UIntPtr referenceData)
     {
+        if (message == WmTaskbarCreated)
+        {
+            // Explorer owns the notification area. Its restart clears every registered icon,
+            // so add ours again without restarting the playback engine or desktop window.
+            _iconInstalled = false;
+            if (TryInstallIcon())
+            {
+                _log?.Invoke("Notification-area icon was restored after Windows Explorer restarted.");
+            }
+            else
+            {
+                _log?.Invoke($"Could not restore notification-area icon after Explorer restarted; win32_error={Marshal.GetLastWin32Error()}.");
+            }
+
+            return DefSubclassProc(windowHandle, message, wParam, lParam);
+        }
+
         if (message == WmSize && unchecked((uint)wParam.ToInt64()) == SizeMinimized)
         {
             _restoring = false;
@@ -110,6 +128,19 @@ internal sealed class TrayIconService : IDisposable
     }
 
     public void RestoreFromNotification() => RestoreWindow();
+
+    private bool TryInstallIcon()
+    {
+        var iconData = _iconData;
+        if (!Shell_NotifyIcon(NimAdd, ref iconData))
+        {
+            _iconInstalled = false;
+            return false;
+        }
+
+        _iconInstalled = true;
+        return true;
+    }
 
     private void RestoreWindow()
     {
@@ -214,6 +245,9 @@ internal sealed class TrayIconService : IDisposable
         IntPtr lParam,
         UIntPtr subclassId,
         UIntPtr referenceData);
+
+    [DllImport("user32.dll", EntryPoint = "RegisterWindowMessageW", CharSet = CharSet.Unicode, SetLastError = true)]
+    private static extern uint RegisterWindowMessage(string message);
 
     [DllImport("shell32.dll", EntryPoint = "Shell_NotifyIconW", SetLastError = true)]
     [return: MarshalAs(UnmanagedType.Bool)]
