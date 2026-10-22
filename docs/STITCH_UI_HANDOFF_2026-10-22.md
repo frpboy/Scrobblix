@@ -24,12 +24,21 @@ This distinction is essential: media position must never be presented as confirm
 | New Home handoff screen | `projects/7036359710720803750/screens/39ba08667751486282f9c8a87b038bd4` | Live listening dashboard reference |
 | New Home HTML export | `projects/7036359710720803750/files/be856039ee464baba56b16a215e90864` | Stitch-generated implementation artifact |
 | New Home screenshot export | `projects/7036359710720803750/files/d1b7873b119942f49ce4b930a7221ecf` | Stitch-rendered visual artifact |
+| Lightweight Home revision | `projects/7036359710720803750/screens/a9e339a2d0484a8983da6045707dd37c` | Simplified current-track, provider, and recent-activity handoff |
+| Lightweight Home HTML export | `projects/7036359710720803750/files/358330d44d4f4f229af3d696b7bb9110` | Stitch-generated lightweight implementation artifact |
+| Lightweight Home screenshot export | `projects/7036359710720803750/files/095da0ea53c1453d80f9fdb71b2f08f6` | Stitch-rendered lightweight visual artifact |
 
 The generated HTML and screenshot remain attached to the private Stitch project. They are design handoff artifacts, not shipped application assets; production UI continues to use native WinUI controls and live data only.
 
 ## Implemented desktop alignment
 
 `src/Scrobblix.Desktop/MainWindow.xaml` now labels the Home workspace **Live listening** and explicitly states that playback, confirmed listening, eligibility, and delivery are separate. This mirrors the generated hierarchy while keeping the existing bindings, tracking logic, queue logic, and Last.fm semantics unchanged.
+
+## Lightweight revision
+
+The owner requested a simpler, lighter UI. Stitch was updated to reduce the Home screen to a compact tracking status strip, one Now listening card, one Last.fm delivery line, a concise Today summary, and three recent tracks. Sources was reduced to a plain list of source names, states, short explanations, and only relevant actions.
+
+The native Home copy now follows that language: **Listening**, one concise explanation, **Love** / **Remove love**, and **Recent tracks**. Existing History, Statistics, Queue, Sources, Diagnostics, and Settings pages remain available rather than duplicating their controls or dense metrics on Home.
 
 ## Implementation guidance for later UI work
 
