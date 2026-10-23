@@ -257,7 +257,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 foreach (var action in retryable)
                 {
                     applicationCancellation.Token.ThrowIfCancellationRequested();
-                    if (await trayRetryStore.RetryNowAsync(
+                    if (await trayRetryStore.RetryExhaustedNowAsync(
                         action.ActionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
                     {
                         scheduled++;

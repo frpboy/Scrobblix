@@ -21,7 +21,7 @@ Menu entries:
 - Playback status uses the displayed observation only when artist/title metadata is present and playback is Playing or Paused. Long menu strings are truncated; clipboard copy retains the full plain-text `Artist — Track` representation. No credentials or session keys are copied.
 - Tracking controls call the same existing tracking-mode transition and preserve local history/eligible queued work.
 - Love/Unlove uses the existing application event and durable queue writer. Pending and in-flight actions block repeated current-track requests; the menu status distinguishes a queued request from provider acceptance and unknown outcomes.
-- The retry query returns only `provider=lastfm`, `action_type=Scrobble`, `state=RetryExhausted`. It excludes scheduled retries, accepted records, Love/Unlove actions, other providers, and `SubmissionOutcomeUnknown`; the existing atomic `RetryNowAsync` store transition performs the user-requested retry.
+- The retry query returns only `provider=lastfm`, `action_type=Scrobble`, `state=RetryExhausted`. Its dedicated conditional mutation rechecks provider, action type, and `RetryExhausted` atomically, so a candidate that becomes `SubmissionOutcomeUnknown` between list and action cannot bypass the existing user-confirmation flow.
 - Open Log Folder uses the configured current log directory and `ProcessStartInfo` with `UseShellExecute`; absent paths and launch failures are handled without crashing.
 - The existing window close handler remains the single shutdown pathway; shutdown state guards tray-originated commands and the native menu/subclass/icon are disposed by the existing lifecycle.
 

@@ -745,6 +745,44 @@ try
         && trayRetryCandidates[0].State == ProviderActionState.RetryExhausted
         && trayRetryCandidates[0].Provider == "lastfm",
         "Tray retry candidates include only exhausted Last.fm scrobbles, excluding accepted, uncertain, scheduled, Love/Unlove, and other-provider actions.");
+
+    var candidateAction = trayRetryCandidates[0];
+    var conditionalRetryStore = new SqliteProviderActionStore(trayQueueTestConnectionString);
+    await using (var retryRaceConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await retryRaceConnection.OpenAsync(CancellationToken.None);
+        await using var becomeUncertain = retryRaceConnection.CreateCommand();
+        becomeUncertain.CommandText = "UPDATE provider_actions SET state = $unknown WHERE action_id = $actionId;";
+        becomeUncertain.Parameters.AddWithValue("$unknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        becomeUncertain.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(await becomeUncertain.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            "The queued candidate can change to an ambiguous outcome between list and action.");
+    }
+
+    Assert(!await conditionalRetryStore.RetryExhaustedNowAsync(candidateAction.ActionId, DateTimeOffset.UtcNow, CancellationToken.None),
+        "Tray retry refuses a stale retry-exhausted candidate once the provider outcome becomes unknown.");
+    await using (var retryStateConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await retryStateConnection.OpenAsync(CancellationToken.None);
+        await using var restoreRetryExhausted = retryStateConnection.CreateCommand();
+        restoreRetryExhausted.CommandText = "UPDATE provider_actions SET state = $retryExhausted WHERE action_id = $actionId;";
+        restoreRetryExhausted.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        restoreRetryExhausted.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(await restoreRetryExhausted.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            "The deterministic fixture can restore its retry-exhausted candidate after testing the race.");
+    }
+
+    Assert(await conditionalRetryStore.RetryExhaustedNowAsync(candidateAction.ActionId, DateTimeOffset.UtcNow, CancellationToken.None),
+        "A still-retry-exhausted Last.fm scrobble can be explicitly retried.");
+    await using (var finalRetryStateConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await finalRetryStateConnection.OpenAsync(CancellationToken.None);
+        await using var finalState = finalRetryStateConnection.CreateCommand();
+        finalState.CommandText = "SELECT state FROM provider_actions WHERE action_id = $actionId;";
+        finalState.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(Convert.ToInt32(await finalState.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) == (int)ProviderActionState.Pending,
+            "Successful tray retry only transitions the still-eligible action to pending.");
+    }
 }
 finally
 {
