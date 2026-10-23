@@ -65,7 +65,7 @@ requireCondition(serviceWorker.includes('"CONNECTION_TIMEOUT"'), "Connection dia
 requireCondition(serviceWorker.includes('candidate.messageId === messageId'), "Connection success must validate the reply message ID.");
 requireCondition(serviceWorker.includes('candidate.protocolVersion === 1'), "Connection success must validate the protocol version.");
 requireCondition(serviceWorker.includes('candidate.type === expectedType'), "Connection success must validate the exact pong response type.");
-requireCondition(serviceWorker.includes("port.error?.message"), "Firefox native-host failures must read the native port error when available.");
+requireCondition(serviceWorker.includes("firefoxPortError"), "Firefox native-host failures must read the native port error when available.");
 requireCondition(serviceWorker.includes("forbidden|access.*denied"), "Chromium forbidden-host failures must classify as extension authorization errors.");
 requireCondition(serviceWorker.includes("no such native application"), "Firefox missing-host failures must classify as host registration errors.");
 requireCondition(serviceWorker.includes("failed to start native messaging host"), "Chromium host launch failures must provide startup recovery guidance.");
