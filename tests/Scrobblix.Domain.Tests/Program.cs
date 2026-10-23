@@ -33,6 +33,42 @@ Assert(PlaybackArtworkPolicy.IsLikelyBrowserApplication("Microsoft.MicrosoftEdge
 Assert(!PlaybackArtworkPolicy.IsLikelyBrowserApplication("Spotify.exe"), "Native music app artwork remains eligible for GSMTC caching.");
 Assert(!PlaybackArtworkPolicy.IsLikelyBrowserApplication(null), "Missing application IDs do not trigger browser-specific behavior.");
 
+Assert(SafePublicArtworkConnector.IsPublicUnicastAddress(IPAddress.Parse("1.1.1.1")),
+    "Globally routable IPv4 addresses remain eligible for artwork fetching.");
+Assert(SafePublicArtworkConnector.IsPublicUnicastAddress(IPAddress.Parse("2001:4860:4860::8888")),
+    "Globally routable IPv6 addresses remain eligible for artwork fetching.");
+foreach (var nonPublicAddress in new[]
+{
+    "0.0.0.1", "10.0.0.1", "100.64.0.1", "127.0.0.1", "169.254.169.254",
+    "172.16.0.1", "192.0.2.1", "192.168.1.1", "198.18.0.1", "203.0.113.1",
+    "224.0.0.1", "240.0.0.1", "::", "::1", "fc00::1", "fe80::1",
+    "2001:db8::1", "2002:7f00:1::", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
+})
+{
+    Assert(!SafePublicArtworkConnector.IsPublicUnicastAddress(IPAddress.Parse(nonPublicAddress)),
+        $"Non-public address {nonPublicAddress} is rejected for artwork fetching.");
+}
+
+var privateDnsResolutionRejected = false;
+var privateDnsResolverCalled = false;
+try
+{
+    await SafePublicArtworkConnector.ConnectAsync(
+        new DnsEndPoint("artwork-controlled.example", 443),
+        (host, _) =>
+        {
+            privateDnsResolverCalled = host == "artwork-controlled.example";
+            return Task.FromResult(new[] { IPAddress.Loopback });
+        },
+        CancellationToken.None);
+}
+catch (HttpRequestException)
+{
+    privateDnsResolutionRejected = true;
+}
+Assert(privateDnsResolverCalled && privateDnsResolutionRejected,
+    "A hostname resolving to loopback is rejected before any socket connection, preventing artwork DNS-rebinding bypass.");
+
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
