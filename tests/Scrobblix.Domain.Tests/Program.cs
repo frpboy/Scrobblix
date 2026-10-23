@@ -590,6 +590,20 @@ Assert(await ingestion.IngestAsync(observationWithoutEventId, CancellationToken.
     "A fresh observation with no event ID is accepted.");
 Assert(await ingestion.IngestAsync(observationWithoutEventId, CancellationToken.None) == ObservationIngestionResult.Duplicate,
     "The database deduplicates a repeated observation even when event_id is NULL.");
+var observationWithoutSessionOrEventId = observation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-null-session", null, 44, null),
+};
+Assert(await ingestion.IngestAsync(observationWithoutSessionOrEventId, CancellationToken.None) == ObservationIngestionResult.Accepted,
+    "A fresh observation without session or event IDs is accepted.");
+Assert(await ingestion.IngestAsync(observationWithoutSessionOrEventId, CancellationToken.None) == ObservationIngestionResult.Duplicate,
+    "The database deduplicates a repeated observation when both optional identity components are NULL.");
+var observationAfterCollectorRestart = observationWithoutEventId with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-new-collector-instance", "session-null", 43, null),
+};
+Assert(await ingestion.IngestAsync(observationAfterCollectorRestart, CancellationToken.None) == ObservationIngestionResult.Accepted,
+    "A fresh collector instance can reuse its own sequence numbers without colliding with an earlier collector.");
 var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
 
