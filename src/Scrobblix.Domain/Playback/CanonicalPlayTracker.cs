@@ -20,7 +20,8 @@ public sealed class CanonicalPlayTracker
         {
             _state.TransitionTo(PlayState.Playing);
         }
-        else if (_state.Current == PlayState.Paused && observation.PlaybackState == PlayState.Playing)
+        else if ((_state.Current is PlayState.Paused or PlayState.Unknown)
+            && observation.PlaybackState == PlayState.Playing)
         {
             _state.TransitionTo(PlayState.Playing);
         }
@@ -39,6 +40,11 @@ public sealed class CanonicalPlayTracker
         if (_state.Current == PlayState.Playing && observation.PlaybackState == PlayState.Paused)
         {
             _state.TransitionTo(PlayState.Paused);
+        }
+        else if (_state.Current == PlayState.Playing
+            && observation.PlaybackState is PlayState.Unknown or PlayState.Ended)
+        {
+            _state.TransitionTo(observation.PlaybackState);
         }
 
         return decision;

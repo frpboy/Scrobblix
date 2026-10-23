@@ -883,6 +883,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
+        long? sourceUnavailableSince = null;
         try
         {
             while (!cancellationToken.IsCancellationRequested)
@@ -891,6 +892,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 var observation = await source.GetCurrentAsync(cancellationToken);
                 if (observation is not null)
                 {
+                    sourceUnavailableSince = null;
                     await ProcessObservationAsync(
                         observation, observationIngestion, tracking, trackingClock, sourceArbitrator,
                         observationGate, metadataEnricher, localPlayStore, metadataStarted,
@@ -898,6 +900,19 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 }
                 else
                 {
+                    var monotonicNow = trackingClock.ElapsedMilliseconds;
+                    sourceUnavailableSince ??= monotonicNow;
+                    if (monotonicNow - sourceUnavailableSince.Value >= TimeSpan.FromSeconds(6).TotalMilliseconds)
+                    {
+                        var lostSource = await tracking.ObserveSourceUnavailableAsync("gsmtc", cancellationToken);
+                        if (lostSource is { } gap)
+                        {
+                            window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(gap.Observation, gap.Status));
+                            logger.Warning("PLAYBACK_SOURCE",
+                                $"Windows media session unavailable; confirmed playback was stopped at the last positive sample; play_id={gap.Status.PlayId ?? "(none)"}; confirmed_ms={gap.Status.ConfirmedPlayedMilliseconds}.");
+                        }
+                    }
+
                     logger.Info("PLAYBACK_SOURCE", "Windows media controls returned no current session.");
                 }
             }
