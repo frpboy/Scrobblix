@@ -183,17 +183,17 @@ internal sealed class TrayIconService : IDisposable
             if (queueMenu != IntPtr.Zero)
             {
                 AppendStatusItem(queueMenu, status.QueueLabel);
-                if (status.RetryableFailedScrobbleCount > 0)
+                if (status.RetryableFailedScrobbleCount is > 0)
                 {
                     AppendItem(
                         queueMenu,
                         RetryFailedCommand,
-                        $"Retry Failed Scrobbles ({status.RetryableFailedScrobbleCount:N0})",
+                        $"Retry Failed Scrobbles ({status.RetryableFailedScrobbleCount.Value:N0})",
                         !status.CanRetryFailedScrobbles);
                 }
                 else
                 {
-                    AppendItem(queueMenu, 0, "No retryable failed scrobbles", disabled: true);
+                    AppendItem(queueMenu, 0, status.QueueRetryStatusLabel, disabled: true);
                 }
 
                 AppendItem(queueMenu, OpenQueueCommand, "Open Queue", status.IsClosed);
