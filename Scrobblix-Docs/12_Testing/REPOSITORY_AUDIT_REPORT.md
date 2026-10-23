@@ -87,23 +87,18 @@ The register at `REPOSITORY_AUDIT_REGISTER.json` contains the stable audit IDs, 
 
 ## Validation and evidence
 
-### Verified on the baseline SHA
+### Current mainline and exact-head evidence
 
-Windows CI run [39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) succeeded on `0436ed83762971ef75dae5be1ffd15bab7e1eae5`. That workflow includes the .NET build, desktop UI contract checks, domain/Infrastructure assertions, browser TypeScript/build/security/manifest checks, PowerShell parsing, Windows/native-host publish and artifact assembly/upload.
+The baseline workflow [39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) passed on audit-start SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5`. The current integrated mainline at `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed its full Windows CI workflow [39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
 
-### Required for this audit branch
+Exact-head CI evidence for the recent additional remediations:
+- PR #33: [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307) passed on `56609db5f5076695c5da9f3c9288b940faecab2c`.
+- PR #35: [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043) passed on `94038c83a304b3ba84f31123ab01f586bea809e6`.
+- PR #37: [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712) passed on `4428685963a695c35be543128ec7edb31b2535af`.
 
-The following must run on the **exact final audit PR head** after all branch changes:
-- Windows .NET Release build with warnings-as-errors.
-- Desktop UI contract script and the full domain/Infrastructure assertion executable.
-- Account/provider isolation tests against a temporary SQLite database.
-- Public/private IPv4/IPv6 and IPv4-mapped address checks plus a controlled DNS resolver test that proves rejection occurs before a socket is opened.
-- Browser TypeScript/build/security assertions and both manifest validators.
-- PowerShell parser, Windows publish, NativeHost publish, artifact assembly and upload.
-- Full diff and secret/artifact review.
+The configured workflow includes .NET Release build with warnings-as-errors, desktop UI contract assertions, release workflow contract checks, domain/Infrastructure regression assertions, browser TypeScript/check/build and security tests, Chromium/Firefox manifest validation, PowerShell parser checks, Windows desktop and NativeHost publishing, test-bundle assembly and artifact upload.
 
-No passing result is reported for these new changes until their exact-head run is complete. No local command result is claimed: the local environment could not clone from GitHub, and .NET/PowerShell were unavailable.
-
+No local .NET or PowerShell command result is claimed: cloning from GitHub was blocked by DNS resolution in this environment, and the prior tool checkpoint reports .NET/PowerShell unavailable. The completed GitHub Actions results above are the actual automated validation evidence.
 ## Real-world qualification remains outstanding
 
 `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md` remains the authoritative manual record. It explicitly keeps installed-browser, Last.fm reconciliation, long-run playback, tray/accessibility, restore/upgrade/rollback/uninstall and private-beta gate rows at `NOT RUN`.
@@ -119,13 +114,13 @@ Record `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN` only according to the test actual
 
 ## Current remaining risks
 
-- The account/provider scoping fix (#30) and the connection-pinned artwork fix (#32) need exact-head CI and review before merge.
+- Source defects #30, #32, #34 and #36 are fixed and merged through PRs #33, #35 and #37; their exact-head CI and the current-main integrated run passed.
 - The artwork UI correction merged as [PR #31](https://github.com/frpboy/Scrobblix/pull/31) at main commit `609d418580cb902d0ba14e949b9b41d756616932`; its merge has its own passing workflow, and its MainWindow changes were preserved when the audit branch was restarted.
-- The release-checkpoint refresh PR [#29](https://github.com/frpboy/Scrobblix/pull/29) was open at audit time. Track its review comments, including markdown formatting, and do not overwrite that branch.
+- This branch refreshes the report, register, checkpoint and release handoff because later merges made the earlier PR #29 checkpoint stale again. Issue #27 remains open until this refresh merges and current-head CI passes.
 - The real Windows/provider/manual matrix is not executed in this environment, and branch-protection details are not available through the current GitHub integration.
 
 ## Release recommendation
 
-The baseline source and CI were in a good automated state, but **this audit candidate is not ready to merge until exact-head CI passes**, and **Scrobblix is not ready for private beta until issue #17's real-world release gates have been executed and resolved**.
+The merged source fixes and the current-main integrated build passed automated Windows CI. This documentation refresh still needs exact-head CI and review. **Scrobblix is not ready for private beta until issue #17's real-world release gates have been executed and resolved.**
 
 See `REPOSITORY_AUDIT_CHECKPOINT.md` for the exact continuation state and next actions.
