@@ -31,6 +31,9 @@ Already merged fixes include:
 - Fail-closed SQLite restore swap with WAL/SHM rollback set, recoverable rollback artifacts, and Windows regression tests (PR #28).
 - Preserve enriched artwork across repeated current-track polls and avoid unnecessary bitmap reloads (PR #31).
 - Scope provider-action claims to exact provider/account identity; pin artwork connections to validated public DNS addresses, with account-isolation and network-boundary regressions (PR #33; issues #30 and #32 closed).
+- PR #35: neutralize additional CSV spreadsheet-formula prefixes, including line-feed and full-width forms; issue #34 closed.
+- PR #37: permit all persisted provider-action completion states in `ProviderActionLifecycle`; issue #36 closed.
+- PR #40: stop confirmed-time accrual across a sustained missing GSMTC session and preserve browser-source playback; issue #39 closed, exact-head CI passed in run 39903263712.
 
 Architecture constraints:
 - Desktop GSMTC must work without the browser extension; the extension is optional.
