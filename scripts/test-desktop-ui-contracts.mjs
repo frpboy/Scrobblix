@@ -135,6 +135,8 @@ const trayMain = read("src/Scrobblix.Desktop/TrayIconService.cs");
 const queueReader = read("src/Scrobblix.Infrastructure/Storage/SqliteQueueReader.cs");
 const manualMatrix = read("Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md");
 const trayImplementationDoc = read("docs/TRAY_CONTEXT_MENU_IMPLEMENTATION.md");
+const actionStore = read("src/Scrobblix.Infrastructure/Storage/SqliteProviderActionStore.cs");
+const queueActionSummary = read("src/Scrobblix.Application/ReadModels/QueueActionSummary.cs");
 
 for (const label of [
   "Scrobblix — Running", "Open Scrobblix", "Pause Tracking", "Resume Tracking",
@@ -165,6 +167,12 @@ assert.ok(code.includes("_queueSummary.AcceptedCount") && code.includes("_queueS
 assert.ok(code.includes("Clipboard.SetContent(package)") && code.includes('ReportTrayActionFailure("Copy Track Details"'), "Copy Track Details must use the clipboard and handle failures.");
 assert.ok(code.includes("public void OpenLogFolderFromTray()") && code.includes("UseShellExecute = true") && code.includes('ReportTrayActionFailure("Open Log Folder"'), "Log Folder must use the configured path and guard launch failures.");
 assert.ok(app.includes("_window?.MarkShutdownStarted();") && app.includes("TrayRetryFailedScrobblesRequested += async"), "Tray actions must be shutdown-aware and wired from the application composition root.");
+assert.ok(app.includes("_window.SetTrackingToggleReady();") && code.includes("private bool _trackingToggleReady;") && code.includes("!_trackingToggleReady"), "Tracking controls must stay disabled until startup has installed and started the tracking listeners.");
+assert.ok(trayMain.includes("_window.TrayCanToggleTracking") && trayMain.includes("case ToggleTrackingCommand:"), "The tray tracking toggle must be disabled during startup and invoke the existing state transition.");
+assert.ok(app.includes("RetryExhaustedNowAsync(") && actionStore.includes("AND state = $retryExhausted") && actionStore.includes("AND action_type = $scrobble") && actionStore.includes("AND provider = $provider"), "Tray retries must atomically recheck state, action type, and provider at mutation time.");
+assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry refuses a stale retry-exhausted candidate"), "The retry race regression test must remain covered.");
+assert.ok(queueActionSummary.includes("public string? AccountId { get; init; }") && queueReader.includes("a.account_id"), "The recent queue read model must carry provider account identity.");
+assert.ok(code.includes("_lastFmAccountId") && code.includes("string.Equals(action.AccountId, _lastFmAccountId, StringComparison.Ordinal)") && app.includes("SetLastFmConnected(account.UserName, account.AccountId)"), "Current-track Love/Unlove state must be scoped to the actual connected Last.fm account.");
 assert.ok(queueReader.includes('command.Parameters.AddWithValue("$provider", "lastfm")') && queueReader.includes("a.action_type = $scrobble") && queueReader.includes("a.state = $retryExhausted"), "Tray retry read model must select only retry-exhausted Last.fm scrobbles.");
 assert.ok(!queueReader.includes("a.state IN ($retryScheduled") && !queueReader.includes("state = $outcomeUnknown"), "Tray retry read model must not include scheduled or ambiguous-outcome actions.");
 assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry candidates include only exhausted Last.fm scrobbles"), "The durable queue eligibility regression assertion must remain in the test executable.");

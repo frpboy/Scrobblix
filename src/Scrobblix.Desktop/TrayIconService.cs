@@ -163,7 +163,8 @@ internal sealed class TrayIconService : IDisposable
 
             AppendAction(menu, OpenCommand, "Open Scrobblix");
             AppendAction(menu, ToggleTrackingCommand,
-                _window.TrayTrackingEnabled ? "Pause Tracking" : "Resume Tracking");
+                _window.TrayTrackingEnabled ? "Pause Tracking" : "Resume Tracking",
+                _window.TrayCanToggleTracking);
             AppendSeparator(menu);
 
             var trackMenu = CreatePopupMenu();

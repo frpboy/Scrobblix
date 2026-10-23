@@ -390,6 +390,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 }
             };
             StartTracking();
+            _window.SetTrackingToggleReady();
 
             ConfigureLastFm(connectionString, accountStore, credentialStore, initialApiKey, initialApiSecret, !string.IsNullOrWhiteSpace(storedApiKey) && !string.IsNullOrWhiteSpace(storedApiSecret), metadataEnricher, logger, () => notificationService, applicationCancellation.Token);
         }

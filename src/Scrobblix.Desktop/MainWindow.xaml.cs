@@ -27,6 +27,7 @@ public sealed partial class MainWindow : Window
     private bool _updatingNavigationPreference;
     private bool _currentTrackLoveActionInProgress;
     private bool _isShuttingDown;
+    private bool _trackingToggleReady;
     private string? _lastFmUserName;
     private string? _lastFmAccountId;
     private QueueSummary? _queueSummary;
@@ -72,6 +73,7 @@ public sealed partial class MainWindow : Window
     private string? _logDirectory;
 
     public bool TrayTrackingEnabled => _trackingMode.IsEnabled;
+    public bool TrayCanToggleTracking => _trackingToggleReady && !_isShuttingDown;
     public bool TrayCanCopyCurrentTrackDetails =>
         !_isShuttingDown
         && (_displayedObservation?.PlaybackState is PlayState.Playing or PlayState.Paused)
@@ -200,6 +202,7 @@ public sealed partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        TrackingToggleButton.IsEnabled = false;
         ConfigureInitialWindowSize();
         ApplyBrandAsset();
         RootLayout.ActualThemeChanged += (_, _) => ApplyBrandAsset();
@@ -383,6 +386,13 @@ public sealed partial class MainWindow : Window
         {
             SelectDestination(destination);
         }
+    }
+
+    public void SetTrackingToggleReady()
+    {
+        if (_isShuttingDown) return;
+        _trackingToggleReady = true;
+        TrackingToggleButton.IsEnabled = true;
     }
 
     public void NavigateFromTray(string destination)
@@ -1573,7 +1583,12 @@ public sealed partial class MainWindow : Window
         ToggleTracking();
     }
 
-    public void MarkShutdownStarted() => _isShuttingDown = true;
+    public void MarkShutdownStarted()
+    {
+        _isShuttingDown = true;
+        _trackingToggleReady = false;
+        if (TrackingToggleButton is not null) TrackingToggleButton.IsEnabled = false;
+    }
 
     public void ReportTrayActionFailure(string operation, Exception exception)
     {
@@ -1774,7 +1789,7 @@ public sealed partial class MainWindow : Window
 
     private void ToggleTracking()
     {
-        if (_isShuttingDown || !_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
+        if (_isShuttingDown || !_trackingToggleReady || !_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
         {
             return;
         }
