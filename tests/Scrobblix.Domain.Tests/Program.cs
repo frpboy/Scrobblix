@@ -1191,6 +1191,77 @@ var nowPlayingOnlyToday = await new SqliteHistoryReader(nowPlayingConnectionStri
     .GetTodaySummaryAsync(nowPlayingTime, CancellationToken.None);
 Assert(nowPlayingOnlyToday.AcceptedScrobbleCount == 0,
     "Accepted now-playing updates are not reported as accepted Last.fm scrobbles.");
+// Stale now-playing actions are ephemeral: pending and retry-scheduled records must
+// expire before a worker can claim them after the playback has gone stale.
+var staleQueuedUtc = nowPlayingTime.AddMinutes(-10);
+var stalePendingPlay = historyRecord with
+{
+    PlayId = "nowplaying-stale-pending",
+    FirstObservedUtc = staleQueuedUtc,
+    LastObservedUtc = staleQueuedUtc,
+};
+await nowPlayingPlayStore.UpsertAsync(stalePendingPlay, CancellationToken.None);
+Assert(await nowPlayingWriter.TryQueueAsync(
+    stalePendingPlay.PlayId, "lastfm", "account-stale-pending", staleQueuedUtc, CancellationToken.None),
+    "A stale pending now-playing action can be seeded for expiry testing.");
+
+var staleRetryPlay = historyRecord with
+{
+    PlayId = "nowplaying-stale-retry",
+    FirstObservedUtc = staleQueuedUtc,
+    LastObservedUtc = staleQueuedUtc,
+};
+await nowPlayingPlayStore.UpsertAsync(staleRetryPlay, CancellationToken.None);
+Assert(await nowPlayingWriter.TryQueueAsync(
+    staleRetryPlay.PlayId, "lastfm", "account-stale-retry", staleQueuedUtc, CancellationToken.None),
+    "A stale retry-scheduled now-playing action can be seeded for expiry testing.");
+var staleRetryLease = await nowPlayingActionStore.ClaimNextDueAsync(
+    "nowplaying-stale-retry-seed-worker", "lastfm", "account-stale-retry",
+    staleQueuedUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(staleRetryLease is { ActionType: ProviderActionType.NowPlaying, PlayId: "nowplaying-stale-retry" },
+    "A newly queued now-playing action is claimable before it exceeds the staleness threshold.");
+await nowPlayingActionStore.CompleteAsync(
+    staleRetryLease!.ActionId,
+    ProviderActionState.RetryScheduled,
+    ReasonCodes.Provider.TemporaryUnavailable,
+    staleQueuedUtc,
+    CancellationToken.None,
+    TimeSpan.FromMinutes(1));
+
+var expiredPendingLease = await nowPlayingActionStore.ClaimNextDueAsync(
+    "nowplaying-expiry-worker", "lastfm", "account-stale-pending",
+    nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
+var expiredRetryLease = await nowPlayingActionStore.ClaimNextDueAsync(
+    "nowplaying-expiry-worker", "lastfm", "account-stale-retry",
+    nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
+var expiryActions = await new SqliteQueueReader(nowPlayingConnectionString).GetRecentActionsAsync(100, CancellationToken.None);
+Assert(expiredPendingLease is null && expiredRetryLease is null
+    && expiryActions.Any(action => action.PlayId == stalePendingPlay.PlayId
+        && action.ActionType == ProviderActionType.NowPlaying
+        && action.State == ProviderActionState.Cancelled
+        && action.LastReasonCode == ReasonCodes.Provider.NowPlayingExpired)
+    && expiryActions.Any(action => action.PlayId == staleRetryPlay.PlayId
+        && action.ActionType == ProviderActionType.NowPlaying
+        && action.State == ProviderActionState.Cancelled
+        && action.LastReasonCode == ReasonCodes.Provider.NowPlayingExpired),
+    "Pending and retry-scheduled now-playing actions older than five minutes are cancelled instead of being sent late.");
+
+// The staleness sweep is scoped to NowPlaying, never to actual historical scrobbles.
+var agedEligiblePlay = historyRecord with
+{
+    PlayId = "aged-real-scrobble",
+    FirstObservedUtc = staleQueuedUtc,
+    LastObservedUtc = staleQueuedUtc,
+};
+Assert(await new SqliteEligiblePlayStore(nowPlayingConnectionString).TryPersistAndQueueAsync(
+    agedEligiblePlay, "lastfm", "account-aged-scrobble", staleQueuedUtc, CancellationToken.None),
+    "An old eligible play still persists its durable scrobble action.");
+var agedScrobbleLease = await nowPlayingActionStore.ClaimNextDueAsync(
+    "aged-scrobble-worker", "lastfm", "account-aged-scrobble",
+    nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(agedScrobbleLease is { ActionType: ProviderActionType.Scrobble, PlayId: "aged-real-scrobble" },
+    "Old real scrobble actions remain claimable; the now-playing expiry rule never drops historical scrobbles.");
+
 File.Delete(nowPlayingDatabasePath);
 
 // Restore replacement must not replace the main database when its WAL sidecar cannot be detached.
