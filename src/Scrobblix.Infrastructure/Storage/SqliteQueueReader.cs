@@ -44,6 +44,24 @@ public sealed class SqliteQueueReader(string connectionString)
     }
 
 
+    public async Task<int> GetRetryableFailedScrobbleCountAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT COUNT(*)
+            FROM provider_actions
+            WHERE provider = 'lastfm'
+              AND action_type = $scrobble
+              AND state = $retryExhausted;
+            """;
+        command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result, CultureInfo.InvariantCulture);
+    }
+
     /// <summary>
     /// Reads only scrobble actions that exhausted automatic retry and remain explicitly
     /// eligible for the existing manual-retry pathway. Scheduled retries keep their backoff.
