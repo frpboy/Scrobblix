@@ -28,22 +28,26 @@ public sealed record TrayMenuStatus(
 
     public bool HasActiveTrack => PlaybackState is PlayState.Playing or PlayState.Paused;
 
+    public bool HasCurrentTrack => !IsClosed && HasActiveTrack && HasTrackMetadata;
+
     public bool HasCurrentPlay =>
-        !IsClosed && HasActiveTrack && !string.IsNullOrWhiteSpace(PlayId) && HasTrackMetadata;
+        HasCurrentTrack && !string.IsNullOrWhiteSpace(PlayId);
 
     public bool CanLoveTrack =>
         HasCurrentPlay && LastFmConnected && !LoveActionInProgress;
 
-    public bool CanCopyTrackDetails => HasTrackMetadata && !IsClosed;
+    public bool CanCopyTrackDetails => HasCurrentTrack;
 
     public bool CanRetryFailedScrobbles =>
         !IsClosed && LastFmConnected && !QueueOperationInProgress && RetryableFailedScrobbleCount is > 0;
 
     public string TrackingCommandLabel => TrackingEnabled ? "Pause Tracking" : "Resume Tracking";
 
-    public string LastFmLabel => LastFmConnected
-        ? $"Last.fm: Connected as {Truncate(LastFmUserName, 42)}"
-        : "Last.fm: Not connected";
+    public string LastFmLabel => !LastFmConnected
+        ? "Last.fm: Not connected"
+        : !string.IsNullOrWhiteSpace(LastFmUserName)
+            ? $"Last.fm: Connected as {Truncate(LastFmUserName, 42)}"
+            : "Last.fm: Connected (account name unavailable)";
 
     public string PlaybackLabel => PlaybackState switch
     {
@@ -70,7 +74,7 @@ public sealed record TrayMenuStatus(
     {
         get
         {
-            if (!HasTrackMetadata) return "Current track: metadata unavailable";
+            if (!HasCurrentTrack) return "Current track: metadata unavailable";
             if (!LastFmConnected) return "Connect Last.fm to manage this track";
             if (LoveActionInProgress) return "Love action in progress";
             return CurrentLoveIntent switch
@@ -86,7 +90,7 @@ public sealed record TrayMenuStatus(
         ? "Unlove Track"
         : "Love Track";
 
-    public string TrackDetails => HasTrackMetadata
+    public string TrackDetails => HasCurrentTrack
         ? $"{Artist!.Trim()} — {Title!.Trim()}"
         : string.Empty;
 
