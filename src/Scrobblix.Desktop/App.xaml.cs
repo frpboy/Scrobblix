@@ -264,9 +264,10 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 foreach (var actionId in retryableActionIds)
                 {
                     applicationCancellation.Token.ThrowIfCancellationRequested();
-                    // RetryNowAsync performs the authoritative state check. If the worker claimed
-                    // or changed an item since the read, it refuses to mutate that action.
-                    if (await actionStore.RetryNowAsync(actionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
+                    // This update atomically requires Last.fm + Scrobble + RetryExhausted. It cannot
+                    // reopen scheduled retries or a submission whose outcome became unknown.
+                    if (await actionStore.RetryFailedScrobbleNowAsync(
+                        actionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
                     {
                         scheduled++;
                     }
