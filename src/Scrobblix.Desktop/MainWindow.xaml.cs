@@ -24,6 +24,7 @@ public sealed partial class MainWindow : Window
     private bool _isLastFmConnected;
     private string? _lastFmUserName;
     private QueueSummary? _queueSummary;
+    private int? _trayRetryableFailedScrobbleCount;
     private bool _trayLovedActionInProgress;
     private bool _trayQueueRetryInProgress;
     private bool _isClosed;
@@ -51,6 +52,8 @@ public sealed partial class MainWindow : Window
     public event Action<string>? DiagnosticLogRequested;
 
     public event Func<string, Task<bool>>? QueueRetryNowRequested;
+
+    public event Func<Task<int>>? TrayRetryFailedScrobblesRequested;
 
     public event Func<string, Task<bool>>? QueueCancelRequested;
     public event Func<string, Task<bool>>? QueueConfirmOutcomeAcceptedRequested;
@@ -675,10 +678,6 @@ public sealed partial class MainWindow : Window
             && !string.IsNullOrWhiteSpace(_displayedPlayId)
             && !string.IsNullOrWhiteSpace(observation?.Artist)
             && !string.IsNullOrWhiteSpace(observation?.Title);
-        var retryableScrobbles = _queueActions.Count(action =>
-            action.ActionType == ProviderActionType.Scrobble
-            && action.State == ProviderActionState.RetryExhausted);
-
         return new TrayMenuStatus(
             _trackingMode.IsEnabled,
             _isLastFmConnected,
@@ -690,7 +689,7 @@ public sealed partial class MainWindow : Window
             _currentTrackLoveIntent,
             _trayLovedActionInProgress,
             _queueSummary?.PendingCount,
-            retryableScrobbles,
+            _trayRetryableFailedScrobbleCount,
             _trayQueueRetryInProgress,
             _isClosed);
     }
@@ -737,18 +736,9 @@ public sealed partial class MainWindow : Window
 
     public async Task RetryFailedScrobblesFromTrayAsync()
     {
-        if (_isClosed || _trayQueueRetryInProgress || !_isLastFmConnected || QueueRetryNowRequested is null)
-        {
-            return;
-        }
-
-        var retryableActionIds = _queueActions
-            .Where(action => action.ActionType == ProviderActionType.Scrobble
-                && action.State == ProviderActionState.RetryExhausted)
-            .Select(action => action.ActionId)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (retryableActionIds.Length == 0)
+        var status = GetTrayMenuStatus();
+        if (_isClosed || _trayQueueRetryInProgress || !status.CanRetryFailedScrobbles
+            || TrayRetryFailedScrobblesRequested is null)
         {
             return;
         }
@@ -757,21 +747,14 @@ public sealed partial class MainWindow : Window
         var scheduled = 0;
         try
         {
-            foreach (var actionId in retryableActionIds)
-            {
-                if (_isClosed) return;
-                if (await QueueRetryNowRequested.Invoke(actionId))
-                {
-                    scheduled++;
-                }
-            }
+            scheduled = await TrayRetryFailedScrobblesRequested.Invoke();
         }
         catch (Exception exception)
         {
             DiagnosticLogRequested?.Invoke(
-                $"Tray failed-scrobble retry stopped; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+                $"Tray failed-scrobble retry failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
             SetStartupStatus(
-                "One or more failed scrobbles could not be queued for manual retry. Review Queue for the current state.",
+                "Failed scrobbles could not be queued for manual retry. Review Queue for the current state.",
                 InfoBarSeverity.Warning,
                 "Queue retry needs attention");
         }
@@ -1357,6 +1340,11 @@ public sealed partial class MainWindow : Window
         {
             QueuePageActionFeedbackText.Text = $"Action could not be cancelled ({exception.GetType().Name}).";
         }
+    }
+
+    public void SetTrayRetryableFailedScrobbleCount(int? count)
+    {
+        _trayRetryableFailedScrobbleCount = count is null ? null : Math.Max(0, count.Value);
     }
 
     public void SetQueueSummary(QueueSummary summary)
