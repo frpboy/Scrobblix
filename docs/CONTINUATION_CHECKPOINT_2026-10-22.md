@@ -69,4 +69,4 @@ node scripts/validate-browser-manifests.mjs
 
 ## Tooling and evidence honesty
 
-The exact-head Windows CI for PR #28 passed. The post-merge main workflow was still in progress at this checkpoint. Real Last.fm acceptance, installed Chrome/Edge/Firefox behavior, GUI tray recovery, real GSMTC source loss/recovery, accessibility, signed distribution, and install/upgrade/rollback are separate qualification gates. Do not mark any of those PASS unless they were actually executed.
+The exact-head Windows CI for PR #28 passed. Current main `d27d06d809d59b1ca17e81a29019fc44be700b90` passed post-merge Windows CI in run 39903649228. Real Last.fm acceptance, installed Chrome/Edge/Firefox behavior, GUI tray recovery, real GSMTC source loss/recovery, accessibility, signed distribution, and install/upgrade/rollback are separate qualification gates. Do not mark any of those PASS unless they were actually executed.
