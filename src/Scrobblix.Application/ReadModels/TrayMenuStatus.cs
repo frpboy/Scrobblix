@@ -22,7 +22,8 @@ public sealed record TrayMenuStatus(
     int? PendingQueueCount,
     int? RetryableFailedScrobbleCount,
     bool QueueOperationInProgress,
-    bool IsClosed = false)
+    bool IsClosed = false,
+    QueueSummary? QueueSnapshot = null)
 {
     public bool HasTrackMetadata =>
         !string.IsNullOrWhiteSpace(Artist) && !string.IsNullOrWhiteSpace(Title);
@@ -70,6 +71,18 @@ public sealed record TrayMenuStatus(
             ? $"Retryable failed scrobbles: {retryable:N0}"
             : "No retryable failed scrobbles"
         : "Retryable failures: status unavailable";
+
+    public IReadOnlyList<string> QueueDetailLabels => QueueSnapshot is { } queue
+        ? new[]
+        {
+            $"In flight: {queue.InFlightCount:N0}",
+            $"Retry scheduled: {queue.RetryScheduledCount:N0}",
+            $"Accepted: {queue.AcceptedCount:N0}",
+            $"Authentication blocked: {queue.AuthBlockedCount:N0}",
+            $"Permanent failures: {queue.PermanentFailureCount:N0}",
+            $"Submission outcome unknown: {queue.SubmissionOutcomeUnknownCount:N0}",
+        }
+        : new[] { "Queue details: status unavailable" };
 
     public string CurrentTrackStatusLabel
     {
