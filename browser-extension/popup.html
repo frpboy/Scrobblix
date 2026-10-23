@@ -9,7 +9,9 @@
   <body>
     <main>
       <header><strong>Scrobblix</strong><span>Browser companion</span></header>
-      <p id="native-status" class="status" data-state="checking">Checking native host…</p>
+      <p id="native-status" class="status" data-state="checking" role="status" aria-live="polite">Checking native host…</p>
+      <p id="native-recovery" class="recovery"></p>
+      <p id="native-diagnostic" class="diagnostic"></p>
       <button id="test-connection" class="secondary" type="button">Test connection</button>
       <section aria-labelledby="current-heading">
         <h1 id="current-heading">Current site</h1>
