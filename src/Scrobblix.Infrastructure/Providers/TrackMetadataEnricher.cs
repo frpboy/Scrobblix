@@ -39,7 +39,7 @@ public sealed class TrackMetadataEnricher
         ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(artworkDirectory);
         _client = client;
-        _artworkClient = artworkClient ?? client;
+        _artworkClient = artworkClient ?? SafePublicArtworkConnector.CreateHttpClient();
         _lastFmApiKey = string.IsNullOrWhiteSpace(lastFmApiKey) ? null : lastFmApiKey.Trim();
         _artworkDirectory = artworkDirectory;
         _log = log;
