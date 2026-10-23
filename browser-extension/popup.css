@@ -4,9 +4,12 @@ main { display: grid; gap: 14px; padding: 16px; }
 header { display: grid; gap: 1px; }
 header strong { font-size: 18px; }
 header span, footer { color: #625c71; }
-.status { margin: 0; color: #4e4a58; }
+.status { margin: 0; color: #4e4a58; overflow-wrap: anywhere; }
 .status[data-state="connected"] { color: #166534; }
 .status[data-state="unavailable"] { color: #a8364b; }
+.status[data-state="checking"] { color: #4e4a58; }
+.recovery { margin: -8px 0 0; color: #34313a; overflow-wrap: anywhere; }
+.diagnostic { margin: -10px 0 0; color: #625c71; font-size: 11px; overflow-wrap: anywhere; }
 section { border-top: 1px solid #d6d0db; padding-top: 12px; }
 h1, h2 { font-size: 13px; margin: 0 0 4px; }
 p { margin: 0 0 10px; overflow-wrap: anywhere; }
