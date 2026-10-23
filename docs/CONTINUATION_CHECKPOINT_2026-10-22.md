@@ -1,54 +1,67 @@
 # Scrobblix continuation checkpoint — 2026-10-23
 
-This checkpoint is a source-of-truth handoff for continuing from the current committed state. Inspect live GitHub state again before relying on any SHA or CI result.
+This checkpoint is a source-of-truth handoff for continuing from the current committed state. Fetch live GitHub state before relying on an SHA or CI result.
 
 ## Repository state
 
 - Repository: https://github.com/frpboy/Scrobblix
-- Protected integration target: `main`; do not force-push/reset or make experimental direct changes.
-- Current main SHA at checkpoint (2026-10-23): `90e6405beb5041aee092ca05394cfebc32e690b5`.
-- Exact post-merge Windows CI for that SHA: [run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495), **PASSED**.
-- PR #28 (SQLite restore sidecar rollback): merged to main. Exact-head Windows CI passed at [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272).
-- PR #26 was a duplicate restore candidate and has been closed as superseded by #28.
-- PR #25 privacy fix, #23 migration-history safety, #21 preview-release automation, and #19 compact hamburger navigation are merged.
-- Preview release [v0.1.0-beta.1](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.1) exists. It is an unsigned preview/test bundle, not a signed installer or stable release.
+- Integration target: `main`; do not force-push/reset or make experimental direct changes.
+- Current main SHA at checkpoint: `e0b99774bb62bcc2ab160a8e98b24051f382641b`.
+- Exact post-merge Windows CI for this SHA: [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156), **PASSED**.
+- Preview release [v0.1.0-beta.1](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.1) exists. It is an unsigned development/test bundle, not a signed installer or stable release.
 - Active release qualification issue: [#17](https://github.com/frpboy/Scrobblix/issues/17).
-- Documentation correction issue: [#27](https://github.com/frpboy/Scrobblix/issues/27). This checkpoint refresh is part of the fix; close the issue only after the documentation PR is merged and the current-main evidence is rechecked.
+- Documentation reconciliation issue: [#27](https://github.com/frpboy/Scrobblix/issues/27). This branch refreshes the current audit report/register and release/continuation handoffs; close #27 only after the docs PR merges and its exact-head CI passes.
 
 ## Do not redo completed work
 
-The baseline includes the WinUI desktop app, GSMTC playback observation, canonical tracking/source arbitration, confirmed-listening eligibility, SQLite history and durable queue, Last.fm scrobble/Now Playing/Love/Unlove flows, Credential Locker integration, MusicBrainz/Cover Art Archive/Last.fm metadata fallback, local artwork cache, diagnostics, backup/restore, tray/notification prototypes, Chromium/Firefox companion support, and Windows CI/test bundles.
+Current main includes the Windows desktop app, GSMTC playback observations, canonical source arbitration, confirmed-listening eligibility, SQLite history and durable queue, Last.fm scrobble/Now Playing/Love/Unlove flows, Credential Locker integration, MusicBrainz/Cover Art Archive/Last.fm metadata fallback, local artwork cache, diagnostics, backup/restore, tray/notification prototypes, Chromium/Firefox companion support and a Windows CI/test-bundle workflow.
 
 Already merged fixes include:
-- App resource ownership and lifecycle cleanup (PR #9).
-- Listening-metadata redaction and follow-up delimiter-safe redaction (PRs #11 and #25).
-- Loved-track/artwork fallback UI (PR #12).
-- Local-day/DST statistics boundaries (PR #16).
-- Explicit browser-origin authorization (PR #18).
-- Hamburger sidebar and clickable compact icon rail with destination tooltips (PR #19).
-- Validated preview-release automation (PR #21).
-- Unknown/inconsistent migration-history rejection (PR #23).
-- Fail-closed SQLite restore swap with WAL/SHM rollback set, recoverable rollback artifacts, and Windows regression tests (PR #28).
-- Preserve enriched artwork across repeated current-track polls and avoid unnecessary bitmap reloads (PR #31).
-- Scope provider-action claims to exact provider/account identity; pin artwork connections to validated public DNS addresses, with account-isolation and network-boundary regressions (PR #33; issues #30 and #32 closed).
+- PR #9: app resource ownership and lifecycle cleanup.
+- PRs #11 and #25: listening-metadata redaction.
+- PR #12: loved-track/action and artwork fallback UI.
+- PR #16: local-day/DST statistics boundaries.
+- PR #18: explicit browser-origin authorization.
+- PR #19: hamburger navigation and functional collapsed icon rail/tooltips.
+- PR #21: validated preview-release workflow.
+- PR #23: reject unknown/inconsistent migration histories.
+- PR #28: fail-closed SQLite restore swap with WAL/SHM rollback.
+- PR #31: preserve enriched artwork across repeated playback polls.
+- PR #33: provider/account-scoped queue claims and DNS-pinned public artwork connections; issues #30/#32 closed.
+- PR #35: CSV formula-prefix neutralization, including line-feed and full-width formula characters; issue #34 closed.
+- PR #37: allow all persisted provider-action completion outcomes in the domain lifecycle helper; issue #36 closed.
 
 Architecture constraints:
 - Desktop GSMTC must work without the browser extension; the extension is optional.
 - Do not add Shazam/audio fingerprinting.
 - Do not claim production readiness from CI alone.
-- Never expose Last.fm secrets/session keys or raw listening metadata in logs.
+- Never expose Last.fm secrets/session keys or raw listening metadata in logs, commits, reports, or screenshots.
+
+## Validation evidence
+
+- Audit-start main SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5` passed Windows CI in [run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297).
+- PR #33 exact-head Windows CI passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307).
+- PR #35 exact-head Windows CI passed in [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043).
+- PR #37 exact-head Windows CI passed in [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712).
+- Current main `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed the integrated Windows workflow in [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+- Workflow includes .NET build, desktop UI and release-workflow contracts, domain/Infrastructure assertions, browser TypeScript/build/security/manifest checks, PowerShell parsing, Windows and NativeHost publishing, test-bundle assembly and artifact uploads.
+- Local GitHub clone failed because this environment could not resolve `github.com`; local .NET/PowerShell executions are not claimed. The GitHub Actions results are the actual automated evidence.
+- Branch-protection details were unavailable through the connected integration; no branch protection was changed.
+
+## Remaining release qualification
+
+[Issue #17](https://github.com/frpboy/Scrobblix/issues/17) remains open. The real-world manual matrix still records provider reconciliation, installed-browser/native messaging, long-run playback, GUI/tray/accessibility, backup/restore failure cases, and signed install/upgrade/rollback/uninstall as `NOT RUN`. Execute those only in an appropriate real Windows/browser environment and with a dedicated Last.fm test account; do not mark them PASS without evidence.
 
 ## Next implementation order
 
-1. **Keep the mainline evidence current.** Main SHA `90e6405beb5041aee092ca05394cfebc32e690b5` passed [post-merge Windows CI run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495). Recheck live GitHub before using that evidence for a later candidate.
-2. **Execute release qualification issue #17.** Use a dedicated Last.fm test account; reconcile accepted submissions; test duplicate/restart/network-retry behavior, long-running playback, browser native messaging, and Windows lifecycle/accessibility.
-3. **Validate installation and distribution.** Test clean install, upgrade, failed update recovery, rollback/uninstall, retained-data behavior, signing/publisher identity, dependency licensing, SBOM, and artifact provenance.
-4. **Record evidence, not assumptions.** Keep unexecuted environment-dependent cases NOT RUN/BLOCKED. Include exact candidate SHA, environment, outcome, and sanitized evidence.
-5. **Stitch UI design.** The handoff is `Scrobblix-Docs/04_UserExperience/STITCH_IMPORT_BRIEF.md`. No claim of external Stitch workspace modification is valid until the integration is available and the actual workspace is inspected.
+1. Review this documentation branch's diff, validate the JSON register and links, and open the focused documentation PR against `main`.
+2. Wait for the exact documentation PR head's Windows CI to complete successfully; fix failures rather than bypassing checks.
+3. Merge only if mergeability and required checks/review policy are satisfied; verify the merge SHA and post-merge CI, then close issue #27.
+4. Keep issue #17 open until the real-world qualification matrix is executed and the release go/no-go is documented.
 
 ## Validation commands
 
-In Windows PowerShell with the desktop app closed, inspect local changes before rebuilding:
+In Windows PowerShell on a clean working tree with the desktop app closed:
 
 ```powershell
 git status --short
@@ -61,9 +74,10 @@ dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj 
 npm --prefix browser-extension ci
 npm --prefix browser-extension run check
 npm --prefix browser-extension run build
+node scripts/test-browser-security.mjs
 node scripts/validate-browser-manifests.mjs
 ```
 
-## Tooling and evidence honesty
+## Resume procedure
 
-The exact-head Windows CI for PR #28 passed. The post-merge main workflow was still in progress at this checkpoint. Real Last.fm acceptance, installed Chrome/Edge/Firefox behavior, GUI tray recovery, accessibility, signed distribution, and install/upgrade/rollback are separate qualification gates. Do not mark any of those PASS unless they were actually executed.
+Fetch live `main`, open issues/PRs and latest workflow conclusions before continuing. Current reference point is main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` and CI run 39901957156. Do not reuse those as proof for any later SHA.
