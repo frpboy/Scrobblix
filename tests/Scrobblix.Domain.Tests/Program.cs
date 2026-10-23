@@ -914,7 +914,7 @@ Assert(nowPlayingActions.Any(action => action.PlayId == firstNowPlayingPlay.Play
     "A track change cancels the older unsent now-playing action and leaves the newest one pending.");
 var nowPlayingActionStore = new SqliteProviderActionStore(nowPlayingConnectionString);
 var acceptedNowPlayingLease = await nowPlayingActionStore.ClaimNextDueAsync(
-    "nowplaying-worker", nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
+    "nowplaying-worker", "lastfm", "account-1", nowPlayingTime, TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(acceptedNowPlayingLease is { ActionType: ProviderActionType.NowPlaying, PlayId: "nowplaying-second" },
     "The durable worker leases the newest current-track update, not the superseded one.");
 await nowPlayingActionStore.CompleteAsync(
