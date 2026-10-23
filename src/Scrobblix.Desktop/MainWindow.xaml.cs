@@ -700,10 +700,13 @@ public sealed partial class MainWindow : Window
             && !string.IsNullOrWhiteSpace(_displayedPlayId)
             && !string.IsNullOrWhiteSpace(observation?.Artist)
             && !string.IsNullOrWhiteSpace(observation?.Title);
-        var savedLoveState = string.IsNullOrWhiteSpace(observation?.Artist) || string.IsNullOrWhiteSpace(observation?.Title)
+        var savedLoveState = string.IsNullOrWhiteSpace(observation?.Artist)
+            || string.IsNullOrWhiteSpace(observation?.Title)
+            || string.IsNullOrWhiteSpace(_lastFmAccountId)
             ? null
             : _lovedTrackRecords.FirstOrDefault(track =>
-                string.Equals(track.Artist?.Trim(), observation.Artist.Trim(), StringComparison.OrdinalIgnoreCase)
+                string.Equals(track.AccountId, _lastFmAccountId, StringComparison.Ordinal)
+                && string.Equals(track.Artist?.Trim(), observation.Artist.Trim(), StringComparison.OrdinalIgnoreCase)
                 && string.Equals(track.Title?.Trim(), observation.Title.Trim(), StringComparison.OrdinalIgnoreCase));
         var loveIntent = _currentTrackLoveIntent ?? savedLoveState?.RequestedAction;
         var loveActionState = savedLoveState?.RequestedAction == loveIntent
