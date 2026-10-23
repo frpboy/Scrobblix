@@ -25,14 +25,14 @@ Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging),
 | Current integration base | `e0b99774bb62bcc2ab160a8e98b24051f382641b` |
 | Baseline workflow | [Windows CI run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) |
 | Baseline workflow result | Passed for that exact baseline SHA |
-| Current main workflow | [Run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) is in progress on `d27d06d809d59b1ca17e81a29019fc44be700b90` |
+| Current main workflow | [Run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) **passed** on `d27d06d809d59b1ca17e81a29019fc44be700b90` |
 | Tracked-file inventory | 401 files at audit start; 405 files on current main; Git tree response not truncated |
 | Latest published release at baseline | [v0.1.0-beta.1](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.1), prerelease |
 | Real-world qualification | The repo's manual matrix says real-machine, provider, installed-browser, UX and installer scenarios remain `NOT RUN` |
 | Local validation limitation | Clone attempt failed because the environment could not resolve github.com; .NET SDK and PowerShell were not present locally. Node.js v22.16.0 was present. |
 | Repository policy visibility | Branch-protection endpoint returned HTTP 403 to the connected integration; protection settings were not changed. |
 
-The current main workflow for SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` is in progress; the previous main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed run 39901957156. Neither result validates real-world provider, installed-browser, live Windows UI or installer behavior.
+The current main workflow for SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` passed in run 39903649228. Automated CI does not validate real-world provider, installed-browser, live Windows UI/accessibility, or signed installer behavior.
 
 ## Component map and end-to-end data flow
 
