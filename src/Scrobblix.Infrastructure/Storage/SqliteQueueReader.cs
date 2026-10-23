@@ -173,8 +173,4 @@ public sealed class SqliteQueueReader(string connectionString)
 
         return result;
     }
-
-
-    }
-
 }
