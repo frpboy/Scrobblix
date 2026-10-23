@@ -99,7 +99,7 @@ public sealed class SqliteQueueReader(string connectionString)
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT p.play_id, p.artist, p.title, p.album, p.artwork_path,
-                   a.action_type, a.state, a.attempt_count, a.last_reason_code, a.updated_utc
+                   a.action_type, a.state, a.attempt_count, a.last_reason_code, a.updated_utc, a.account_id
             FROM provider_actions a
             JOIN plays p ON p.play_id = a.play_id
             WHERE a.provider = 'lastfm'
@@ -136,7 +136,10 @@ public sealed class SqliteQueueReader(string connectionString)
                 (ProviderActionState)reader.GetInt32(6),
                 reader.GetInt32(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8),
-                DateTimeOffset.Parse(reader.GetString(9), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)));
+                DateTimeOffset.Parse(reader.GetString(9), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind))
+            {
+                AccountId = reader.IsDBNull(10) ? null : reader.GetString(10),
+            });
         }
         return result;
     }
