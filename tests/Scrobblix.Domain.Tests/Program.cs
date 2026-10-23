@@ -107,6 +107,8 @@ Assert(trayConnected.TrackDetails == "Test Artist — Test Track", "Copy details
 var trayPaused = trayConnected with { TrackingEnabled = false, PlaybackState = null };
 Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking command changes when tracking is paused.");
 Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
+Assert(trayPaused.LoveCommandLabel == "Love Track",
+    "A stopped session does not retain an Unlove label from the prior current track.");
 Assert((trayConnected with { PlaybackState = PlayState.Paused }).PlaybackLabel.StartsWith("Paused:", StringComparison.Ordinal),
     "A paused media session remains the current track without being labelled as actively playing.");
 Assert((trayConnected with { Artist = null, Title = null }).PlaybackLabel == "Now Playing: Metadata unavailable",
