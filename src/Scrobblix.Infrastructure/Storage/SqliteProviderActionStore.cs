@@ -9,6 +9,7 @@ namespace Scrobblix.Infrastructure.Storage;
 public sealed class SqliteProviderActionStore(string connectionString) : IProviderActionStore
 {
     private static readonly TimeSpan RetryDelay = TimeSpan.FromMinutes(1);
+    private const int NowPlayingStalenessMinutes = 5;
 
     public async Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
@@ -47,6 +48,43 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         await using var connection = new SqliteConnection(connectionString);
         await connection.OpenAsync(cancellationToken);
         await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+        // Now-playing is ephemeral, unlike a durable scrobble. Expire old, non-in-flight
+        // now-playing actions inside the same transaction that selects the next action,
+        // so a stale update cannot race through the claim path.
+        var staleNowPlayingBefore = nowUtc.Subtract(TimeSpan.FromMinutes(NowPlayingStalenessMinutes))
+            .UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using (var expireNowPlaying = connection.CreateCommand())
+        {
+            expireNowPlaying.Transaction = transaction;
+            expireNowPlaying.CommandText = """
+                UPDATE provider_actions
+                SET state = $cancelled,
+                    last_reason_code = $expiredReason,
+                    completed_utc = $now,
+                    lease_owner = NULL,
+                    lease_expires_utc = NULL,
+                    updated_utc = $now
+                WHERE provider = $provider
+                  AND account_id = $accountId
+                  AND action_type = $nowPlaying
+                  AND state IN ($pending, $retry, $authBlocked, $retryExhausted, $outcomeUnknown)
+                  AND created_utc <= $staleBefore;
+                """;
+            expireNowPlaying.Parameters.AddWithValue("$cancelled", (int)ProviderActionState.Cancelled);
+            expireNowPlaying.Parameters.AddWithValue("$expiredReason", ReasonCodes.Provider.NowPlayingExpired);
+            expireNowPlaying.Parameters.AddWithValue("$now", now);
+            expireNowPlaying.Parameters.AddWithValue("$provider", provider);
+            expireNowPlaying.Parameters.AddWithValue("$accountId", accountId);
+            expireNowPlaying.Parameters.AddWithValue("$nowPlaying", (int)ProviderActionType.NowPlaying);
+            expireNowPlaying.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+            expireNowPlaying.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+            expireNowPlaying.Parameters.AddWithValue("$authBlocked", (int)ProviderActionState.AuthBlocked);
+            expireNowPlaying.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+            expireNowPlaying.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+            expireNowPlaying.Parameters.AddWithValue("$staleBefore", staleNowPlayingBefore);
+            await expireNowPlaying.ExecuteNonQueryAsync(cancellationToken);
+        }
 
         await using var select = connection.CreateCommand();
         select.Transaction = transaction;
