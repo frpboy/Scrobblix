@@ -14,7 +14,7 @@ The GitHub tree at the audit baseline contained 401 tracked files (tree API repo
 
 The audit reconciled current issues and PRs, release prerequisites, the real-world matrix, migration/restore hardening, browser/native-host boundaries, playback ingestion/tracking, provider delivery, metadata/artwork fetching, diagnostics/privacy, CSV, lifecycle, release workflows and helper scripts. The GitHub tree currently has 405 tracked files. Current main has additionally merged PR #33 (queue account isolation/artwork connection pinning), PR #35 (CSV formula-prefix hardening), and PR #37 (provider-action lifecycle outcomes).
 
-Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging), #13 (P2 daylight-saving day boundaries), #15 (P2 browser-origin registration), #30 (P1 account/provider queue isolation), #32 (P2 artwork destination connection pinning), #34 (P2 CSV formula prefixes) and #36 (P3 lifecycle completion-state consistency). Their fixes were merged in PRs #11/#25, #16, #18, #33, #35 and #37 respectively, with exact-head Windows CI evidence linked in the validation section below. The mainline CI at the current baseline also passed.
+Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging), #13 (P2 daylight-saving day boundaries), #15 (P2 browser-origin registration), #30 (P1 account/provider queue isolation), #32 (P2 artwork destination connection pinning), #34 (P2 CSV formula prefixes) and #36 (P3 lifecycle completion-state consistency). Their fixes were merged in PRs #11/#25, #16, #18, #33, #35 and #37 respectively, with exact-head Windows CI evidence linked in the validation section below. The mainline CI at the current baseline also passed. A further confirmed playback-timing defect is tracked by [issue #39](https://github.com/frpboy/Scrobblix/issues/39): a sustained missing GSMTC session could allow an unobserved time gap to count toward eligibility. The source-gap fix is under review in [PR #40](https://github.com/frpboy/Scrobblix/pull/40); its exact-head Windows CI run 39903263712 is still in progress at this report snapshot and the fix is not yet merged.
 
 ## Baseline and environment
 
@@ -80,6 +80,7 @@ The current main CI run validates the integrated changes at SHA `e0b99774bb62bcc
 | AUD-SEC-002 | Artwork hostnames were not validated/pinned to the addresses used for outbound connections | P2 | [#32](https://github.com/frpboy/Scrobblix/issues/32) | Closed; merged PR [#33](https://github.com/frpboy/Scrobblix/pull/33), DNS/address and resolver regression coverage |
 | AUD-CSV-001 | CSV export omitted LF and full-width spreadsheet formula prefixes | P2 | [#34](https://github.com/frpboy/Scrobblix/issues/34) | Closed; merged PR [#35](https://github.com/frpboy/Scrobblix/pull/35) with regression coverage |
 | AUD-QUEUE-002 | Domain lifecycle helper rejected valid persisted terminal outcomes | P3 | [#36](https://github.com/frpboy/Scrobblix/issues/36) | Closed; merged PR [#37](https://github.com/frpboy/Scrobblix/pull/37), lease cleanup tests |
+| AUD-PLAY-001 | Missing active GSMTC session could leave confirmed-time accrual running across an unobserved gap | P2 | [#39](https://github.com/frpboy/Scrobblix/issues/39) | PR [#40](https://github.com/frpboy/Scrobblix/pull/40) open; exact-head CI run 39903263712 in progress; not merged |
 | AUD-REL-001 | Real-world Windows/provider/browser/recovery/distribution qualification not executed | Release blocker | [#17](https://github.com/frpboy/Scrobblix/issues/17) | Open intentionally; the matrix remains NOT RUN until tests actually execute |
 | AUD-DOC-001 | Release status and continuation checkpoint stale at baseline | P2/documentation | [#27](https://github.com/frpboy/Scrobblix/issues/27) | Current refresh is in this docs PR; close only after it merges and the current-main evidence is rechecked |
 
@@ -95,6 +96,7 @@ Exact-head CI evidence for the recent additional remediations:
 - PR #33: [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307) passed on `56609db5f5076695c5da9f3c9288b940faecab2c`.
 - PR #35: [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043) passed on `94038c83a304b3ba84f31123ab01f586bea809e6`.
 - PR #37: [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712) passed on `4428685963a695c35be543128ec7edb31b2535af`.
+- PR #40 source-gap accounting fix: [run 39903263712](https://github.com/frpboy/Scrobblix/actions/runs/39903263712) was in progress on head `d864697601dcb9221a2482f859aa3de0328fc464` at the time of this snapshot; do not treat it as passed until completion.
 
 The configured workflow includes .NET Release build with warnings-as-errors, desktop UI contract assertions, release workflow contract checks, domain/Infrastructure regression assertions, browser TypeScript/check/build and security tests, Chromium/Firefox manifest validation, PowerShell parser checks, Windows desktop and NativeHost publishing, test-bundle assembly and artifact upload.
 
@@ -114,7 +116,8 @@ Record `PASS`, `FAIL`, `BLOCKED`, or `NOT RUN` only according to the test actual
 
 ## Current remaining risks
 
-- Source defects #30, #32, #34 and #36 are fixed and merged through PRs #33, #35 and #37; their exact-head CI and the current-main integrated run passed.
+- Source defects #30, #32, #34 and #36 are fixed and merged through PRs #33, #35 and #37; their exact-head CI and current-main integration passed.
+- Issue #39 / PR #40 is a newly confirmed playback-time accounting defect. The source-gap fix is under exact-head CI validation; current main still contains the defect until that PR merges.
 - The artwork UI correction merged as [PR #31](https://github.com/frpboy/Scrobblix/pull/31) at main commit `609d418580cb902d0ba14e949b9b41d756616932`; its merge has its own passing workflow, and its MainWindow changes were preserved when the audit branch was restarted.
 - This branch refreshes the report, register, checkpoint and release handoff because later merges made the earlier PR #29 checkpoint stale again. Issue #27 remains open until this refresh merges and current-head CI passes.
 - The real Windows/provider/manual matrix is not executed in this environment, and branch-protection details are not available through the current GitHub integration.
