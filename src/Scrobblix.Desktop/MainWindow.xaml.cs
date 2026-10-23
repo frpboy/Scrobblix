@@ -74,7 +74,7 @@ public sealed partial class MainWindow : Window
     public bool TrayLastFmConnected => _isLastFmConnected;
     public bool TrayCanCopyCurrentTrackDetails =>
         !_isShuttingDown
-        && _displayedObservation?.PlaybackState is PlayState.Playing or PlayState.Paused
+        && (_displayedObservation?.PlaybackState is PlayState.Playing or PlayState.Paused)
         && TrayCurrentTrackDetails is not null;
     public bool TrayCanOpenLogFolder => !string.IsNullOrWhiteSpace(_logDirectory) && Directory.Exists(_logDirectory) && !_isShuttingDown;
     public bool TrayCanRetryFailedScrobbles => !_isShuttingDown && _retryableFailedScrobbleCount is > 0;
@@ -1434,17 +1434,17 @@ public sealed partial class MainWindow : Window
 
     private void UpdateLovedButtons()
     {
-        var canAct = _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        var canAct = TrayCanLoveCurrentTrack;
         if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
         if (CurrentTrackLoveIcon is not null)
         {
-            CurrentTrackLoveIcon.Foreground = _currentTrackLoveIntent == ProviderActionType.Love
+            CurrentTrackLoveIcon.Foreground = GetCurrentTrackLoveIntent() == ProviderActionType.Love
                 ? new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Red)
                 : (Brush)Microsoft.UI.Xaml.Application.Current.Resources["TextFillColorSecondaryBrush"];
         }
         if (CurrentTrackLoveButton is not null)
         {
-            var loved = _currentTrackLoveIntent == ProviderActionType.Love;
+            var loved = GetCurrentTrackLoveIntent() == ProviderActionType.Love;
             AutomationProperties.SetName(CurrentTrackLoveButton, loved ? "Unlove this track" : "Love this track");
             ToolTipService.SetToolTip(CurrentTrackLoveButton, loved ? "Unlove track" : "Love track");
             AutomationProperties.SetHelpText(CurrentTrackLoveButton, "Toggles the locally queued Love/Unlove intent. Last.fm delivery status appears on the Loved page.");
@@ -1454,150 +1454,14 @@ public sealed partial class MainWindow : Window
             ? "Connect Last.fm in Settings to manage loved tracks."
             : string.IsNullOrWhiteSpace(_displayedPlayId)
                 ? "Start a supported track to love or unlove it."
-                : _currentTrackLoveIntent == ProviderActionType.Love
-                    ? "Love request saved locally; delivery status appears on the Loved page."
-                    : _currentTrackLoveIntent == ProviderActionType.Unlove
-                        ? "Unlove request saved locally; delivery status appears on the Loved page."
-                        : "Requests are saved locally first; provider status appears on the Loved page.";
+                : GetCurrentTrackLoveAction() is { } currentAction
+                    ? TrayCurrentLoveStatusText
+                    : _currentTrackLoveIntent == ProviderActionType.Love
+                        ? "Love request saved locally; delivery status appears on the Loved page."
+                        : _currentTrackLoveIntent == ProviderActionType.Unlove
+                            ? "Unlove request saved locally; delivery status appears on the Loved page."
+                            : "Requests are saved locally first; provider status appears on the Loved page.";
     }
-
-    private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args)
-    {
-        var nextAction = GetCurrentTrackLoveIntent() == ProviderActionType.Love
-            ? ProviderActionType.Unlove
-            : ProviderActionType.Love;
-        await RequestLovedTrackActionAsync(nextAction);
-    }
-
-    public async Task RequestCurrentTrackLoveFromTrayAsync()
-    {
-        if (!TrayCanLoveCurrentTrack) return;
-        var nextAction = GetCurrentTrackLoveIntent() == ProviderActionType.Love
-            ? ProviderActionType.Unlove
-            : ProviderActionType.Love;
-        await RequestLovedTrackActionAsync(nextAction);
-    }
-
-    private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
-    {
-        if (_isShuttingDown || _currentTrackLoveActionInProgress) return;
-        if (!TrayCanLoveCurrentTrack)
-        {
-            SetLovedActionFeedback("Love/Unlove is unavailable until a connected Last.fm account and a safe current-track state are available.");
-            return;
-        }
-        if (string.IsNullOrWhiteSpace(_displayedPlayId))
-        {
-            SetLovedActionFeedback("Wait for Scrobblix to save the current listening session before requesting Love/Unlove.");
-            return;
-        }
-        if (LovedTrackActionRequested is null)
-        {
-            SetLovedActionFeedback("Loved-track actions are not initialized. Restart the app and try again.");
-            return;
-        }
-
-        _currentTrackLoveActionInProgress = true;
-        CurrentTrackLoveButton.IsEnabled = false;
-        try
-        {
-            var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
-            if (!queued)
-            {
-                SetLovedActionFeedback("No duplicate request was created. Check Loved and Queue for the current state.");
-            }
-            else
-            {
-                _currentTrackLoveIntent = actionType;
-                SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; provider acceptance is shown on the Loved page.");
-            }
-        }
-        catch (OperationCanceledException) when (_isShuttingDown)
-        {
-        }
-        catch (Exception exception)
-        {
-            if (!_isShuttingDown)
-            {
-                SetLovedActionFeedback($"Love/Unlove could not be queued ({exception.GetType().Name}). No provider success is implied.");
-                ReportTrayActionFailure("Love/Unlove", exception);
-            }
-        }
-        finally
-        {
-            _currentTrackLoveActionInProgress = false;
-            if (!_isShuttingDown) UpdateLovedButtons();
-        }
-    }
-
-    private ProviderActionType? GetCurrentTrackLoveIntent() =>
-        GetCurrentTrackLoveAction()?.ActionType ?? _currentTrackLoveIntent;
-
-    private QueueActionSummary? GetCurrentTrackLoveAction() =>
-        string.IsNullOrWhiteSpace(_displayedPlayId)
-            ? null
-            : _queueActions.FirstOrDefault(action =>
-                string.Equals(action.PlayId, _displayedPlayId, StringComparison.Ordinal)
-                && string.Equals(action.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
-                && action.ActionType is ProviderActionType.Love or ProviderActionType.Unlove);
-
-    public void CopyTrackDetailsFromTray()
-    {
-        if (_isShuttingDown || !TrayCanCopyCurrentTrackDetails || TrayCurrentTrackDetails is not { } details) return;
-        try
-        {
-            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
-            package.SetText(details);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
-            global::Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
-        }
-        catch (Exception exception)
-        {
-            ReportTrayActionFailure("Copy Track Details", exception);
-        }
-    }
-
-    public async Task<int> RetryFailedScrobblesFromTrayAsync()
-    {
-        if (_isShuttingDown || TrayRetryFailedScrobblesRequested is not { } handler) return 0;
-        try
-        {
-            return await handler.Invoke();
-        }
-        catch (OperationCanceledException) when (_isShuttingDown)
-        {
-            return 0;
-        }
-        catch (Exception exception)
-        {
-            if (!_isShuttingDown) ReportTrayActionFailure("Retry Failed Scrobbles", exception);
-            return 0;
-        }
-    }
-
-    public void ToggleTrackingFromTray()
-    {
-        if (_isShuttingDown) return;
-        ToggleTracking();
-    }
-
-    public void MarkShutdownStarted() => _isShuttingDown = true;
-
-    public void ReportTrayActionFailure(string operation, Exception exception)
-    {
-        DiagnosticLogRequested?.Invoke($"{operation} failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
-    }
-
-    private static string TruncateForTray(string? value, int maximumLength)
-    {
-        if (string.IsNullOrWhiteSpace(value)) return "Unavailable";
-        var text = value.Trim();
-        return text.Length <= maximumLength ? text : text[..Math.Max(1, maximumLength - 1)] + "…";
-    }
-
-    private void UpdateLovedButtons()
-    {
-        var canAct = TrayCanLoveCurrentTrack;
 
     public void SetTodaySummary(TodaySummary summary)
     {
