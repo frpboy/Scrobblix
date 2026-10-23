@@ -306,19 +306,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             {
                 Timeout = TimeSpan.FromSeconds(12),
             };
-            // Artwork URLs originate in remote playback metadata, so use a dedicated direct
-            // connection path that checks and pins DNS answers before opening the socket.
-            // This client intentionally bypasses system proxies; a proxy can perform its own
-            // DNS resolution and would bypass the address-pinning guarantee.
-            var artworkHttpClient = new HttpClient(new SocketsHttpHandler
-            {
-                AllowAutoRedirect = false,
-                UseProxy = false,
-                ConnectCallback = SafePublicArtworkConnector.ConnectAsync,
-            })
-            {
-                Timeout = TimeSpan.FromSeconds(12),
-            };
+            var artworkHttpClient = SafePublicArtworkConnector.CreateHttpClient(TimeSpan.FromSeconds(12));
             var metadataEnricher = new TrackMetadataEnricher(
                 metadataHttpClient,
                 initialApiKey,
