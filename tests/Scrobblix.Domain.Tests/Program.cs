@@ -71,6 +71,113 @@ Assert(privateDnsResolverCalled && privateDnsResolutionRejected,
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
+var trayConnected = new TrayMenuStatus(
+    TrackingEnabled: true,
+    LastFmConnected: true,
+    LastFmUserName: "listener",
+    PlaybackState: PlayState.Playing,
+    PlayId: "play-1",
+    Artist: "Test Artist",
+    Title: "Test Track",
+    CurrentLoveIntent: null,
+    CurrentLoveActionState: null,
+    LoveActionInProgress: false,
+    PendingQueueCount: 3,
+    RetryableFailedScrobbleCount: 1,
+    QueueOperationInProgress: false,
+    QueueSnapshot: new QueueSummary(3, 1, 4, 2, 1, 1, 1));
+Assert(trayConnected.TrackingCommandLabel == "Pause Tracking", "Tray tracking command follows the authoritative enabled state.");
+Assert(trayConnected.LastFmLabel == "Last.fm: Connected as listener", "Tray shows the authenticated Last.fm username.");
+Assert(trayConnected.PlaybackLabel == "Now Playing: Test Artist, Test Track", "Tray current-track status comes from real playback metadata.");
+Assert(trayConnected.QueueLabel == "Provider actions: 3 pending", "Tray queue status labels aggregate provider-action counts accurately.");
+Assert(trayConnected.QueueDetailLabels.Contains("In flight: 1")
+    && trayConnected.QueueDetailLabels.Contains("Retry scheduled: 2")
+    && trayConnected.QueueDetailLabels.Contains("Accepted: 4")
+    && trayConnected.QueueDetailLabels.Contains("Authentication blocked: 1")
+    && trayConnected.QueueDetailLabels.Contains("Failed (permanent or retries exhausted): 1")
+    && trayConnected.QueueDetailLabels.Contains("Submission outcome unknown: 1"),
+    "The provider-action submenu distinguishes pending, in-flight, scheduled, accepted, blocked, failed, and uncertain action states.");
+var unavailableQueueDetails = (trayConnected with { QueueSnapshot = null }).QueueDetailLabels;
+Assert(unavailableQueueDetails.Count == 1 && unavailableQueueDetails[0] == "Queue details: status unavailable",
+    "The tray does not fabricate detailed queue statuses when its database snapshot is unavailable.");
+Assert(trayConnected.CanLoveTrack && trayConnected.CanCopyTrackDetails, "Connected current tracks enable Love and copy actions.");
+Assert(trayConnected.LoveCommandLabel == "Love Track", "No local Love intent defaults to the Love operation.");
+Assert(trayConnected.CanRetryFailedScrobbles, "Retry is enabled only when retryable failed scrobbles exist and the account is connected.");
+Assert(trayConnected.TrackDetails == "Test Artist, Test Track", "Copy details use a plain artist/title representation.");
+
+var trayPaused = trayConnected with { TrackingEnabled = false, PlaybackState = null, CurrentLoveIntent = ProviderActionType.Love };
+Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking command changes when tracking is paused.");
+Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
+Assert(trayPaused.LoveCommandLabel == "Love Track",
+    "A stopped session does not retain an Unlove label from the prior current track.");
+Assert(trayPaused.CurrentTrackStatusLabel == "No current track",
+    "The Current Track submenu does not describe a stopped session as missing metadata.");
+Assert((trayConnected with { PlaybackState = PlayState.Paused }).PlaybackLabel.StartsWith("Paused:", StringComparison.Ordinal),
+    "A paused media session remains the current track without being labelled as actively playing.");
+Assert((trayConnected with { Artist = null, Title = null }).PlaybackLabel == "Now Playing: Metadata unavailable",
+    "Active playback with missing metadata is not falsely reported as nothing playing.");
+Assert((trayConnected with { Artist = null, Title = null }).CurrentTrackStatusLabel == "Current track metadata unavailable",
+    "An active track with incomplete metadata gets a distinct current-track status.");
+Assert(!(trayConnected with { Artist = null, Title = null }).CanLoveTrack
+    && !(trayConnected with { Artist = null, Title = null }).CanCopyTrackDetails,
+    "Insufficient metadata disables current-track actions.");
+Assert((trayPaused with { PendingQueueCount = null, QueueSnapshot = null }).QueueLabel == "Provider-action queue: status unavailable",
+    "Tray does not fabricate a queue count when the read model is unavailable.");
+
+var trayDisconnected = trayConnected with { LastFmConnected = false, LastFmUserName = null };
+Assert(trayDisconnected.LastFmLabel == "Last.fm: Not connected", "Disconnected Last.fm is not presented as connected.");
+Assert(!trayDisconnected.CanLoveTrack && !trayDisconnected.CanRetryFailedScrobbles,
+    "Disconnected accounts cannot invoke provider Love/retry actions from the tray.");
+Assert(!(trayConnected with { LoveActionInProgress = true }).CanLoveTrack,
+    "A pending Love operation prevents rapid duplicate requests.");
+Assert(!(trayConnected with { QueueOperationInProgress = true }).CanRetryFailedScrobbles,
+    "Queue retry stays unavailable while another incompatible queue operation is running.");
+Assert(!(trayConnected with { RetryableFailedScrobbleCount = 0 }).CanRetryFailedScrobbles,
+    "No retryable failed scrobbles means the tray retry command is disabled.");
+Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).LoveCommandLabel == "Unlove Track",
+    "The next Love action follows the latest locally saved intent.");
+Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).CurrentTrackStatusLabel.Contains("saved locally", StringComparison.OrdinalIgnoreCase),
+    "Local Love intent is described as saved locally rather than falsely confirmed by Last.fm.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.Pending,
+}).CurrentTrackStatusLabel.Contains("queued", StringComparison.OrdinalIgnoreCase),
+    "A pending Love intent is shown as queued rather than provider-accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.Accepted,
+}).CurrentTrackStatusLabel == "Loved on Last.fm",
+    "The tray reports Love only after the persisted provider state is accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Unlove,
+    CurrentLoveActionState = ProviderActionState.Accepted,
+}).CurrentTrackStatusLabel == "Unloved on Last.fm",
+    "The tray reports Unlove only after the persisted provider state is accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.PermanentFailure,
+}).CurrentTrackStatusLabel.Contains("permanently failed", StringComparison.OrdinalIgnoreCase),
+    "A permanent Love failure is represented as rejected, not as success.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.SubmissionOutcomeUnknown,
+}).CurrentTrackStatusLabel.Contains("unknown", StringComparison.OrdinalIgnoreCase),
+    "Ambiguous Love outcomes remain explicitly unknown.");
+var longTrayLabel = (trayConnected with
+{
+    Artist = new string('A', 200),
+    Title = new string('T', 200),
+}).PlaybackLabel;
+Assert(longTrayLabel.Length < 100 && longTrayLabel.EndsWith('…'),
+    "Tray track labels are truncated so long metadata cannot dominate the native menu.");
+Assert(!(trayConnected with { IsClosed = true }).CanCopyTrackDetails,
+    "Disposed-window snapshots disable clipboard actions.");
+
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
 using var mismatchedNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"different-extension"}""");
 using var incompleteNativeHostEnvelope = JsonDocument.Parse("{}");
@@ -681,6 +788,184 @@ Assert(queueActions.Count >= 2
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
+// The tray retry read model must include only retry-exhausted Last.fm scrobbles,
+// never successful or scheduled retries, Love actions, or uncertain submissions.
+var trayQueueDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-tray-queue-{Guid.NewGuid():N}.db");
+var trayQueueConnectionString = $"Data Source={trayQueueDatabasePath};Pooling=False";
+await new SqliteDatabase(trayQueueConnectionString).InitializeAsync(CancellationToken.None);
+var trayQueuePlayStore = new SqliteEligiblePlayStore(trayQueueConnectionString);
+var trayQueueTime = DateTimeOffset.UtcNow;
+foreach (var trayQueuePlayId in new[] { "tray-retryable", "tray-scheduled", "tray-accepted", "tray-love", "tray-unknown" })
+{
+    var trayQueuePlay = historyRecord with { PlayId = trayQueuePlayId };
+    Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+        trayQueuePlay, "lastfm", "tray-account", trayQueueTime, CancellationToken.None),
+        $"Tray queue fixture {trayQueuePlayId} is persisted.");
+}
+
+Assert(await new SqliteLovedActionWriter(trayQueueConnectionString).EnqueueAsync(
+    "tray-love", "tray-account", ProviderActionType.Love, trayQueueTime, CancellationToken.None),
+    "The tray queue fixture includes a separate Love action that must not be retried as a scrobble.");
+
+await using (var trayQueueUpdateConnection = new SqliteConnection(trayQueueConnectionString))
+{
+    await trayQueueUpdateConnection.OpenAsync(CancellationToken.None);
+    foreach (var update in new[]
+    {
+        (PlayId: "tray-retryable", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.RetryExhausted),
+        (PlayId: "tray-scheduled", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.RetryScheduled),
+        (PlayId: "tray-accepted", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.Accepted),
+        (PlayId: "tray-love", ActionType: ProviderActionType.Love, State: ProviderActionState.RetryExhausted),
+        (PlayId: "tray-unknown", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.SubmissionOutcomeUnknown),
+    })
+    {
+        await using var updateCommand = trayQueueUpdateConnection.CreateCommand();
+        updateCommand.CommandText = "UPDATE provider_actions SET state = $state WHERE play_id = $playId AND action_type = $actionType;";
+        updateCommand.Parameters.AddWithValue("$state", (int)update.State);
+        updateCommand.Parameters.AddWithValue("$playId", update.PlayId);
+        updateCommand.Parameters.AddWithValue("$actionType", (int)update.ActionType);
+        Assert(await updateCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            $"Tray queue fixture {update.PlayId}/{update.ActionType} moves to {update.State}.");
+    }
+}
+
+var trayQueueReader = new SqliteQueueReader(trayQueueConnectionString);
+Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 1,
+    "Tray retry count includes only retry-exhausted Last.fm scrobble actions.");
+var trayRetryableIds = await trayQueueReader.GetRetryableFailedScrobbleActionIdsAsync(CancellationToken.None);
+var trayQueueRows = await trayQueueReader.GetRecentActionsAsync(20, CancellationToken.None);
+var expectedTrayRetryableId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-retryable" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+Assert(trayRetryableIds.Count == 1 && trayRetryableIds[0] == expectedTrayRetryableId,
+    "Tray retry candidates exclude scheduled retries, accepted scrobbles, exhausted Love actions, and ambiguous outcomes.");
+var trayScheduledId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-scheduled" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayAcceptedId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-accepted" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayLoveId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-love" && action.ActionType == ProviderActionType.Love).ActionId;
+var trayUnknownId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-unknown" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayRetryStore = new SqliteProviderActionStore(trayQueueConnectionString);
+Assert(await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method reopens an exhausted Last.fm scrobble.");
+Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method rejects duplicate clicks after the first state change.");
+Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(trayScheduledId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayAcceptedId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayLoveId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayUnknownId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method cannot override backoff, resubmit accepted actions, retry Love actions, or retry unknown outcomes.");
+// Simulate the stale-candidate race: the read model returns an exhausted scrobble,
+ // but a concurrent queue action changes its state before the tray mutation.
+ await using (var raceMutationConnection = new SqliteConnection(trayQueueConnectionString))
+ {
+     await raceMutationConnection.OpenAsync(CancellationToken.None);
+     await using var reseedRaceCommand = raceMutationConnection.CreateCommand();
+     reseedRaceCommand.CommandText = """
+         UPDATE provider_actions
+         SET state = $retryExhausted
+         WHERE action_id = $actionId AND provider = 'lastfm'
+           AND action_type = $scrobble AND state = $pending;
+         """;
+     reseedRaceCommand.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+     reseedRaceCommand.Parameters.AddWithValue("$actionId", expectedTrayRetryableId);
+     reseedRaceCommand.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+     reseedRaceCommand.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+     Assert(await reseedRaceCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+         "A previously retried scrobble can be reseeded as exhausted for stale-candidate coverage.");
+
+     var staleCandidates = await trayQueueReader.GetRetryableFailedScrobbleActionIdsAsync(CancellationToken.None);
+     Assert(staleCandidates.Contains(expectedTrayRetryableId),
+         "The exhausted scrobble is selected as eligible before the concurrent state change.");
+
+     await using var concurrentStateChange = raceMutationConnection.CreateCommand();
+     concurrentStateChange.CommandText = """
+         UPDATE provider_actions
+         SET state = $outcomeUnknown
+         WHERE action_id = $actionId AND provider = 'lastfm'
+           AND action_type = $scrobble AND state = $retryExhausted;
+         """;
+     concurrentStateChange.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+     concurrentStateChange.Parameters.AddWithValue("$actionId", expectedTrayRetryableId);
+     concurrentStateChange.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+     concurrentStateChange.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+     Assert(await concurrentStateChange.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+         "A concurrent worker can change the selected scrobble to an unknown outcome before tray mutation.");
+ }
+
+ Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+     "The tray refuses a stale retry-exhausted candidate that becomes outcome-unknown before mutation.");
+
+Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 0,
+    "A successfully reopened tray retry no longer appears in the exhausted-failure count.");
+
+// Prove the tray's exact current-track Love lookup is not constrained by the Loved page's
+// recent-200 window. The oldest target action must still be returned for its current account.
+const string longWindowPlayId = "tray-love-outside-recent-window";
+const string longWindowArtist = "Older Saved Artist";
+const string longWindowTitle = "Older Saved Track";
+var longWindowPlay = historyRecord with
+{
+    PlayId = longWindowPlayId,
+    Artist = longWindowArtist,
+    Title = longWindowTitle,
+};
+Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+    longWindowPlay, "lastfm", "tray-account", trayQueueTime.AddMinutes(-1), CancellationToken.None),
+    "The out-of-window target play is persisted.");
+Assert(await new SqliteLovedActionWriter(trayQueueConnectionString).EnqueueAsync(
+    longWindowPlayId, "tray-account", ProviderActionType.Love, trayQueueTime.AddMinutes(-1), CancellationToken.None),
+    "The out-of-window target Love action is persisted.");
+await using (var targetLoveStateConnection = new SqliteConnection(trayQueueConnectionString))
+{
+    await targetLoveStateConnection.OpenAsync(CancellationToken.None);
+    await using var targetLoveStateCommand = targetLoveStateConnection.CreateCommand();
+    targetLoveStateCommand.CommandText = "UPDATE provider_actions SET state = $accepted WHERE play_id = $playId AND account_id = $accountId AND action_type = $love;";
+    targetLoveStateCommand.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+    targetLoveStateCommand.Parameters.AddWithValue("$playId", longWindowPlayId);
+    targetLoveStateCommand.Parameters.AddWithValue("$accountId", "tray-account");
+    targetLoveStateCommand.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+    Assert(await targetLoveStateCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+        "The out-of-window target Love action is marked provider-accepted.");
+}
+
+var trayLovedWriter = new SqliteLovedActionWriter(trayQueueConnectionString);
+for (var index = 0; index < 205; index++)
+{
+    var newerPlayId = $"tray-love-window-{index:D3}";
+    var newerTime = trayQueueTime.AddMinutes(index + 1);
+    var newerPlay = historyRecord with
+    {
+        PlayId = newerPlayId,
+        Artist = $"Recent Artist {index:D3}",
+        Title = $"Recent Track {index:D3}",
+    };
+    Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+        newerPlay, "lastfm", "tray-account", newerTime, CancellationToken.None),
+        $"Recent Love-window play {index} is persisted.");
+    Assert(await trayLovedWriter.EnqueueAsync(
+        newerPlayId, "tray-account", ProviderActionType.Love, newerTime, CancellationToken.None),
+        $"Recent Love-window action {index} is persisted.");
+}
+
+var boundedLovedWindow = await trayQueueReader.GetRecentLovedTracksAsync(200, CancellationToken.None);
+Assert(!boundedLovedWindow.Any(track => track.PlayId == longWindowPlayId),
+    "The target Love intent is outside the Loved page's recent-200 read model.");
+var exactCurrentTrackLove = await trayQueueReader.GetLatestLovedTrackForTrackAsync(
+    longWindowArtist, longWindowTitle, "tray-account", CancellationToken.None);
+Assert(exactCurrentTrackLove is
+    {
+        PlayId: longWindowPlayId,
+        AccountId: "tray-account",
+        RequestedAction: ProviderActionType.Love,
+        State: ProviderActionState.Accepted,
+    },
+    "The tray's exact current-track lookup returns an older accepted Love intent outside the recent-200 window.");
+File.Delete(trayQueueDatabasePath);
+
+
+
 var unknownQueuePlay = retryRecord with { PlayId = "play-outcome-unknown" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(unknownQueuePlay, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
     "An additional eligible action is persisted for the unknown-outcome queue test.");
@@ -1131,8 +1416,11 @@ Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.
     "A newer Unlove intent supersedes an unstarted Love intent.");
 var lovedReader = new SqliteQueueReader(connectionString);
 var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
-Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
-    "The Loved read model reflects the newest persisted intent for the same track.");
+Assert(latestLovedTracks.Any(track => track.PlayId == "play-1"
+        && track.AccountId == "account-1"
+        && track.RequestedAction == ProviderActionType.Unlove
+        && track.State == ProviderActionState.Pending),
+    "The Loved read model includes the account identity for the newest persisted track intent.");
 var nowPlayingDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-nowplaying-{Guid.NewGuid():N}.db");
 var nowPlayingConnectionString = $"Data Source={nowPlayingDatabasePath};Pooling=False";
 await new SqliteDatabase(nowPlayingConnectionString).InitializeAsync(CancellationToken.None);

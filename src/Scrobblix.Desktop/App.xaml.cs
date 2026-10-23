@@ -243,6 +243,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             var queueReader = new SqliteQueueReader(connectionString);
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
+            _window.SetTrayRetryableFailedScrobbleCount(
+                await queueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None));
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
             _window.SetLovedTracks(await queueReader.GetRecentLovedTracksAsync(200, CancellationToken.None));
 
@@ -253,6 +255,28 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 logger.Info("QUEUE_ACTION", $"Manual retry requested; action_id={actionId}; changed={changed}.");
                 await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
                 return changed;
+            };
+            _window.TrayRetryFailedScrobblesRequested += async () =>
+            {
+                var retryableActionIds = await queueReader.GetRetryableFailedScrobbleActionIdsAsync(applicationCancellation.Token);
+                var actionStore = new SqliteProviderActionStore(connectionString);
+                var scheduled = 0;
+                foreach (var actionId in retryableActionIds)
+                {
+                    applicationCancellation.Token.ThrowIfCancellationRequested();
+                    // This update atomically requires Last.fm + Scrobble + RetryExhausted. It cannot
+                    // reopen scheduled retries or a submission whose outcome became unknown.
+                    if (await actionStore.RetryFailedScrobbleNowAsync(
+                        actionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
+                    {
+                        scheduled++;
+                    }
+                }
+
+                logger.Info("QUEUE_ACTION",
+                    $"Tray manual retry requested; eligible_scrobbles={retryableActionIds.Count}; scheduled={scheduled}.");
+                await RefreshDashboardAsync(_window!, connectionString, applicationCancellation.Token);
+                return scheduled;
             };
             _window.QueueCancelRequested += async actionId =>
             {
@@ -530,7 +554,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                         DateTimeOffset.UtcNow),
                     cancellationToken);
                 authorization = null;
-                _window.SetLastFmConnected(session.UserName);
+                _window.SetLastFmConnected(session.UserName, $"lastfm:{session.UserName.ToLowerInvariant()}");
                 logger.Info("LASTFM", $"Account authorization completed; username={session.UserName}.");
                 await RefreshDashboardAsync(_window, connectionString, cancellationToken);
             }
@@ -763,7 +787,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             return;
         }
 
-        _window!.SetLastFmConnected(account.UserName);
+        _window!.SetLastFmConnected(account.UserName, account.AccountId);
     }
 
     private static async Task ProcessProviderQueueUntilClosedAsync(
@@ -1226,6 +1250,23 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         return Interlocked.CompareExchange(ref _lastDashboardRefreshUtcTicks, nowTicks, previousTicks) == previousTicks;
     }
 
+    private static async Task<(string AccountId, string Artist, string Title)?> CaptureTrayLoveLookupRequestAsync(
+        MainWindow window,
+        CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<(string AccountId, string Artist, string Title)?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!window.DispatcherQueue.TryEnqueue(() =>
+            {
+                completion.TrySetResult(window.GetTrayLoveLookupRequest());
+            }))
+        {
+            return null;
+        }
+
+        return await completion.Task.WaitAsync(cancellationToken);
+    }
+
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
     {
         var historyReader = new SqliteHistoryReader(connectionString);
@@ -1234,8 +1275,14 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
+        var retryableFailedScrobbleCount = await queueReader.GetRetryableFailedScrobbleCountAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
         var lovedTracks = await queueReader.GetRecentLovedTracksAsync(200, cancellationToken);
+        var currentTrackLoveLookup = await CaptureTrayLoveLookupRequestAsync(window, cancellationToken);
+        var currentTrackLovedSummary = currentTrackLoveLookup is { } loveLookup
+            ? await queueReader.GetLatestLovedTrackForTrackAsync(
+                loveLookup.Artist, loveLookup.Title, loveLookup.AccountId, cancellationToken)
+            : null;
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
@@ -1243,8 +1290,10 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             window.SetHistoryPage(historyPage);
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
+            window.SetTrayRetryableFailedScrobbleCount(retryableFailedScrobbleCount);
             window.SetQueueActions(queueActions);
             window.SetLovedTracks(lovedTracks);
+            window.SetCurrentTrackLovedSummary(currentTrackLovedSummary);
             window.SetStatisticsSummary(statistics);
         });
     }

@@ -172,6 +172,37 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
     }
 
+    /// <summary>
+    /// Atomically retries an exhausted Last.fm scrobble action only. Unlike the general queue
+    /// retry command, this path does not reopen scheduled retries or ambiguous outcomes.
+    /// </summary>
+    public async Task<bool> RetryFailedScrobbleNowAsync(
+        string actionId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
+        var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $pending, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
+                last_reason_code = NULL, completed_utc = NULL, updated_utc = $now
+            WHERE action_id = $actionId
+              AND provider = 'lastfm'
+              AND action_type = $scrobble
+              AND state = $retryExhausted;
+            """;
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+        command.Parameters.AddWithValue("$now", now);
+        command.Parameters.AddWithValue("$actionId", actionId);
+        return await command.ExecuteNonQueryAsync(cancellationToken) == 1;
+    }
+
     public async Task<bool> CancelAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
