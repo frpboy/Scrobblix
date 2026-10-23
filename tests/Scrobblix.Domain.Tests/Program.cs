@@ -704,6 +704,20 @@ Assert(csvTest.Contains("'=SUM(1,1)", StringComparison.Ordinal)
     && csvTest.StartsWith("started_utc,artist,title", StringComparison.Ordinal),
     "History CSV export quotes separators/quotes and guards spreadsheet formula injection.");
 
+var csvFormulaEdgeCases = HistoryCsvExporter.Export(new[]
+{
+    new RecentPlay("csv-lf", observation.ObservedAtUtc, "\n=1+1", "＝1+1", "＋1+1",
+        180_000, 90_000, null, null),
+    new RecentPlay("csv-fullwidth", observation.ObservedAtUtc, "－1+1", "＠SUM(1,1)", "Album",
+        180_000, 90_000, null, null),
+});
+Assert(csvFormulaEdgeCases.Contains("\"'\\n=1+1\"", StringComparison.Ordinal)
+    && csvFormulaEdgeCases.Contains("\"'＝1+1\"", StringComparison.Ordinal)
+    && csvFormulaEdgeCases.Contains("\"'＋1+1\"", StringComparison.Ordinal)
+    && csvFormulaEdgeCases.Contains("\"'－1+1\"", StringComparison.Ordinal)
+    && csvFormulaEdgeCases.Contains("\"'＠SUM(1,1)\"", StringComparison.Ordinal),
+    "History CSV export neutralizes line-feed and full-width spreadsheet formula prefixes.");
+
 // Exercise explicit retry/cancel transitions without deleting listening history.
 var userRetryRecord = historyRecord with { PlayId = "play-user-retry" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(userRetryRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
