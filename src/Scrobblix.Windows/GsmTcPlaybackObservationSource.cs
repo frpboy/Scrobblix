@@ -17,6 +17,8 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
     private readonly string _artworkDirectory = artworkDirectory
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scrobblix", "artwork");
     private readonly ConcurrentDictionary<string, string> _artworkCache = new(StringComparer.Ordinal);
+    // Sequence numbers restart with this collector; a fresh instance ID prevents collisions with prior process runs.
+    private readonly string _sourceInstanceId = Guid.NewGuid().ToString("N");
     private long _sequence;
 
     public async Task<PlayObservation?> GetCurrentAsync(CancellationToken cancellationToken)
@@ -44,7 +46,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
                 media.Title,
                 cancellationToken);
         return new PlayObservation(
-            new SourceEventKey(session.SourceAppUserModelId, session.SourceAppUserModelId, Interlocked.Increment(ref _sequence)),
+            new SourceEventKey(_sourceInstanceId, session.SourceAppUserModelId, Interlocked.Increment(ref _sequence)),
             capturedUtc,
             capturedUtc,
             "gsmtc",
