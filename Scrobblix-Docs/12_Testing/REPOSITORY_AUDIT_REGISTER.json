@@ -146,9 +146,7 @@
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
       "validation": "PR #37 exact-head Windows CI passed in run 39901751712; tests prove SubmissionOutcomeUnknown and RetryExhausted completion preserve reason and clear lease fields."
-    }
-,
-    ,
+    },
     {
       "id": "AUD-PLAY-001",
       "title": "Confirmed-time accrual across a sustained missing GSMTC session",
