@@ -243,6 +243,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             var queueReader = new SqliteQueueReader(connectionString);
             var queueSummary = await queueReader.GetSummaryAsync(CancellationToken.None);
             _window.SetQueueSummary(queueSummary);
+            _window.SetTrayRetryableFailedScrobbleCount(
+                await queueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None));
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
             _window.SetLovedTracks(await queueReader.GetRecentLovedTracksAsync(200, CancellationToken.None));
 
@@ -253,6 +255,27 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 logger.Info("QUEUE_ACTION", $"Manual retry requested; action_id={actionId}; changed={changed}.");
                 await RefreshDashboardAsync(_window, connectionString, applicationCancellation.Token);
                 return changed;
+            };
+            _window.TrayRetryFailedScrobblesRequested += async () =>
+            {
+                var retryableActionIds = await queueReader.GetRetryableFailedScrobbleActionIdsAsync(applicationCancellation.Token);
+                var actionStore = new SqliteProviderActionStore(connectionString);
+                var scheduled = 0;
+                foreach (var actionId in retryableActionIds)
+                {
+                    applicationCancellation.Token.ThrowIfCancellationRequested();
+                    // RetryNowAsync performs the authoritative state check. If the worker claimed
+                    // or changed an item since the read, it refuses to mutate that action.
+                    if (await actionStore.RetryNowAsync(actionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
+                    {
+                        scheduled++;
+                    }
+                }
+
+                logger.Info("QUEUE_ACTION",
+                    $"Tray manual retry requested; eligible_scrobbles={retryableActionIds.Count}; scheduled={scheduled}.");
+                await RefreshDashboardAsync(_window!, connectionString, applicationCancellation.Token);
+                return scheduled;
             };
             _window.QueueCancelRequested += async actionId =>
             {
@@ -1234,6 +1257,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var todaySummary = await historyReader.GetTodaySummaryAsync(DateTimeOffset.Now, cancellationToken);
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
+        var retryableFailedScrobbleCount = await queueReader.GetRetryableFailedScrobbleCountAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
         var lovedTracks = await queueReader.GetRecentLovedTracksAsync(200, cancellationToken);
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
@@ -1243,6 +1267,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             window.SetHistoryPage(historyPage);
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
+            window.SetTrayRetryableFailedScrobbleCount(retryableFailedScrobbleCount);
             window.SetQueueActions(queueActions);
             window.SetLovedTracks(lovedTracks);
             window.SetStatisticsSummary(statistics);
