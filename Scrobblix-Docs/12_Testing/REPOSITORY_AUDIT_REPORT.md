@@ -3,9 +3,9 @@
 > **Audit date:** 2026-10-23  
 > **Repository:** https://github.com/frpboy/Scrobblix  
 > **Audit-start base SHA:** `0436ed83762971ef75dae5be1ffd15bab7e1eae5`  
-> **Rebased integration base:** `main` / `609d418580cb902d0ba14e949b9b41d756616932`  
-> **Audit branch:** `audit/complete-repository-remediation-2026-10-v2`  
-> **Status:** Source remediation in progress; exact-head CI and review required before merge.  
+> **Rebased integration base:** `main` / `e0b99774bb62bcc2ab160a8e98b24051f382641b`  
+> **Audit branch:** `docs/reconcile-release-status-2026-10-23`  
+> **Status:** Prior source fixes are merged; this report is being reconciled to the current main SHA.  
 > **Release recommendation:** **Not ready for private beta** until the real-world qualification matrix is executed and all blocking outcomes are resolved.
 
 ## Executive summary
