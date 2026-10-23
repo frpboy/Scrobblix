@@ -27,6 +27,9 @@ $uninstallerPath = Join-Path $repoRoot 'scripts\uninstall-native-host.ps1'
 if ($RegisterOnly -and $Browser -eq 'BuildOnly') {
     throw 'RegisterOnly needs a target browser: Chrome, Edge, ChromeAndEdge, or Firefox.'
 }
+if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
+    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
+}
 if ($Browser -in @('Chrome', 'Edge', 'ChromeAndEdge') -and @($ExtensionId).Count -eq 0) {
     throw 'Build the package first, load the unpacked extension from artifacts\Scrobblix\BrowserCompanion\chromium, copy its real ID from the browser, then rerun with -RegisterOnly -Browser Chrome/Edge/ChromeAndEdge -ExtensionId <ID>.'
 }
@@ -43,6 +46,8 @@ try {
             throw 'Run this script from a Scrobblix source clone; browser-extension/package.json was not found.'
         }
 
+        # Only replace generated package outputs during an explicit build. Registration-only
+        # never rebuilds/deletes them, so browser IDs and installed manifest paths remain stable.
         if (Test-Path -LiteralPath $packageRoot) {
             Remove-Item -LiteralPath $packageRoot -Recurse -Force
         }
