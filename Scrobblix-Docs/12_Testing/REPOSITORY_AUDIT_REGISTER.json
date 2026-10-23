@@ -40,7 +40,7 @@
     {
       "id": "AUD-BROWSER-001",
       "title": "Custom browser-origin authorization requires an explicit matching registration",
-      "severity": "P1",
+      "severity": "P2",
       "status": "fixed_merged",
       "issue": 15,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/15",
