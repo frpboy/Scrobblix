@@ -728,7 +728,8 @@ public sealed partial class MainWindow : Window
             _queueSummary?.PendingCount,
             _trayRetryableFailedScrobbleCount,
             _trayQueueRetryInProgress,
-            _isClosed);
+            _isClosed,
+            _queueSummary);
     }
 
     public void ReportTrayFailure(string operation, Exception exception)
