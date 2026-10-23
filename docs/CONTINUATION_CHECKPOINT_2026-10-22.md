@@ -6,8 +6,8 @@ This checkpoint is a source-of-truth handoff for continuing from the current com
 
 - Repository: https://github.com/frpboy/Scrobblix
 - Protected integration target: `main`; do not force-push/reset or make experimental direct changes.
-- Current main SHA at checkpoint (2026-10-23): `90e6405beb5041aee092ca05394cfebc32e690b5`.
-- Exact post-merge Windows CI for that SHA: [run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495), **PASSED**.
+- Current main SHA at checkpoint (2026-10-23): `d27d06d809d59b1ca17e81a29019fc44be700b90`.
+- Exact post-merge Windows CI for that SHA: [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228), **PASSED**.
 - PR #28 (SQLite restore sidecar rollback): merged to main. Exact-head Windows CI passed at [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272).
 - PR #26 was a duplicate restore candidate and has been closed as superseded by #28.
 - PR #25 privacy fix, #23 migration-history safety, #21 preview-release automation, and #19 compact hamburger navigation are merged.
@@ -31,6 +31,9 @@ Already merged fixes include:
 - Fail-closed SQLite restore swap with WAL/SHM rollback set, recoverable rollback artifacts, and Windows regression tests (PR #28).
 - Preserve enriched artwork across repeated current-track polls and avoid unnecessary bitmap reloads (PR #31).
 - Scope provider-action claims to exact provider/account identity; pin artwork connections to validated public DNS addresses, with account-isolation and network-boundary regressions (PR #33; issues #30 and #32 closed).
+- PR #35: neutralize additional CSV spreadsheet-formula prefixes, including line-feed and full-width forms; issue #34 closed.
+- PR #37: permit all persisted provider-action completion states in `ProviderActionLifecycle`; issue #36 closed.
+- PR #40: stop confirmed-time accrual across a sustained missing GSMTC session and preserve browser-source playback; issue #39 closed, exact-head CI passed in run 39903263712.
 
 Architecture constraints:
 - Desktop GSMTC must work without the browser extension; the extension is optional.
@@ -40,7 +43,7 @@ Architecture constraints:
 
 ## Next implementation order
 
-1. **Keep the mainline evidence current.** Main SHA `90e6405beb5041aee092ca05394cfebc32e690b5` passed [post-merge Windows CI run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495). Recheck live GitHub before using that evidence for a later candidate.
+1. **Keep the mainline evidence current.** Main SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` passed [post-merge Windows CI run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228). Recheck live GitHub before using that evidence for a later candidate.
 2. **Execute release qualification issue #17.** Use a dedicated Last.fm test account; reconcile accepted submissions; test duplicate/restart/network-retry behavior, long-running playback, browser native messaging, and Windows lifecycle/accessibility.
 3. **Validate installation and distribution.** Test clean install, upgrade, failed update recovery, rollback/uninstall, retained-data behavior, signing/publisher identity, dependency licensing, SBOM, and artifact provenance.
 4. **Record evidence, not assumptions.** Keep unexecuted environment-dependent cases NOT RUN/BLOCKED. Include exact candidate SHA, environment, outcome, and sanitized evidence.
@@ -66,4 +69,4 @@ node scripts/validate-browser-manifests.mjs
 
 ## Tooling and evidence honesty
 
-The exact-head Windows CI for PR #28 passed. The post-merge main workflow was still in progress at this checkpoint. Real Last.fm acceptance, installed Chrome/Edge/Firefox behavior, GUI tray recovery, accessibility, signed distribution, and install/upgrade/rollback are separate qualification gates. Do not mark any of those PASS unless they were actually executed.
+The exact-head Windows CI for PR #28 passed. Current main `d27d06d809d59b1ca17e81a29019fc44be700b90` passed post-merge Windows CI in run 39903649228. Real Last.fm acceptance, installed Chrome/Edge/Firefox behavior, GUI tray recovery, real GSMTC source loss/recovery, accessibility, signed distribution, and install/upgrade/rollback are separate qualification gates. Do not mark any of those PASS unless they were actually executed.
