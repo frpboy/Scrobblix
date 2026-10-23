@@ -70,10 +70,6 @@ requireCondition(popupHtml.includes('id="native-diagnostic"'), "Popup must displ
 
 const setupScript = await readFile(resolve(root, "scripts/setup-browser-companion.ps1"), "utf8");
 requireCondition(setupScript.includes("Build/package and registration are separate steps"), "Setup helper must keep package build and browser registration in separate invocations.");
-requireCondition(setupScript.includes("browser-extension\\\\popup.html"), "Browser package setup must copy popup.html into generated extension folders.");
-requireCondition(setupScript.includes("browser-extension\\\\popup.css"), "Browser package setup must copy popup.css into generated extension folders.");
-requireCondition(setupScript.includes("$chromiumRoot 'dist\\\\popup.js'"), "Chromium package checks must require the emitted popup script.");
-requireCondition(setupScript.includes("$firefoxRoot 'dist\\\\popup.js'"), "Firefox package checks must require the emitted popup script.");
 
 const ciWorkflow = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
 requireCondition(ciWorkflow.includes('"$companion/chromium/popup.html"'), "CI browser companion ZIP must include the Chromium popup HTML.");
@@ -82,3 +78,9 @@ requireCondition(ciWorkflow.includes('"$companion/firefox/popup.html"'), "CI bro
 requireCondition(ciWorkflow.includes('"$companion/firefox/popup.css"'), "CI browser companion ZIP must include the Firefox popup stylesheet.");
 requireCondition(ciWorkflow.includes('"$companion/chromium/dist/popup.js"'), "CI must validate the Chromium popup script in the packaged artifact.");
 requireCondition(ciWorkflow.includes('"$companion/firefox/dist/popup.js"'), "CI must validate the Firefox popup script in the packaged artifact.");
+
+requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'popup.html')"), "Browser package setup must copy popup.html into the Chromium extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'popup.css')"), "Browser package setup must copy popup.css into the Chromium extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.html')"), "Browser package setup must copy popup.html into the Firefox extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.css')"), "Browser package setup must copy popup.css into the Firefox extension folder.");
+requireCondition(setupScript.includes(String.raw`'dist\\popup.js'`), "The setup script must require the built popup script in each browser package.");
