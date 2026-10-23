@@ -121,8 +121,23 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
             return true;
         }
 
-        return previous.PositionMilliseconds is > 60_000
-            && previous.PositionMilliseconds.Value - current.PositionMilliseconds.Value >= 60_000;
+        var previousPosition = previous.PositionMilliseconds;
+        var currentPosition = current.PositionMilliseconds;
+        if (previousPosition is > 60_000 && currentPosition is not null
+            && previousPosition.Value - currentPosition.Value >= 60_000)
+        {
+            return true;
+        }
+
+        if (previous.PlaybackState != PlayState.Unknown
+            || previousPosition is null || currentPosition is null || currentPosition > 5000
+            || currentPosition >= previousPosition || previous.DurationMilliseconds is not > 0)
+        {
+            return false;
+        }
+
+        var tolerance = Math.Max(5000, previous.DurationMilliseconds.Value / 10);
+        return previousPosition.Value >= previous.DurationMilliseconds.Value - tolerance;
     }
 
     private static bool IsSameTrack(PlayObservation? previous, PlayObservation current)
