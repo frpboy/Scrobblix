@@ -1,7 +1,5 @@
 using System.ComponentModel;
 using System.Runtime.InteropServices;
-using Microsoft.UI.Xaml;
-
 namespace Scrobblix.Desktop;
 
 /// <summary>
@@ -50,7 +48,7 @@ internal sealed class TrayIconService : IDisposable
     private const uint SubclassId = 1;
     private static readonly Guid TrayGuid = new("605D2E99-F0D5-4F49-97ED-BAF322DC27A1");
 
-    private readonly Window _window;
+    private readonly MainWindow _window;
     private readonly IntPtr _windowHandle;
     private readonly SubclassProcedure _subclassProcedure;
     private readonly NotifyIconData _iconData;
@@ -60,7 +58,7 @@ internal sealed class TrayIconService : IDisposable
     private bool _restoring;
     private int _retryingFailedScrobbles;
 
-    public TrayIconService(Window window)
+    public TrayIconService(MainWindow window)
     {
         _window = window ?? throw new ArgumentNullException(nameof(window));
         _windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window);
