@@ -34,12 +34,17 @@ public sealed class ProviderActionProcessor(
 
     public async Task<bool> ProcessNextAsync(
         string workerId,
+        string providerName,
+        string accountId,
         string sessionKey,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(providerName);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentException.ThrowIfNullOrWhiteSpace(sessionKey);
-        var action = await actionStore.ClaimNextDueAsync(workerId, nowUtc, TimeSpan.FromMinutes(1), cancellationToken);
+        var action = await actionStore.ClaimNextDueAsync(
+            workerId, providerName, accountId, nowUtc, TimeSpan.FromMinutes(1), cancellationToken);
         if (action is null)
         {
             return false;
