@@ -138,7 +138,7 @@ Assert((trayConnected with
 {
     CurrentLoveIntent = ProviderActionType.Love,
     CurrentLoveActionState = ProviderActionState.PermanentFailure,
-}).CurrentTrackStatusLabel.Contains("rejected", StringComparison.OrdinalIgnoreCase),
+}).CurrentTrackStatusLabel.Contains("permanently failed", StringComparison.OrdinalIgnoreCase),
     "A permanent Love failure is represented as rejected, not as success.");
 Assert((trayConnected with
 {
