@@ -18,7 +18,7 @@ public sealed record TrayMenuStatus(
     ProviderActionType? CurrentLoveIntent,
     bool LoveActionInProgress,
     int? PendingQueueCount,
-    int RetryableFailedScrobbleCount,
+    int? RetryableFailedScrobbleCount,
     bool QueueOperationInProgress,
     bool IsClosed = false)
 {
@@ -34,7 +34,7 @@ public sealed record TrayMenuStatus(
     public bool CanCopyTrackDetails => HasTrackMetadata && !IsClosed;
 
     public bool CanRetryFailedScrobbles =>
-        !IsClosed && LastFmConnected && !QueueOperationInProgress && RetryableFailedScrobbleCount > 0;
+        !IsClosed && LastFmConnected && !QueueOperationInProgress && RetryableFailedScrobbleCount is > 0;
 
     public string TrackingCommandLabel => TrackingEnabled ? "Pause Tracking" : "Resume Tracking";
 
@@ -51,6 +51,12 @@ public sealed record TrayMenuStatus(
     public string QueueLabel => PendingQueueCount is int count
         ? $"Scrobble queue: {Math.Max(0, count):N0} pending"
         : "Scrobble queue: status unavailable";
+
+    public string QueueRetryStatusLabel => RetryableFailedScrobbleCount is int retryable
+        ? retryable > 0
+            ? $"Retryable failed scrobbles: {retryable:N0}"
+            : "No retryable failed scrobbles"
+        : "Retryable failures: status unavailable";
 
     public string CurrentTrackStatusLabel
     {
