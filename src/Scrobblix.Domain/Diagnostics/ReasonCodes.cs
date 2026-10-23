@@ -55,6 +55,7 @@ public static class ReasonCodes
         public const string UserConfirmedAccepted = "provider.user_confirmed_accepted";
         public const string ResponseInvalid = "provider.response_invalid";
         public const string ActionSuperseded = "provider.action_superseded";
+        public const string NowPlayingExpired = "provider.nowplaying.expired";
     }
 
     public static class Extension
