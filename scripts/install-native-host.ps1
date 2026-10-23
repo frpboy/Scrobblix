@@ -75,6 +75,18 @@ if ($registerChromium) {
         type = 'stdio'
         allowed_origins = $allowedOrigins
     }
+    # Preserve IDs already trusted by other installed Chromium browsers. A Chrome-only
+    # repair must not revoke Edge's identity (and vice versa).
+    $existingChromiumIds = @()
+    if (Test-Path -LiteralPath $trustPath) {
+        $existingValue = (Get-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -ErrorAction SilentlyContinue).AllowedChromeExtensionIds
+        if ($existingValue) {
+            $existingChromiumIds = @($existingValue -split '[;,\r\n]' | ForEach-Object { $_.Trim() } | Where-Object { $_ -cmatch '^[a-p]{32}$' })
+        }
+    }
+    $mergedChromiumIds = @($existingChromiumIds + $extensionIds | Select-Object -Unique)
+    $allowedOrigins = @($mergedChromiumIds | ForEach-Object { "chrome-extension://$_/" })
+    $manifest.allowed_origins = $allowedOrigins
     $manifestJson = $manifest | ConvertTo-Json -Depth 4
     Set-Content -LiteralPath $manifestPath -Value $manifestJson -Encoding utf8
 
@@ -86,15 +98,9 @@ if ($registerChromium) {
     if (-not (Test-Path -LiteralPath $parsedManifest.path -PathType Leaf)) {
         throw 'Generated Chromium native-host manifest points to a missing executable.'
     }
-    if (@($parsedManifest.allowed_origins).Count -ne $extensionIds.Count) {
-        throw 'Generated Chromium native-host manifest does not preserve every supplied extension ID.'
+    if (@($parsedManifest.allowed_origins).Count -ne $mergedChromiumIds.Count) {
+        throw 'Generated Chromium native-host manifest does not preserve every installed extension ID.'
     }
-    foreach ($id in $extensionIds) {
-        if (@($parsedManifest.allowed_origins) -cnotcontains "chrome-extension://$id/") {
-            throw 'Generated Chromium native-host manifest is missing an explicitly supplied extension origin.'
-        }
-    }
-
     if ($RegisterChrome) {
         $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
         New-Item -Path $registryPath -Force | Out-Null
