@@ -137,42 +137,6 @@ if ($RegisterFirefox) {
 Write-Host 'Scrobblix native messaging host registration updated.'
 Write-Host "Native host: $installedExecutable"
 Write-Host 'Restart any registered browser completely before testing the companion.'
- })
-        }
-    }
-    $mergedChromiumIds = @($existingChromiumIds + $extensionIds | Select-Object -Unique)
-    $manifest.allowed_origins = @($mergedChromiumIds | ForEach-Object { "chrome-extension://$_/" })
-    $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
-
-    # Verify the actual generated manifest before writing a browser registration.
-    $parsedManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
-    if ($parsedManifest.name -cne 'com.frpboy.scrobblix' -or $parsedManifest.type -cne 'stdio') {
-        throw 'Generated Chromium native-host manifest has an unexpected name or transport type.'
-    }
-    if (-not (Test-Path -LiteralPath $parsedManifest.path -PathType Leaf)) {
-        throw 'Generated Chromium native-host manifest points to a missing executable.'
-    }
-    if (@($parsedManifest.allowed_origins).Count -ne $mergedChromiumIds.Count) {
-        throw 'Generated Chromium native-host manifest does not preserve every installed extension ID.'
-    }
-    if ($RegisterChrome) {
-        $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-        if ((Get-Item -LiteralPath $registryPath).GetValue('') -ne $manifestPath) {
-            throw 'Chrome native-host registration did not retain the expected manifest path.'
-        }
-    }
-    if ($RegisterEdge) {
-        $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
-        New-Item -Path $registryPath -Force | Out-Null
-        Set-Item -LiteralPath $registryPath -Value $manifestPath
-        if ((Get-Item -LiteralPath $registryPath).GetValue('') -ne $manifestPath) {
-            throw 'Edge native-host registration did not retain the expected manifest path.'
-        }
-    }
-
-    Write-Host "Chromium extension IDs allow-listed: $($mergedChromiumIds -join ', ')"
 }
 
 if ($RegisterFirefox) {
