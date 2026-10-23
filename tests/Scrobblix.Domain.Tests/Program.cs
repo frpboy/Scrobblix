@@ -968,6 +968,53 @@ var afterResumeStatus = await sourceGapTracker.ObserveAsync(afterResumeObservati
 Assert(afterResumeStatus.ConfirmedPlayedMilliseconds == 70_000,
     "Confirmed-time accumulation resumes from the first positive observation after a source gap.");
 
+// Repeating a short track after its GSMTC session disappears must create a new canonical play.
+var shortReplayStore = new RecordingLocalPlayStore();
+using var shortReplayTracker = new PlaybackTrackingService(shortReplayStore);
+var shortTrackStart = observation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-short-replay", "short-session", 1, "short-start"),
+    SourceName = "gsmtc",
+    ApplicationId = "short-track-app",
+    DurationMilliseconds = 40_000,
+    PositionMilliseconds = 0,
+    PlaybackState = PlayState.Playing,
+};
+var shortTrackNearEnd = shortTrackStart with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-short-replay", "short-session", 2, "short-near-end"),
+    ObservedAtUtc = shortTrackStart.ObservedAtUtc.AddSeconds(38),
+    PositionMilliseconds = 38_000,
+};
+var shortTrackFirstStatus = await shortReplayTracker.ObserveAsync(shortTrackStart, 0, CancellationToken.None);
+var shortTrackNearEndStatus = await shortReplayTracker.ObserveAsync(shortTrackNearEnd, 38_000, CancellationToken.None);
+var shortTrackGap = await shortReplayTracker.ObserveSourceUnavailableAsync("gsmtc", CancellationToken.None);
+var shortTrackRestart = shortTrackNearEnd with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-short-replay", "short-session", 3, "short-restart"),
+    ObservedAtUtc = shortTrackNearEnd.ObservedAtUtc.AddMinutes(3),
+    PositionMilliseconds = 0,
+    PlaybackState = PlayState.Playing,
+};
+var shortTrackRestartStatus = await shortReplayTracker.ObserveAsync(shortTrackRestart, 218_000, CancellationToken.None);
+Assert(shortTrackFirstStatus.DidStartPlay
+    && shortTrackNearEndStatus.DidPersistEligiblePlay
+    && shortTrackGap.HasValue
+    && shortTrackRestartStatus.DidStartPlay
+    && shortTrackRestartStatus.PlayId != shortTrackNearEndStatus.PlayId,
+    "A 40-second same-track restart at position zero after GSMTC source loss creates a distinct canonical play.");
+var shortTrackRestartEligible = await shortReplayTracker.ObserveAsync(
+    shortTrackRestart with
+    {
+        SourceEventKey = new SourceEventKey("gsmtc-short-replay", "short-session", 4, "short-restart-eligible"),
+        ObservedAtUtc = shortTrackRestart.ObservedAtUtc.AddSeconds(20),
+        PositionMilliseconds = 20_000,
+    },
+    238_000,
+    CancellationToken.None);
+Assert(shortTrackRestartEligible.DidPersistEligiblePlay,
+    "The repeated short track can reach eligibility and be queued as a separate play.");
+
 var browserGapTrackerStore = new RecordingLocalPlayStore();
 using var browserGapTracker = new PlaybackTrackingService(browserGapTrackerStore);
 var browserGapFirst = observation with
