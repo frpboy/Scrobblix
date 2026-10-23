@@ -14,7 +14,7 @@ The menu contains:
 - Open Scrobblix: restores and activates the existing window.
 - Pause Tracking / Resume Tracking: calls the same tracking-state transition used by the main window. It stops/starts observation only; it does not clear eligible listening history or queue records.
 - Current Track: the latest local Love/Unlove intent/status, Love or Unlove using the existing event/service path, and Copy Track Details. Provider acceptance is not implied by a locally queued intent.
-- Scrobble Queue: pending count, Retry Failed Scrobbles when eligible actions exist, and Open Queue.
+- Scrobble Queue: pending, in-flight, retry-scheduled, accepted, authentication-blocked, permanent-failure, and outcome-unknown counts when available; Retry Failed Scrobbles only for eligible exhausted scrobbles; and Open Queue.
 - Open Log Folder, Open Settings, Open Diagnostics, and Exit Scrobblix.
 
 ## Queue retry boundary
