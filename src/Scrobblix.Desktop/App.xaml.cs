@@ -790,7 +790,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                     {
                         var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
                         if (!string.IsNullOrWhiteSpace(sessionKey)
-                            && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                            && await processor.ProcessNextAsync(
+                                "desktop", account.Provider, account.AccountId, sessionKey, DateTimeOffset.UtcNow, cancellationToken))
                         {
                             await RefreshDashboardAsync(window, connectionString, cancellationToken);
                         }
