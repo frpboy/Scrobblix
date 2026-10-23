@@ -582,6 +582,14 @@ var observationStore = new SqlitePlaybackObservationStore(connectionString);
 var ingestion = new PlaybackObservationIngestionService(observationStore);
 Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Accepted, "A validated source observation is stored durably.");
 Assert(await ingestion.IngestAsync(observation, CancellationToken.None) == ObservationIngestionResult.Duplicate, "Duplicate source observations are ignored by the database constraint.");
+var observationWithoutEventId = observation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-null-event", "session-null", 43, null),
+};
+Assert(await ingestion.IngestAsync(observationWithoutEventId, CancellationToken.None) == ObservationIngestionResult.Accepted,
+    "A fresh observation with no event ID is accepted.");
+Assert(await ingestion.IngestAsync(observationWithoutEventId, CancellationToken.None) == ObservationIngestionResult.Duplicate,
+    "The database deduplicates a repeated observation even when event_id is NULL.");
 var eligiblePlayStore = new SqliteEligiblePlayStore(connectionString);
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "An eligible play and scrobble action are persisted atomically.");
 
