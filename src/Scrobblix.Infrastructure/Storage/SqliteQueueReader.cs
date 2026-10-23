@@ -44,6 +44,35 @@ public sealed class SqliteQueueReader(string connectionString)
     }
 
 
+    /// <summary>
+    /// Reads only scrobble actions that exhausted automatic retry and remain explicitly
+    /// eligible for the existing manual-retry pathway. Scheduled retries keep their backoff.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> GetRetryableFailedScrobbleActionIdsAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT action_id
+            FROM provider_actions
+            WHERE provider = 'lastfm'
+              AND action_type = $scrobble
+              AND state = $retryExhausted
+            ORDER BY updated_utc DESC, created_utc DESC, action_id DESC;
+            """;
+        command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new List<string>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(reader.GetString(0));
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<LovedTrackSummary>> GetRecentLovedTracksAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
