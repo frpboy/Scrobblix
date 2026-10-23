@@ -773,7 +773,7 @@ var trayQueueConnectionString = $"Data Source={trayQueueDatabasePath};Pooling=Fa
 await new SqliteDatabase(trayQueueConnectionString).InitializeAsync(CancellationToken.None);
 var trayQueuePlayStore = new SqliteEligiblePlayStore(trayQueueConnectionString);
 var trayQueueTime = DateTimeOffset.UtcNow;
-foreach (var trayQueuePlayId in new[] { "tray-retryable", "tray-scheduled", "tray-accepted", "tray-love" })
+foreach (var trayQueuePlayId in new[] { "tray-retryable", "tray-scheduled", "tray-accepted", "tray-love", "tray-unknown" })
 {
     var trayQueuePlay = historyRecord with { PlayId = trayQueuePlayId };
     Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
@@ -794,6 +794,7 @@ await using (var trayQueueUpdateConnection = new SqliteConnection(trayQueueConne
         (PlayId: "tray-scheduled", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.RetryScheduled),
         (PlayId: "tray-accepted", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.Accepted),
         (PlayId: "tray-love", ActionType: ProviderActionType.Love, State: ProviderActionState.RetryExhausted),
+        (PlayId: "tray-unknown", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.SubmissionOutcomeUnknown),
     })
     {
         await using var updateCommand = trayQueueUpdateConnection.CreateCommand();
@@ -814,7 +815,28 @@ var trayQueueRows = await trayQueueReader.GetRecentActionsAsync(20, Cancellation
 var expectedTrayRetryableId = trayQueueRows.Single(action =>
     action.PlayId == "tray-retryable" && action.ActionType == ProviderActionType.Scrobble).ActionId;
 Assert(trayRetryableIds.Count == 1 && trayRetryableIds[0] == expectedTrayRetryableId,
-    "Tray retry candidates exclude scheduled retries, accepted scrobbles, and exhausted Love actions.");
+    "Tray retry candidates exclude scheduled retries, accepted scrobbles, exhausted Love actions, and ambiguous outcomes.");
+var trayScheduledId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-scheduled" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayAcceptedId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-accepted" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayLoveId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-love" && action.ActionType == ProviderActionType.Love).ActionId;
+var trayUnknownId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-unknown" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+var trayRetryStore = new SqliteProviderActionStore(trayQueueConnectionString);
+Assert(await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method reopens an exhausted Last.fm scrobble.");
+Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method rejects duplicate clicks after the first state change.");
+Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(trayScheduledId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayAcceptedId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayLoveId, trayQueueTime, CancellationToken.None)
+    && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayUnknownId, trayQueueTime, CancellationToken.None),
+    "The tray's atomic retry method cannot override backoff, resubmit accepted actions, retry Love actions, or retry unknown outcomes.");
+Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 0,
+    "A successfully reopened tray retry no longer appears in the exhausted-failure count.");
+File.Delete(trayQueueDatabasePath);
 File.Delete(trayQueueDatabasePath);
 
 
