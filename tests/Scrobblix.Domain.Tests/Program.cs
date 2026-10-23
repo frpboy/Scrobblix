@@ -582,6 +582,10 @@ Assert(await accountIsolationPlayStore.TryPersistAndQueueAsync(
 Assert(await accountIsolationPlayStore.TryPersistAndQueueAsync(
     accountBPlay, "lastfm", "account-b", observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
     "Account B's action is newer than account A's action.");
+var otherProviderPlay = historyRecord with { PlayId = "account-isolation-other-provider" };
+Assert(await accountIsolationPlayStore.TryPersistAndQueueAsync(
+    otherProviderPlay, "other-provider", "account-a", observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+    "An action under another provider is persisted independently for the same account ID.");
 var accountIsolationActionStore = new SqliteProviderActionStore(accountIsolationConnectionString);
 var accountBLease = await accountIsolationActionStore.ClaimNextDueAsync(
     "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddSeconds(2), TimeSpan.FromMinutes(1), CancellationToken.None);
@@ -590,6 +594,9 @@ Assert(accountBLease is { PlayId: "account-isolation-b", AccountId: "account-b" 
 await accountIsolationActionStore.CompleteAsync(
     accountBLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
     observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None);
+Assert(await accountIsolationActionStore.ClaimNextDueAsync(
+    "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddSeconds(2), TimeSpan.FromMinutes(1), CancellationToken.None) is null,
+    "Account B cannot claim account A's older due action.");
 var accountALease = await accountIsolationActionStore.ClaimNextDueAsync(
     "worker-account-a", "lastfm", "account-a", observation.ObservedAtUtc.AddSeconds(2), TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(accountALease is { PlayId: "account-isolation-a", AccountId: "account-a" },
@@ -597,9 +604,16 @@ Assert(accountALease is { PlayId: "account-isolation-a", AccountId: "account-a" 
 await accountIsolationActionStore.CompleteAsync(
     accountALease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
     observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None);
+var otherProviderLease = await accountIsolationActionStore.ClaimNextDueAsync(
+    "worker-other-provider", "other-provider", "account-a", observation.ObservedAtUtc.AddSeconds(3), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(otherProviderLease is { PlayId: "account-isolation-other-provider", Provider: "other-provider", AccountId: "account-a" },
+    "A provider-specific claim cannot consume another provider's queued action.");
+await accountIsolationActionStore.CompleteAsync(
+    otherProviderLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
+    observation.ObservedAtUtc.AddSeconds(3), CancellationToken.None);
 Assert(await accountIsolationActionStore.ClaimNextDueAsync(
     "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is null,
-    "Account B cannot claim account A's already-completed or future-due queue records.");
+    "Account B cannot claim account A's completed queue records.");
 File.Delete(accountIsolationDatabasePath);
 
 var actionStore = new SqliteProviderActionStore(connectionString);
