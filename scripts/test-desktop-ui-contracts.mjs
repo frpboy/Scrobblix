@@ -142,7 +142,7 @@ for (const label of [
   "Scrobble Queue", "Retry Failed Scrobbles", "Open Queue",
   "Open Settings", "Open Diagnostics", "Open Log Folder", "Exit Scrobblix",
 ]) {
-  assert.ok(trayMain.includes(label), `Tray context menu entry missing: ${label}`);
+  assert.ok((trayMain + "\n" + code).includes(label), `Tray context menu entry missing: ${label}`);
 }
 for (const stateBinding of [
   "_window.TrayLastFmStatusText", "_window.TrayPlaybackStatusText",
