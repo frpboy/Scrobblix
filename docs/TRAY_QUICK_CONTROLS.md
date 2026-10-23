@@ -19,7 +19,7 @@ The menu contains:
 
 ## Queue retry boundary
 
-The queue reader exposes a read-only query for Last.fm Scrobble actions in RetryExhausted state. The tray action re-reads eligible action IDs, then passes each ID through the existing SqliteProviderActionStore.RetryNowAsync state check. Therefore, an action claimed or otherwise changed since the read is not blindly resubmitted. Scheduled retries keep their backoff; accepted, uncertain, Love/Unlove and non-scrobble actions are excluded.
+The queue reader exposes a read-only query for Last.fm Scrobble actions in RetryExhausted state. The tray action re-reads eligible action IDs, then uses the existing queue store's atomic RetryFailedScrobbleNowAsync transition, which requires Last.fm + Scrobble + RetryExhausted at mutation time. Therefore, an action claimed or otherwise changed since the read is not blindly resubmitted. Scheduled retries keep their backoff; accepted, uncertain, Love/Unlove and non-scrobble actions are excluded.
 
 ## Lifecycle, errors and privacy
 
