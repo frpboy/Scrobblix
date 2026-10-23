@@ -35,6 +35,10 @@ const connectionCode = document.querySelector<HTMLElement>("#native-diagnostic")
 let currentSite: { origin: string; pattern: string } | undefined;
 let connectionTestRunning = false;
 
+// Wire the diagnostic control synchronously before async storage, tab, or permission
+// initialization. It must remain usable even when one of those setup calls stalls.
+connectionButton.addEventListener("click", () => void testConnection());
+
 void initialise();
 
 async function initialise(): Promise<void> {
@@ -55,7 +59,6 @@ async function initialise(): Promise<void> {
   await refreshTrackAction(settings.customSites);
   renderCustomSites(settings.customSites);
   trackButton.addEventListener("click", () => void trackCurrentSite());
-  connectionButton.addEventListener("click", () => void testConnection());
   await testConnection();
 }
 
