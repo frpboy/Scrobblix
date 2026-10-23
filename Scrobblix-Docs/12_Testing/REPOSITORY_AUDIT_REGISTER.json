@@ -69,7 +69,7 @@
         "src/Scrobblix.Desktop/App.xaml.cs",
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
-      "validation": "PR #33 exact-head Windows CI passed in run 39895414307; current main integration run 39901957156 passed."
+      "validation": "PR #33 exact-head Windows CI passed in run 39895414307; integrated main at d27d06d809d59b1ca17e81a29019fc44be700b90 passed in run 39903649228."
     },
     {
       "id": "AUD-SEC-002",
@@ -86,7 +86,7 @@
         "src/Scrobblix.Desktop/App.xaml.cs",
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
-      "validation": "PR #33 exact-head Windows CI passed in run 39895414307; current main integration run 39901957156 passed."
+      "validation": "PR #33 exact-head Windows CI passed in run 39895414307; integrated main at d27d06d809d59b1ca17e81a29019fc44be700b90 passed in run 39903649228."
     },
     {
       "id": "AUD-REL-001",
@@ -114,7 +114,7 @@
         "docs/RELEASE_GATE_STATUS_2026-10-22.md",
         "docs/CONTINUATION_CHECKPOINT_2026-10-22.md"
       ],
-      "validation": "Refresh is being restaged on a branch based on current main after PR #40 merged. Close issue #27 only after the new documentation PR merges and exact-head CI passes."
+      "validation": "This refreshed documentation PR targets current main at d27d06d809d59b1ca17e81a29019fc44be700b90. Close issue #27 after the replacement docs PR merges and exact-head CI passes."
     },
     {
       "id": "AUD-CSV-001",
@@ -129,7 +129,7 @@
         "src/Scrobblix.Application/ReadModels/HistoryCsvExporter.cs",
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
-      "validation": "PR #35 exact-head Windows CI passed in run 39896613043; current main integration run 39901957156 passed. Real Excel/LibreOffice behavior is not claimed as tested."
+      "validation": "PR #35 exact-head Windows CI passed in run 39896613043; current integrated main workflow 39903649228 passed. Real Excel/LibreOffice behavior is not claimed as tested."
     },
     {
       "id": "AUD-QUEUE-002",
@@ -163,7 +163,7 @@
         "src/Scrobblix.Domain/Playback/ConfirmedPlayedTime.cs",
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
-      "validation": "PR #40 exact-head Windows CI passed in run 39903263712 on d864697601dcb9221a2482f859aa3de0328fc464; main post-merge workflow 39903649228 was still in progress. Real GSMTC behavior remains a manual release test."
+      "validation": "PR #40 exact-head Windows CI passed in run 39903263712 on d864697601dcb9221a2482f859aa3de0328fc464; current main at d27d06d809d59b1ca17e81a29019fc44be700b90 passed post-merge run 39903649228. Real GSMTC behavior remains a manual release test."
     }
   ],
   "releaseGates": {
@@ -184,5 +184,5 @@
   "baselineCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39812019297",
   "currentMainCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39903649228",
   "auditStartSha": "0436ed83762971ef75dae5be1ffd15bab7e1eae5",
-  "currentMainCiConclusion": "in_progress"
+  "currentMainCiConclusion": "success"
 }
