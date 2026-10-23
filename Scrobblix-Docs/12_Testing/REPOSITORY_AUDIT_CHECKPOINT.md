@@ -3,45 +3,51 @@
 > Updated: 2026-10-23  
 > Repository: https://github.com/frpboy/Scrobblix  
 > Audit-start SHA: `0436ed83762971ef75dae5be1ffd15bab7e1eae5`  
-> Current integration base: `main` / `609d418580cb902d0ba14e949b9b41d756616932`  
-> Working branch: `audit/complete-repository-remediation-2026-10-v2`  
-> Audit state: remediation implemented; exact-head PR CI and review are pending.
+> Current main SHA: `e0b99774bb62bcc2ab160a8e98b24051f382641b`  
+> Current main CI: [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156) — **PASSED on the exact SHA above**  
+> Working branch: `docs/reconcile-release-status-2026-10-23`  
+> Audit state: source remediation through PR #37 is merged; audit/release documents are being refreshed on this branch.  
+> Release recommendation: **Not ready for private beta** until issue #17's real-world qualification evidence is recorded.
 
 ## Last completed stage
 
-- Enumerated the 401-file baseline tree from GitHub's untruncated tree response and reviewed architecture, engineering, security, storage, release and manual-test documents.
-- Reconciled earlier issues/PRs and avoided rewriting the prior audit branch when `main` advanced.
-- PR #31 (playback artwork retention) merged into `main` at `609d418580cb902d0ba14e949b9b41d756616932`; its exact-head and post-merge workflow passed ([run 39894119316](https://github.com/frpboy/Scrobblix/actions/runs/39894119316)).
-- The audit report and JSON register are saved in this directory.
-- [Issue #30](https://github.com/frpboy/Scrobblix/issues/30), P1, tracks queue account/provider isolation. The queue store now requires and filters exact provider/account identity; the worker passes the account associated with its retrieved session key; SQLite regression assertions cover two accounts and a second provider.
-- [Issue #32](https://github.com/frpboy/Scrobblix/issues/32), P2, tracks artwork SSRF via unresolved/private DNS destinations. Artwork requests now use a dedicated no-proxy client with connection-time DNS resolution/address validation and connect to the exact validated IP; regression assertions cover reserved/private IPv4, IPv6 and IPv4-mapped IPv6 plus a controlled resolver returning loopback.
-- Issues #10, #13 and #15 remain closed through merged PRs #11, #16 and #18; their fixes were present in the initial audit baseline.
+- Inventoried 405 tracked files on the current mainline tree; the audit-start tree had 401. Reviewed the AI-agent rules, product rules, architecture, definition of done, threat model/data classifications, security/provider/queue/SQLite/backup/NativeHost/lifecycle paths, CI/release workflows, helper scripts, and current audit/release documents.
+- Reconciled prior issues and pull requests against live GitHub state instead of treating stale checkpoint text as current.
+- PR #33 merged queue provider/account scoping and DNS-pinned public-address artwork connection handling. Issues [#30](https://github.com/frpboy/Scrobblix/issues/30) and [#32](https://github.com/frpboy/Scrobblix/issues/32) are closed. Exact-head CI passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307).
+- PR #35 expanded CSV formula-prefix neutralization and regression coverage. Issue [#34](https://github.com/frpboy/Scrobblix/issues/34) is closed. Exact-head CI passed in [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043).
+- PR #37 aligned `ProviderActionLifecycle` with the valid `SubmissionOutcomeUnknown` and `RetryExhausted` states and added lease-cleanup tests. Issue [#36](https://github.com/frpboy/Scrobblix/issues/36) is closed. Exact-head CI passed in [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712).
+- Current `main` SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed the integrated Windows workflow [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+- Earlier issues #10, #13 and #15 remain closed through PRs #11/#25, #16 and #18.
 
-## Current branch scope
+## Current documentation branch scope
 
-- Queue API/storage/processor/worker changes in `IProviderActionStore`, `SqliteProviderActionStore`, `ProviderActionProcessor`, and `App.xaml.cs`.
-- Account/provider isolation regression cases in `tests/Scrobblix.Domain.Tests/Program.cs`.
-- New `SafePublicArtworkConnector` plus a separate safe artwork HttpClient in `TrackMetadataEnricher` and `App.xaml.cs`.
-- IPv4/IPv6/public-address and controlled DNS-resolution regressions in the assertion suite.
-- Report, machine-readable issue register and this continuation checkpoint.
+- Refresh `REPOSITORY_AUDIT_REPORT.md` with current issue status, post-merge CI evidence and remaining risks.
+- Refresh `REPOSITORY_AUDIT_REGISTER.json` with current main SHA, confirmed merged fixes, the CSV and lifecycle findings, and correct validation states.
+- Refresh `REPOSITORY_AUDIT_CHECKPOINT.md`, `docs/RELEASE_GATE_STATUS_2026-10-22.md`, and `docs/CONTINUATION_CHECKPOINT_2026-10-22.md`.
+- Resolve issue [#27](https://github.com/frpboy/Scrobblix/issues/27) only after this documentation PR has merged and its exact-head CI passes.
 
-## Validation status
+## Validation evidence
 
-- Baseline `main` at SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5` passed [workflow 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297).
-- Refreshed `main` at SHA `609d418580cb902d0ba14e949b9b41d756616932` passed [workflow 39894119316](https://github.com/frpboy/Scrobblix/actions/runs/39894119316).
-- Neither result validates this branch's queue or artwork network-boundary changes. Wait for the exact PR head workflow to finish before claiming success or merging.
-- Local `git clone` failed because this environment could not resolve github.com. Local .NET SDK and PowerShell are unavailable; Node.js v22.16.0 is present. Do not claim local .NET build/test or PowerShell runs.
-- GitHub branch-protection details returned HTTP 403 to this integration; no protection was changed.
-- The published `v0.1.0-beta.1` remains an unsigned preview/test bundle, not a production installer.
-- [Issue #17](https://github.com/frpboy/Scrobblix/issues/17) remains open: the manual Windows, Last.fm profile, installed-browser, long-run, restore and installer qualification matrix is still `NOT RUN`.
-- [Issue #27](https://github.com/frpboy/Scrobblix/issues/27) and [PR #29](https://github.com/frpboy/Scrobblix/pull/29) are a separate release-status/checkpoint documentation task; PR #29 was open at last check and should be reconciled before closure.
+- Audit-start main SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5`: Windows CI passed in [run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297).
+- PR #33: exact-head Windows CI passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307).
+- PR #35: exact-head Windows CI passed in [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043).
+- PR #37: exact-head Windows CI passed in [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712).
+- Current main `e0b99774bb62bcc2ab160a8e98b24051f382641b`: full Windows CI passed in [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+- CI includes .NET build, desktop and release-workflow contracts, domain/Infrastructure assertions, browser TypeScript/build/security/manifest checks, PowerShell parser validation, Windows/NativeHost publishing, and artifact assembly/upload.
+- Local GitHub clone failed because the environment could not resolve `github.com`; local .NET and PowerShell runs are not claimed. Do not represent this as a local build/test.
+- GitHub branch-protection details were not available through the connected integration and were not changed.
+- The preview release `v0.1.0-beta.1` remains an unsigned test bundle, not a signed production installer.
+
+## Remaining release qualification
+
+[Issue #17](https://github.com/frpboy/Scrobblix/issues/17) remains open. The manual matrix still records real-device/provider/installed-browser/GUI/accessibility/restore/install-upgrade-rollback checks as `NOT RUN`. These must not be marked PASS until actually run with a dedicated Last.fm test account and a real supported Windows/browser environment.
 
 ## Next three concrete actions
 
-1. Open/update the PR from this branch to `main`; review the exact head, run logs and complete diff, correcting any CI failure without disabling tests or lowering security assertions.
-2. Confirm the exact final PR head passes .NET build, desktop contracts, domain/Infrastructure assertions, browser checks, manifests, PowerShell parsing, Windows/native-host publishing, and artifact assembly.
-3. Merge only after CI and required review checks pass. Verify the merge commit/current `main`, ensure #30 and #32 close only through the verified merge, update this report/register/checkpoint with the final SHAs and run, and leave #17 open until manual qualification evidence is actually recorded.
+1. Review the full diff of this branch, validate the JSON register syntax/issue references, and open a focused documentation PR targeting `main`.
+2. Wait for the exact documentation PR head's Windows CI to complete successfully; fix failures rather than suppressing checks.
+3. Merge only if the PR is mergeable and required checks/reviews are satisfied. Verify the merge SHA and post-merge main CI, then close issue #27. Leave #17 open until manual qualification evidence is recorded.
 
 ## Resume procedure
 
-Fetch live GitHub state first: latest main SHA, this branch SHA, open issues/PRs, and latest workflow conclusions. Do not use a queued, running or older-SHA workflow as proof. Reconcile PR #29 and all comments before touching its files. Never rewrite or force-push the predecessor audit branch.
+Fetch live `main`, open issues/PRs, and latest workflow conclusions before continuing. Current reference point at this checkpoint is main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` and CI run 39901957156. Do not reuse these as proof for any later SHA.
