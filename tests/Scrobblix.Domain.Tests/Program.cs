@@ -533,19 +533,52 @@ Assert(await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", 
 
 
 Assert(!await eligiblePlayStore.TryPersistAndQueueAsync(historyRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "The provider action idempotency key prevents repeated queueing.");
+// A queue worker must never claim another account's older due action with its own session key.
+var accountIsolationDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-account-isolation-{Guid.NewGuid():N}.db");
+var accountIsolationConnectionString = $"Data Source={accountIsolationDatabasePath};Pooling=False";
+await new SqliteDatabase(accountIsolationConnectionString).InitializeAsync(CancellationToken.None);
+var accountIsolationPlayStore = new SqliteEligiblePlayStore(accountIsolationConnectionString);
+var accountAPlay = historyRecord with { PlayId = "account-isolation-a" };
+var accountBPlay = historyRecord with { PlayId = "account-isolation-b" };
+Assert(await accountIsolationPlayStore.TryPersistAndQueueAsync(
+    accountAPlay, "lastfm", "account-a", observation.ObservedAtUtc, CancellationToken.None),
+    "Account A's due action is persisted for the account-isolation regression.");
+Assert(await accountIsolationPlayStore.TryPersistAndQueueAsync(
+    accountBPlay, "lastfm", "account-b", observation.ObservedAtUtc.AddSeconds(1), CancellationToken.None),
+    "Account B's action is newer than account A's action.");
+var accountIsolationActionStore = new SqliteProviderActionStore(accountIsolationConnectionString);
+var accountBLease = await accountIsolationActionStore.ClaimNextDueAsync(
+    "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddSeconds(2), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(accountBLease is { PlayId: "account-isolation-b", AccountId: "account-b" },
+    "A worker for account B claims B's action even though account A has the older due action.");
+await accountIsolationActionStore.CompleteAsync(
+    accountBLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
+    observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None);
+var accountALease = await accountIsolationActionStore.ClaimNextDueAsync(
+    "worker-account-a", "lastfm", "account-a", observation.ObservedAtUtc.AddSeconds(2), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(accountALease is { PlayId: "account-isolation-a", AccountId: "account-a" },
+    "A worker for account A can claim only A's remaining action.");
+await accountIsolationActionStore.CompleteAsync(
+    accountALease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted,
+    observation.ObservedAtUtc.AddSeconds(2), CancellationToken.None);
+Assert(await accountIsolationActionStore.ClaimNextDueAsync(
+    "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is null,
+    "Account B cannot claim account A's already-completed or future-due queue records.");
+File.Delete(accountIsolationDatabasePath);
+
 var actionStore = new SqliteProviderActionStore(connectionString);
-var lease = await actionStore.ClaimNextDueAsync("worker-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
+var lease = await actionStore.ClaimNextDueAsync("worker-1", "lastfm", "account-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(lease is not null && lease.PlayId == "play-1" && lease.AttemptCount == 1, "A due provider action is leased exactly once before delivery.");
 await actionStore.CompleteAsync(lease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted, observation.ObservedAtUtc, CancellationToken.None);
-Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "An accepted provider action is not delivered again.");
+Assert(await actionStore.ClaimNextDueAsync("worker-2", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "An accepted provider action is not delivered again.");
 var retryRecord = historyRecord with { PlayId = "play-2" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(retryRecord, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "A distinct eligible play can be placed in the provider queue.");
-var retryLease = await actionStore.ClaimNextDueAsync("worker-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
+var retryLease = await actionStore.ClaimNextDueAsync("worker-1", "lastfm", "account-1", observation.ObservedAtUtc, TimeSpan.FromMinutes(1), CancellationToken.None);
 await actionStore.CompleteAsync(retryLease!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
-Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddSeconds(30), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "Transient provider failures observe a retry delay.");
-Assert(await actionStore.ClaimNextDueAsync("worker-2", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
+Assert(await actionStore.ClaimNextDueAsync("worker-2", "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(30), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "Transient provider failures observe a retry delay.");
+Assert(await actionStore.ClaimNextDueAsync("worker-2", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
 Assert(await actionStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 1, "An expired in-flight action is recovered after a restart-safe lease timeout.");
-Assert(await actionStore.ClaimNextDueAsync("worker-3", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A recovered action can be leased for a subsequent delivery attempt.");
+Assert(await actionStore.ClaimNextDueAsync("worker-3", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A recovered action can be leased for a subsequent delivery attempt.");
 var historyReader = new SqliteHistoryReader(connectionString);
 var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
@@ -561,7 +594,7 @@ Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queu
 var unknownQueuePlay = retryRecord with { PlayId = "play-outcome-unknown" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(unknownQueuePlay, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
     "An additional eligible action is persisted for the unknown-outcome queue test.");
-var unknownQueueLease = await actionStore.ClaimNextDueAsync("worker-unknown", observation.ObservedAtUtc.AddHours(1), TimeSpan.FromMinutes(1), CancellationToken.None);
+var unknownQueueLease = await actionStore.ClaimNextDueAsync("worker-unknown", "lastfm", "account-1", observation.ObservedAtUtc.AddHours(1), TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(unknownQueueLease is not null, "The additional action can be claimed for completion.");
 await actionStore.CompleteAsync(unknownQueueLease!.ActionId, ProviderActionState.SubmissionOutcomeUnknown,
     ReasonCodes.Provider.SubmissionOutcomeUnknown, observation.ObservedAtUtc.AddHours(1), CancellationToken.None);
@@ -627,12 +660,12 @@ Assert(await eligiblePlayStore.TryPersistAndQueueAsync(userRetryRecord, "lastfm"
     "A new eligible record can be queued for manual retry testing.");
 var retryCandidate = (await queueReader.GetRecentActionsAsync(50, CancellationToken.None))
     .Single(action => action.PlayId == "play-user-retry");
-var retryCandidateLease = await actionStore.ClaimNextDueAsync("worker-user-retry", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None);
+var retryCandidateLease = await actionStore.ClaimNextDueAsync("worker-user-retry", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(retryCandidateLease is not null, "Queued actions can be leased for retry-state testing.");
 await actionStore.CompleteAsync(retryCandidateLease!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
 Assert(await actionStore.RetryNowAsync(retryCandidateLease.ActionId, observation.ObservedAtUtc.AddSeconds(10), CancellationToken.None),
     "A retry-scheduled action can be moved to immediate pending delivery.");
-var immediateRetry = await actionStore.ClaimNextDueAsync("worker-user-retry-2", observation.ObservedAtUtc.AddSeconds(10), TimeSpan.FromMinutes(1), CancellationToken.None);
+var immediateRetry = await actionStore.ClaimNextDueAsync("worker-user-retry-2", "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(10), TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(immediateRetry is not null && immediateRetry.ActionId == retryCandidate.ActionId,
     "Retry now makes the selected action eligible for immediate leasing.");
 await actionStore.CompleteAsync(immediateRetry!.ActionId, ProviderActionState.RetryScheduled, ReasonCodes.Provider.TemporaryUnavailable, observation.ObservedAtUtc, CancellationToken.None);
@@ -690,7 +723,7 @@ var processor = new ProviderActionProcessor(
         observedProviderOutcome = outcome;
         observedProviderReason = reasonCode;
     });
-Assert(await processor.ProcessNextAsync("worker-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
+Assert(await processor.ProcessNextAsync("worker-1", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None), "The queue worker submits a leased action through the provider boundary.");
 Assert(recordingStore.CompletedState == ProviderActionState.Accepted, "An accepted provider response is stored as an accepted queue action.");
 Assert(observedProviderActionType == ProviderActionType.Scrobble
     && observedProviderOutcome == ProviderActionState.Accepted
@@ -701,14 +734,14 @@ var unknownOutcomeStore = new RecordingProviderActionStore(queuedLease with { Ac
 var unknownOutcomeProcessor = new ProviderActionProcessor(
     unknownOutcomeStore,
     new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false)));
-Assert(await unknownOutcomeProcessor.ProcessNextAsync("worker-unknown", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await unknownOutcomeProcessor.ProcessNextAsync("worker-unknown", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && unknownOutcomeStore.CompletedState == ProviderActionState.SubmissionOutcomeUnknown,
     "An ambiguous Last.fm scrobble outcome is persisted for review instead of blindly retried.");
 var ignoredActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-ignored" });
 var ignoredProcessor = new ProviderActionProcessor(
     ignoredActionStore,
     new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.IgnoredArtist, false)));
-Assert(await ignoredProcessor.ProcessNextAsync("worker-ignored", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await ignoredProcessor.ProcessNextAsync("worker-ignored", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && ignoredActionStore.CompletedState == ProviderActionState.ProviderIgnored,
     "A Last.fm filtered scrobble is stored as ProviderIgnored, not a false success or an automatic retry.");
 
@@ -717,7 +750,7 @@ var retryAfterStore = new RecordingProviderActionStore(queuedLease with { Action
 var retryAfterProcessor = new ProviderActionProcessor(
     retryAfterStore,
     new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.RateLimited, true, TimeSpan.FromSeconds(27))));
-Assert(await retryAfterProcessor.ProcessNextAsync("worker-rate-limit", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await retryAfterProcessor.ProcessNextAsync("worker-rate-limit", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && retryAfterStore.CompletedState == ProviderActionState.RetryScheduled
     && retryAfterStore.CompletedRetryAfter == TimeSpan.FromSeconds(27),
     "Provider Retry-After hints are passed to durable queue scheduling.");
@@ -726,7 +759,7 @@ var backoffStore = new RecordingProviderActionStore(queuedLease with { ActionId 
 var backoffProcessor = new ProviderActionProcessor(
     backoffStore,
     new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.TemporaryUnavailable, true)));
-Assert(await backoffProcessor.ProcessNextAsync("worker-backoff", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await backoffProcessor.ProcessNextAsync("worker-backoff", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && backoffStore.CompletedState == ProviderActionState.RetryScheduled
     && backoffStore.CompletedRetryAfter == TimeSpan.FromMinutes(4),
     "Transient failures use capped exponential backoff when the provider supplies no Retry-After value.");
@@ -735,21 +768,21 @@ var exhaustedStore = new RecordingProviderActionStore(queuedLease with { ActionI
 var exhaustedProcessor = new ProviderActionProcessor(
     exhaustedStore,
     new ResultScrobbleProvider(new ProviderSubmissionResult(false, ReasonCodes.Provider.TemporaryUnavailable, true)));
-Assert(await exhaustedProcessor.ProcessNextAsync("worker-exhausted", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await exhaustedProcessor.ProcessNextAsync("worker-exhausted", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && exhaustedStore.CompletedState == ProviderActionState.RetryExhausted,
     "Repeated transient failures stop automatic retries after the configured attempt limit.");
 
 var loveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-love", ActionType = ProviderActionType.Love });
 var loveProvider = new AcceptingScrobbleProvider();
 var loveProcessor = new ProviderActionProcessor(loveActionStore, loveProvider);
-Assert(await loveProcessor.ProcessNextAsync("worker-love", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await loveProcessor.ProcessNextAsync("worker-love", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && loveProvider.LastAction == "love" && loveActionStore.CompletedState == ProviderActionState.Accepted,
     "The shared provider queue dispatches Love actions through the Last.fm provider boundary.");
 
 var unloveActionStore = new RecordingProviderActionStore(queuedLease with { ActionId = "action-unlove", ActionType = ProviderActionType.Unlove });
 var unloveProvider = new AcceptingScrobbleProvider();
 var unloveProcessor = new ProviderActionProcessor(unloveActionStore, unloveProvider);
-Assert(await unloveProcessor.ProcessNextAsync("worker-unlove", "session-key", observation.ObservedAtUtc, CancellationToken.None)
+Assert(await unloveProcessor.ProcessNextAsync("worker-unlove", "lastfm", "account-1", "session-key", observation.ObservedAtUtc, CancellationToken.None)
     && unloveProvider.LastAction == "unlove" && unloveActionStore.CompletedState == ProviderActionState.Accepted,
     "The shared provider queue dispatches Unlove actions through the Last.fm provider boundary.");
 
@@ -1004,8 +1037,16 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
 
     public Task<int> RecoverExpiredLeasesAsync(DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(0);
 
-    public Task<ProviderActionLease?> ClaimNextDueAsync(string workerId, DateTimeOffset nowUtc, TimeSpan leaseDuration, CancellationToken cancellationToken)
+    public Task<ProviderActionLease?> ClaimNextDueAsync(
+        string workerId, string provider, string accountId, DateTimeOffset nowUtc, TimeSpan leaseDuration, CancellationToken cancellationToken)
     {
+        if (_lease is null
+            || !string.Equals(_lease.Provider, provider, StringComparison.Ordinal)
+            || !string.Equals(_lease.AccountId, accountId, StringComparison.Ordinal))
+        {
+            return Task.FromResult<ProviderActionLease?>(null);
+        }
+
         var next = _lease;
         _lease = null;
         return Task.FromResult(next);
