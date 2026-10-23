@@ -80,6 +80,7 @@ var trayConnected = new TrayMenuStatus(
     Artist: "Test Artist",
     Title: "Test Track",
     CurrentLoveIntent: null,
+    CurrentLoveActionState: null,
     LoveActionInProgress: false,
     PendingQueueCount: 3,
     RetryableFailedScrobbleCount: 1,
@@ -115,6 +116,36 @@ Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).Love
     "The next Love action follows the latest locally saved intent.");
 Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).CurrentTrackStatusLabel.Contains("requested", StringComparison.Ordinal),
     "Local Love intent is described as requested rather than falsely confirmed by Last.fm.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.Pending,
+}).CurrentTrackStatusLabel.Contains("queued", StringComparison.OrdinalIgnoreCase),
+    "A pending Love intent is shown as queued rather than provider-accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.Accepted,
+}).CurrentTrackStatusLabel == "Loved on Last.fm",
+    "The tray reports Love only after the persisted provider state is accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Unlove,
+    CurrentLoveActionState = ProviderActionState.Accepted,
+}).CurrentTrackStatusLabel == "Unloved on Last.fm",
+    "The tray reports Unlove only after the persisted provider state is accepted.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.PermanentFailure,
+}).CurrentTrackStatusLabel.Contains("rejected", StringComparison.OrdinalIgnoreCase),
+    "A permanent Love failure is represented as rejected, not as success.");
+Assert((trayConnected with
+{
+    CurrentLoveIntent = ProviderActionType.Love,
+    CurrentLoveActionState = ProviderActionState.SubmissionOutcomeUnknown,
+}).CurrentTrackStatusLabel.Contains("unknown", StringComparison.OrdinalIgnoreCase),
+    "Ambiguous Love outcomes remain explicitly unknown.");
 var longTrayLabel = (trayConnected with
 {
     Artist = new string('A', 200),
