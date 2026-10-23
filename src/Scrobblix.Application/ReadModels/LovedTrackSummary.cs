@@ -12,4 +12,7 @@ public sealed record LovedTrackSummary(
     ProviderActionState State,
     int AttemptCount,
     string? LastReasonCode,
-    DateTimeOffset UpdatedUtc);
+    DateTimeOffset UpdatedUtc)
+{
+    public string? AccountId { get; init; }
+}
