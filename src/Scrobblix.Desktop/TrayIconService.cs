@@ -5,13 +5,14 @@ using Microsoft.UI.Xaml;
 namespace Scrobblix.Desktop;
 
 /// <summary>
-/// Keeps the listening companion available in the Windows notification area while its
-/// window is minimized. The app continues tracking; the tray menu provides a clear way
-/// to restore the window or explicitly exit the application.
+/// Owns the existing Win32 notification-area icon and native context menu.
+/// The menu is rebuilt from the window's latest local read-model snapshot each time it
+/// opens; building it performs no storage or provider I/O.
 /// </summary>
 internal sealed class TrayIconService : IDisposable
 {
     private const uint WmSize = 0x0005;
+    private const uint WmNull = 0x0000;
     private const uint WmApp = 0x8000;
     private const uint TrayCallbackMessage = WmApp + 0x31;
     private const uint SizeMinimized = 1;
@@ -28,17 +29,29 @@ internal sealed class TrayIconService : IDisposable
     private const uint LoadImageFromFile = 0x0010;
     private const uint LoadImageDefaultSize = 0x0040;
     private const uint MfString = 0x00000000;
+    private const uint MfGray = 0x00000001;
+    private const uint MfDisabled = 0x00000002;
     private const uint MfSeparator = 0x00000800;
+    private const uint MfPopup = 0x00000010;
     private const uint TpmRightButton = 0x0002;
     private const uint TpmReturnCommand = 0x0100;
     private const int SwHide = 0;
     private const int SwRestore = 9;
     private const uint OpenCommand = 1001;
     private const uint ExitCommand = 1002;
+    private const uint TrackingCommand = 1003;
+    private const uint LoveTrackCommand = 1004;
+    private const uint CopyTrackCommand = 1005;
+    private const uint RetryFailedCommand = 1006;
+    private const uint OpenQueueCommand = 1007;
+    private const uint OpenSettingsCommand = 1008;
+    private const uint OpenDiagnosticsCommand = 1009;
+    private const uint OpenLogFolderCommand = 1010;
     private const uint SubclassId = 1;
     private static readonly Guid TrayGuid = new("605D2E99-F0D5-4F49-97ED-BAF322DC27A1");
 
     private readonly Window _window;
+    private readonly MainWindow _mainWindow;
     private readonly IntPtr _windowHandle;
     private readonly SubclassProcedure _subclassProcedure;
     private readonly NotifyIconData _iconData;
@@ -47,9 +60,10 @@ internal sealed class TrayIconService : IDisposable
     private bool _disposed;
     private bool _restoring;
 
-    public TrayIconService(Window window)
+    public TrayIconService(MainWindow window)
     {
-        _window = window ?? throw new ArgumentNullException(nameof(window));
+        _mainWindow = window ?? throw new ArgumentNullException(nameof(window));
+        _window = window;
         _windowHandle = WinRT.Interop.WindowNative.GetWindowHandle(window);
         _subclassProcedure = WindowSubclass;
         if (!SetWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId), UIntPtr.Zero))
@@ -80,7 +94,7 @@ internal sealed class TrayIconService : IDisposable
         var iconData = _iconData;
         if (!Shell_NotifyIcon(NimAdd, ref iconData))
         {
-            RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
+            _ = RemoveWindowSubclass(_windowHandle, _subclassProcedure, new UIntPtr(SubclassId));
             if (_ownedIcon != IntPtr.Zero) _ = DestroyIcon(_ownedIcon);
             throw new Win32Exception(Marshal.GetLastWin32Error(), "Windows could not add the Scrobblix notification-area icon.");
         }
@@ -138,14 +152,60 @@ internal sealed class TrayIconService : IDisposable
 
     private void ShowContextMenu()
     {
+        if (_disposed) return;
+
         var menu = CreatePopupMenu();
         if (menu == IntPtr.Zero) return;
 
         try
         {
-            _ = AppendMenu(menu, MfString, new UIntPtr(OpenCommand), "Open Scrobblix");
-            _ = AppendMenu(menu, MfSeparator, UIntPtr.Zero, string.Empty);
-            _ = AppendMenu(menu, MfString, new UIntPtr(ExitCommand), "Exit Scrobblix");
+            var status = _mainWindow.GetTrayMenuStatus();
+            AppendStatusItem(menu, "Scrobblix — Running");
+            AppendStatusItem(menu, status.LastFmLabel);
+            AppendStatusItem(menu, status.PlaybackLabel);
+            AppendStatusItem(menu, status.QueueLabel);
+            AppendSeparator(menu);
+
+            AppendItem(menu, OpenCommand, "Open Scrobblix", status.IsClosed);
+            AppendItem(menu, TrackingCommand, status.TrackingCommandLabel, status.IsClosed);
+
+            var currentTrackMenu = CreatePopupMenu();
+            if (currentTrackMenu != IntPtr.Zero)
+            {
+                AppendStatusItem(currentTrackMenu, status.CurrentTrackStatusLabel);
+                AppendSeparator(currentTrackMenu);
+                AppendItem(currentTrackMenu, LoveTrackCommand, status.LoveCommandLabel, !status.CanLoveTrack);
+                AppendItem(currentTrackMenu, CopyTrackCommand, "Copy Track Details", !status.CanCopyTrackDetails);
+                AppendSubmenu(menu, currentTrackMenu, "Current Track");
+            }
+
+            var queueMenu = CreatePopupMenu();
+            if (queueMenu != IntPtr.Zero)
+            {
+                AppendStatusItem(queueMenu, status.QueueLabel);
+                if (status.RetryableFailedScrobbleCount > 0)
+                {
+                    AppendItem(
+                        queueMenu,
+                        RetryFailedCommand,
+                        $"Retry Failed Scrobbles ({status.RetryableFailedScrobbleCount:N0})",
+                        !status.CanRetryFailedScrobbles);
+                }
+                else
+                {
+                    AppendItem(queueMenu, 0, "No retryable failed scrobbles", disabled: true);
+                }
+
+                AppendItem(queueMenu, OpenQueueCommand, "Open Queue", status.IsClosed);
+                AppendSubmenu(menu, queueMenu, "Scrobble Queue");
+            }
+
+            AppendSeparator(menu);
+            AppendItem(menu, OpenLogFolderCommand, "Open Log Folder", status.IsClosed);
+            AppendItem(menu, OpenSettingsCommand, "Open Settings", status.IsClosed);
+            AppendItem(menu, OpenDiagnosticsCommand, "Open Diagnostics", status.IsClosed);
+            AppendSeparator(menu);
+            AppendItem(menu, ExitCommand, "Exit Scrobblix", status.IsClosed);
 
             _ = SetForegroundWindow(_windowHandle);
             if (!GetCursorPos(out var point)) return;
@@ -158,19 +218,96 @@ internal sealed class TrayIconService : IDisposable
                 _windowHandle,
                 IntPtr.Zero);
 
-            if (command == OpenCommand)
+            // The documented WM_NULL post helps Windows dismiss the native popup reliably.
+            _ = PostMessage(_windowHandle, WmNull, IntPtr.Zero, IntPtr.Zero);
+            if (!_disposed)
             {
-                RestoreWindow();
+                DispatchCommand(command);
             }
-            else if (command == ExitCommand)
-            {
-                _window.Close();
-            }
-
+        }
+        catch (Exception exception)
+        {
+            // Tray UI must never take down the listening process. Log only the failure class;
+            // this avoids putting track names, account details or credentials into diagnostics.
+            System.Diagnostics.Debug.WriteLine($"Scrobblix tray menu failed: {exception.GetType().Name}");
         }
         finally
         {
             _ = DestroyMenu(menu);
+        }
+    }
+
+    private void DispatchCommand(uint command)
+    {
+        if (_disposed) return;
+
+        switch (command)
+        {
+            case OpenCommand:
+                RestoreWindow();
+                break;
+            case TrackingCommand:
+                var status = _mainWindow.GetTrayMenuStatus();
+                if (!status.IsClosed)
+                {
+                    _mainWindow.SetTrackingEnabledFromTray(!status.TrackingEnabled);
+                }
+                break;
+            case LoveTrackCommand:
+                if (_mainWindow.GetTrayMenuStatus().CanLoveTrack)
+                {
+                    _ = _mainWindow.ToggleLovedTrackFromTrayAsync();
+                }
+                break;
+            case CopyTrackCommand:
+                _mainWindow.CopyCurrentTrackDetailsFromTray();
+                break;
+            case RetryFailedCommand:
+                if (_mainWindow.GetTrayMenuStatus().CanRetryFailedScrobbles)
+                {
+                    _ = _mainWindow.RetryFailedScrobblesFromTrayAsync();
+                }
+                break;
+            case OpenQueueCommand:
+                RestoreWindow();
+                _mainWindow.NavigateFromTray("queue");
+                break;
+            case OpenSettingsCommand:
+                RestoreWindow();
+                _mainWindow.NavigateFromTray("settings");
+                break;
+            case OpenDiagnosticsCommand:
+                RestoreWindow();
+                _mainWindow.NavigateFromTray("diagnostics");
+                break;
+            case OpenLogFolderCommand:
+                _mainWindow.OpenLogFolderFromTray();
+                break;
+            case ExitCommand:
+                _window.Close();
+                break;
+        }
+    }
+
+    private static void AppendStatusItem(IntPtr menu, string label) =>
+        _ = AppendMenu(menu, MfString | MfGray | MfDisabled, UIntPtr.Zero, label);
+
+    private static void AppendItem(IntPtr menu, uint command, string label, bool disabled = false) =>
+        _ = AppendMenu(
+            menu,
+            MfString | (disabled ? MfGray | MfDisabled : 0),
+            new UIntPtr(command),
+            label);
+
+    private static void AppendSeparator(IntPtr menu) =>
+        _ = AppendMenu(menu, MfSeparator, UIntPtr.Zero, string.Empty);
+
+    private static void AppendSubmenu(IntPtr menu, IntPtr submenu, string label)
+    {
+        if (submenu == IntPtr.Zero) return;
+        if (!AppendMenu(menu, MfPopup, new UIntPtr(unchecked((ulong)submenu.ToInt64())), label))
+        {
+            _ = DestroyMenu(submenu);
         }
     }
 
@@ -280,4 +417,7 @@ internal sealed class TrayIconService : IDisposable
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool SetForegroundWindow(IntPtr windowHandle);
 
+    [DllImport("user32.dll", EntryPoint = "PostMessageW", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool PostMessage(IntPtr windowHandle, uint message, IntPtr wParam, IntPtr lParam);
 }
