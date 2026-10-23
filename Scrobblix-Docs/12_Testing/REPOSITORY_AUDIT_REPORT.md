@@ -14,7 +14,7 @@ The GitHub tree at the audit baseline contained 401 tracked files (tree API repo
 
 The audit reconciled current issues and PRs, release prerequisites, the real-world matrix, migration/restore hardening, browser/native-host boundaries, playback ingestion/tracking, provider delivery, metadata/artwork fetching, diagnostics/privacy, CSV, lifecycle, release workflows and helper scripts. The GitHub tree currently has 405 tracked files. Current main has additionally merged PR #33 (queue account isolation/artwork connection pinning), PR #35 (CSV formula-prefix hardening), PR #37 (provider-action lifecycle outcomes), and PR #40 (GSMTC source-gap time accounting).
 
-Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging), #13 (P2 daylight-saving day boundaries), #15 (P2 browser-origin registration), #30 (P1 account/provider queue isolation), #32 (P2 artwork destination connection pinning), #34 (P2 CSV formula prefixes) and #36 (P3 lifecycle completion-state consistency). Their fixes were merged in PRs #11/#25, #16, #18, #33, #35 and #37 respectively, with exact-head Windows CI evidence linked in the validation section below. The integrated mainline passed its full Windows CI workflow on SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` in run 39903649228. PR #40 fixed issue #39: after a sustained missing GSMTC session, the tracker stops confirmed-time accrual at the last positive sample, preserves same-track resume without counting the gap, and leaves a browser-owned play alone. PR #40's exact-head CI passed in run 39903263712; live GSMTC behavior remains a manual qualification item under issue #17.
+Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging), #13 (P2 daylight-saving day boundaries), #15 (P2 browser-origin registration), #30 (P1 account/provider queue isolation), #32 (P2 artwork destination connection pinning), #34 (P2 CSV formula prefixes) and #36 (P3 lifecycle completion-state consistency), and #39 (P2 missing-GSMTC source-gap time accounting). Their fixes were merged in PRs #11/#25, #16, #18, #33, #35, #37 and #40 respectively, with exact-head Windows CI evidence linked in the validation section below. The integrated mainline passed its full Windows CI workflow on SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` in run 39903649228. PR #40 fixed issue #39: after a sustained missing GSMTC session, the tracker stops confirmed-time accrual at the last positive sample, preserves same-track resume without counting the gap, and leaves a browser-owned play alone. PR #40's exact-head CI passed in run 39903263712; live GSMTC behavior remains a manual qualification item under issue #17.
 
 ## Baseline and environment
 
@@ -22,7 +22,7 @@ Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging),
 |---|---|
 | Default branch | `main` |
 | Audit-start SHA | `0436ed83762971ef75dae5be1ffd15bab7e1eae5` |
-| Current integration base | `e0b99774bb62bcc2ab160a8e98b24051f382641b` |
+| Current integration base | `d27d06d809d59b1ca17e81a29019fc44be700b90` |
 | Baseline workflow | [Windows CI run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) |
 | Baseline workflow result | Passed for that exact baseline SHA |
 | Current main workflow | [Run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) **passed** on `d27d06d809d59b1ca17e81a29019fc44be700b90` |
