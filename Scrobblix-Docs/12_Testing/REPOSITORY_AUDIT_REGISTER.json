@@ -1,0 +1,136 @@
+{
+  "schemaVersion": 1,
+  "auditDate": "2026-10-23",
+  "repository": "frpboy/Scrobblix",
+  "baseBranch": "main",
+  "baseSha": "0436ed83762971ef75dae5be1ffd15bab7e1eae5",
+  "auditBranch": "audit/complete-repository-remediation-2026-10-v2",
+  "findings": [
+    {
+      "id": "AUD-PRIV-001",
+      "title": "Listening metadata retained in diagnostic logs",
+      "severity": "P2",
+      "status": "fixed_merged",
+      "issue": 10,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/10",
+      "fixPR": 11,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/11",
+      "evidence": [
+        "src/Scrobblix.Application/Queue/ProviderActionProcessor.cs",
+        "src/Scrobblix.Desktop/ScrobblixFileLogger.cs",
+        "src/Scrobblix.Infrastructure/Diagnostics/DiagnosticMessageSanitizer.cs"
+      ],
+      "validation": "Merged and later delimiter-safe redaction change is present on base."
+    },
+    {
+      "id": "AUD-DATE-001",
+      "title": "Today summary bounds across daylight-saving transitions",
+      "severity": "P2",
+      "status": "fixed_merged",
+      "issue": 13,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/13",
+      "fixPR": 16,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/16",
+      "evidence": [
+        "src/Scrobblix.Infrastructure/Storage/SqliteHistoryReader.cs",
+        "tests/Scrobblix.Domain.Tests/Program.cs"
+      ],
+      "validation": "Exact-head Windows CI passed before merge; 23-hour and 25-hour regression assertions."
+    },
+    {
+      "id": "AUD-BROWSER-001",
+      "title": "Custom browser-origin authorization requires an explicit matching registration",
+      "severity": "P2",
+      "status": "fixed_merged",
+      "issue": 15,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/15",
+      "fixPR": 18,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/18",
+      "evidence": [
+        "browser-extension/src/message-validation.ts",
+        "browser-extension/src/service-worker.ts",
+        "scripts/test-browser-security.mjs"
+      ],
+      "validation": "Exact-head Windows CI passed before merge; origin, registration, protocol and spoofing assertions."
+    },
+    {
+      "id": "AUD-QUEUE-001",
+      "title": "Scope provider-action claims to connected provider/account",
+      "severity": "P1",
+      "status": "implemented_ci_pending",
+      "issue": 30,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/30",
+      "fixPR": null,
+      "fixPRUrl": null,
+      "evidence": [
+        "src/Scrobblix.Application/Abstractions/IProviderActionStore.cs",
+        "src/Scrobblix.Application/Queue/ProviderActionProcessor.cs",
+        "src/Scrobblix.Infrastructure/Storage/SqliteProviderActionStore.cs",
+        "src/Scrobblix.Desktop/App.xaml.cs",
+        "tests/Scrobblix.Domain.Tests/Program.cs"
+      ],
+      "validation": "Temporary SQLite test covers two account IDs and provider scoping; exact-head CI not yet complete."
+    },
+    {
+      "id": "AUD-SEC-002",
+      "title": "Pin artwork connections to validated public IP addresses",
+      "severity": "P2",
+      "status": "implemented_ci_pending",
+      "issue": 32,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/32",
+      "fixPR": null,
+      "fixPRUrl": null,
+      "evidence": [
+        "src/Scrobblix.Infrastructure/Providers/TrackMetadataEnricher.cs",
+        "src/Scrobblix.Infrastructure/Providers/SafePublicArtworkConnector.cs",
+        "src/Scrobblix.Desktop/App.xaml.cs",
+        "tests/Scrobblix.Domain.Tests/Program.cs"
+      ],
+      "validation": "Deterministic address classification and controlled private-DNS resolver assertions added; exact-head CI not yet complete. Artwork client bypasses OS proxy so the request cannot delegate DNS resolution to a proxy."
+    },
+    {
+      "id": "AUD-REL-001",
+      "title": "Real-world qualification matrix remains NOT RUN",
+      "severity": "release_gate",
+      "status": "open_manual_qualification",
+      "issue": 17,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/17",
+      "evidence": [
+        "Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md",
+        "PRODUCTION_RELEASE_PREREQUISITES.md"
+      ],
+      "validation": "Requires real Windows session, dedicated test account, installed browser/native host and installer/recovery tests."
+    },
+    {
+      "id": "AUD-DOC-001",
+      "title": "Release gate status and continuation checkpoint stale at baseline",
+      "severity": "P2",
+      "status": "existing_pr_open",
+      "issue": 27,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/27",
+      "fixPR": 29,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/29",
+      "evidence": [
+        "docs/RELEASE_GATE_STATUS_2026-10-22.md",
+        "docs/CONTINUATION_CHECKPOINT_2026-10-22.md"
+      ],
+      "validation": "Open docs PR refresh exists; avoid duplicate branch edits and reconcile its current review comments."
+    }
+  ],
+  "releaseGates": {
+    "status": "not_ready_for_private_beta",
+    "issue": 17,
+    "manualMatrix": "Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md",
+    "manualStatuses": "NOT RUN unless actual evidence is recorded"
+  },
+  "environment": {
+    "githubCloneAttempt": "blocked: name resolution for github.com failed in execution environment",
+    "dotnetSdkLocal": "unavailable",
+    "powershellLocal": "unavailable",
+    "node": "v22.16.0",
+    "exactHeadCIRequired": true
+  },
+  "currentMainSha": "609d418580cb902d0ba14e949b9b41d756616932",
+  "baselineCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39812019297",
+  "currentMainCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39894119316"
+}

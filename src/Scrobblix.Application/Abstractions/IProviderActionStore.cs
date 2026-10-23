@@ -8,6 +8,8 @@ public interface IProviderActionStore
 
     Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,
+        string provider,
+        string accountId,
         DateTimeOffset nowUtc,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken);

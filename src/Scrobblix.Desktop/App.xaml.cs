@@ -306,7 +306,13 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             {
                 Timeout = TimeSpan.FromSeconds(12),
             };
-            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"), message => logger.Info("METADATA_PROVIDER", message));
+            var artworkHttpClient = SafePublicArtworkConnector.CreateHttpClient(TimeSpan.FromSeconds(12));
+            var metadataEnricher = new TrackMetadataEnricher(
+                metadataHttpClient,
+                initialApiKey,
+                Path.Combine(dataDirectory, "artwork"),
+                message => logger.Info("METADATA_PROVIDER", message),
+                artworkHttpClient);
             var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
             var localPlayStore = new SqliteLocalPlayStore(connectionString);
             var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
@@ -790,7 +796,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                     {
                         var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
                         if (!string.IsNullOrWhiteSpace(sessionKey)
-                            && await processor.ProcessNextAsync("desktop", sessionKey, DateTimeOffset.UtcNow, cancellationToken))
+                            && await processor.ProcessNextAsync(
+                                "desktop", account.Provider, account.AccountId, sessionKey, DateTimeOffset.UtcNow, cancellationToken))
                         {
                             await RefreshDashboardAsync(window, connectionString, cancellationToken);
                         }

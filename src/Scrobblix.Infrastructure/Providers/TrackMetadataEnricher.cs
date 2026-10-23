@@ -20,6 +20,7 @@ public sealed class TrackMetadataEnricher
     private static readonly SemaphoreSlim MusicBrainzGate = new(1, 1);
     private static DateTimeOffset _lastMusicBrainzRequestUtc = DateTimeOffset.MinValue;
     private readonly HttpClient _client;
+    private readonly HttpClient _artworkClient;
     private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
     private readonly Action<string>? _log;
@@ -28,17 +29,29 @@ public sealed class TrackMetadataEnricher
 
     public long ConfigurationVersion => Interlocked.Read(ref _configurationVersion);
 
-    public TrackMetadataEnricher(HttpClient client, string? lastFmApiKey, string artworkDirectory, Action<string>? log = null)
+    public TrackMetadataEnricher(
+        HttpClient client,
+        string? lastFmApiKey,
+        string artworkDirectory,
+        Action<string>? log = null,
+        HttpClient? artworkClient = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(artworkDirectory);
         _client = client;
+        _artworkClient = artworkClient ?? SafePublicArtworkConnector.CreateHttpClient();
         _lastFmApiKey = string.IsNullOrWhiteSpace(lastFmApiKey) ? null : lastFmApiKey.Trim();
         _artworkDirectory = artworkDirectory;
         _log = log;
+        const string userAgent = "Scrobblix/0.1.0 (+https://github.com/frpboy/Scrobblix)";
         if (_client.DefaultRequestHeaders.UserAgent.Count == 0)
         {
-            _client.DefaultRequestHeaders.UserAgent.ParseAdd("Scrobblix/0.1.0 (+https://github.com/frpboy/Scrobblix)");
+            _client.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
+        }
+
+        if (!ReferenceEquals(_artworkClient, _client) && _artworkClient.DefaultRequestHeaders.UserAgent.Count == 0)
+        {
+            _artworkClient.DefaultRequestHeaders.UserAgent.ParseAdd(userAgent);
         }
     }
 
@@ -671,7 +684,7 @@ public sealed class TrackMetadataEnricher
             try
             {
                 using var request = new HttpRequestMessage(HttpMethod.Get, currentUri);
-                using var response = await _client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+                using var response = await _artworkClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
                 if ((int)response.StatusCode is >= 300 and < 400 && response.Headers.Location is not null)
                 {
                     currentUri = new Uri(currentUri, response.Headers.Location);
