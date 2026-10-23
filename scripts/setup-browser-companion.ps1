@@ -36,6 +36,9 @@ if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
 if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
     throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
 }
+if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
+    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
+}
 if ($Browser -in @('Chrome', 'Edge', 'ChromeAndEdge') -and @($ExtensionId).Count -eq 0) {
     throw 'Build the package first, load the unpacked extension from artifacts\Scrobblix\BrowserCompanion\chromium, copy its real ID from the browser, then rerun with -RegisterOnly -Browser Chrome/Edge/ChromeAndEdge -ExtensionId <ID>.'
 }
