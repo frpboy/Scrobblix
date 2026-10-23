@@ -162,9 +162,5 @@ if ($RegisterFirefox) {
 Write-Host 'Scrobblix native messaging host registration updated.'
 Write-Host "Native host: $installedExecutable"
 Write-Host 'Restart any registered browser completely before testing the companion.'
-}
 
 
-Write-Host 'Scrobblix native messaging host registration updated.'
-Write-Host "Native host: $installedExecutable"
-Write-Host 'Restart any registered browser completely before testing the companion.'
