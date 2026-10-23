@@ -12,13 +12,9 @@
 
 The GitHub tree at the audit baseline contained 401 tracked files (tree API reported no truncation): 222 files under `Scrobblix-Docs`, 114 under `src`, 17 under `docs`, 12 under `browser-extension`, 9 under `scripts`, 2 under `tests`, 2 under `skills`, and 21 root files. Of those, 133 tracked files matched implementation/configuration extensions used to map the C#, XAML, TypeScript/JavaScript, SQL, PowerShell, project, JSON and workflow surface. This count is an inventory aid, not a claim that every individual line received a human review.
 
-The audit reconciled current issues and PRs, the release prerequisites, the real-world test matrix, the migration and restore hardening already merged, the browser/native-host boundary, playback ingestion and tracking, provider queue delivery, metadata/artwork fetching, diagnostics/privacy, CSV and backup boundaries, lifecycle, release workflows and helper scripts. During the audit the main branch advanced through PR #31; the working branch was restarted from the new main SHA rather than rewritten.
+The audit reconciled current issues and PRs, release prerequisites, the real-world matrix, migration/restore hardening, browser/native-host boundaries, playback ingestion/tracking, provider delivery, metadata/artwork fetching, diagnostics/privacy, CSV, lifecycle, release workflows and helper scripts. The GitHub tree currently has 405 tracked files. Current main has additionally merged PR #33 (queue account isolation/artwork connection pinning), PR #35 (CSV formula-prefix hardening), and PR #37 (provider-action lifecycle outcomes).
 
-Three earlier defect issues are already closed through merged fixes on the baseline: diagnostic-log privacy (#10), daylight-saving “Today” bounds (#13), and explicit browser-origin registration (#15). During this deeper pass, two additional code-level findings were confirmed and documented:
-- **#30 (P1):** provider actions were claimable without filtering by account/provider, while the worker supplied the currently connected account's session key. This could submit one account's queued scrobble or Love/Unlove action under another account.
-- **#32 (P2):** artwork URL validation rejected literal private addresses but did not validate/pin DNS-resolved destinations, leaving a hostname/redirect path that could resolve into a private or special-use network range.
-
-Fixes and regression tests for #30 and #32 are committed to this audit branch. **These new changes are not yet validated by a completed exact-head CI run at the time of this report.** They must remain open until PR review and CI establish success.
+Confirmed and closed code-defect findings include #10 (P2 privacy-safe logging), #13 (P2 daylight-saving day boundaries), #15 (P2 browser-origin registration), #30 (P1 account/provider queue isolation), #32 (P2 artwork destination connection pinning), #34 (P2 CSV formula prefixes) and #36 (P3 lifecycle completion-state consistency). Their fixes were merged in PRs #11/#25, #16, #18, #33, #35 and #37 respectively, with exact-head Windows CI evidence linked in the validation section below. The mainline CI at the current baseline also passed.
 
 ## Baseline and environment
 
@@ -26,17 +22,17 @@ Fixes and regression tests for #30 and #32 are committed to this audit branch. *
 |---|---|
 | Default branch | `main` |
 | Audit-start SHA | `0436ed83762971ef75dae5be1ffd15bab7e1eae5` |
-| Refreshed integration base | `609d418580cb902d0ba14e949b9b41d756616932` |
+| Current integration base | `e0b99774bb62bcc2ab160a8e98b24051f382641b` |
 | Baseline workflow | [Windows CI run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) |
 | Baseline workflow result | Passed for that exact baseline SHA |
-| Post-PR #31 main workflow | [Run 39894119316](https://github.com/frpboy/Scrobblix/actions/runs/39894119316) passed on `609d418580cb902d0ba14e949b9b41d756616932` |
-| Tracked-file inventory | 401 files; Git tree response not truncated |
+| Current main workflow | [Run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156) passed on `e0b99774bb62bcc2ab160a8e98b24051f382641b` |
+| Tracked-file inventory | 401 files at audit start; 405 files on current main; Git tree response not truncated |
 | Latest published release at baseline | [v0.1.0-beta.1](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.1), prerelease |
 | Real-world qualification | The repo's manual matrix says real-machine, provider, installed-browser, UX and installer scenarios remain `NOT RUN` |
 | Local validation limitation | Clone attempt failed because the environment could not resolve github.com; .NET SDK and PowerShell were not present locally. Node.js v22.16.0 was present. |
 | Repository policy visibility | Branch-protection endpoint returned HTTP 403 to the connected integration; protection settings were not changed. |
 
-The baseline CI result validates only the baseline commit. It does not validate the audit-branch queue/account-isolation and safe-artwork-connection changes. The exact branch head must be validated through its pull-request workflow.
+The current main CI run validates the integrated changes at SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` for the automated stages configured in Windows CI. It does not validate real-world provider, installed-browser, live Windows UI or installer behavior.
 
 ## Component map and end-to-end data flow
 
@@ -80,10 +76,12 @@ The baseline CI result validates only the baseline commit. It does not validate 
 | AUD-PRIV-001 | Listening artist/title/album values in diagnostic logs | P2 | [#10](https://github.com/frpboy/Scrobblix/issues/10) | Closed; merged PR [#11](https://github.com/frpboy/Scrobblix/pull/11), further delimiter-safe handling via merged PR #25 |
 | AUD-DATE-001 | “Today” summary assumed an elapsed 24-hour day at DST boundaries | P2 | [#13](https://github.com/frpboy/Scrobblix/issues/13) | Closed; merged PR [#16](https://github.com/frpboy/Scrobblix/pull/16), 23/25-hour regression cases |
 | AUD-BROWSER-001 | Broad optional host permission could be treated as sufficient custom-origin authorization | P2 | [#15](https://github.com/frpboy/Scrobblix/issues/15) | Closed; merged PR [#18](https://github.com/frpboy/Scrobblix/pull/18), explicit origin-registration binding |
-| AUD-QUEUE-001 | Queue lease did not scope provider/account although the worker supplied the current account's session key | P1 | [#30](https://github.com/frpboy/Scrobblix/issues/30) | Fix and two-account/provider regression coverage on this branch; CI/review pending |
-| AUD-SEC-002 | Artwork hostnames were not validated/pinned to the addresses used for outbound connections | P2 | [#32](https://github.com/frpboy/Scrobblix/issues/32) | Dedicated socket connector and resolver regressions on this branch; CI/review pending |
+| AUD-QUEUE-001 | Queue lease did not scope provider/account although the worker supplied the connected account's session key | P1 | [#30](https://github.com/frpboy/Scrobblix/issues/30) | Closed; merged PR [#33](https://github.com/frpboy/Scrobblix/pull/33), two-account/provider regression coverage |
+| AUD-SEC-002 | Artwork hostnames were not validated/pinned to the addresses used for outbound connections | P2 | [#32](https://github.com/frpboy/Scrobblix/issues/32) | Closed; merged PR [#33](https://github.com/frpboy/Scrobblix/pull/33), DNS/address and resolver regression coverage |
+| AUD-CSV-001 | CSV export omitted LF and full-width spreadsheet formula prefixes | P2 | [#34](https://github.com/frpboy/Scrobblix/issues/34) | Closed; merged PR [#35](https://github.com/frpboy/Scrobblix/pull/35) with regression coverage |
+| AUD-QUEUE-002 | Domain lifecycle helper rejected valid persisted terminal outcomes | P3 | [#36](https://github.com/frpboy/Scrobblix/issues/36) | Closed; merged PR [#37](https://github.com/frpboy/Scrobblix/pull/37), lease cleanup tests |
 | AUD-REL-001 | Real-world Windows/provider/browser/recovery/distribution qualification not executed | Release blocker | [#17](https://github.com/frpboy/Scrobblix/issues/17) | Open intentionally; the matrix remains NOT RUN until tests actually execute |
-| AUD-DOC-001 | Release status and continuation checkpoint stale at baseline | P2/documentation | [#27](https://github.com/frpboy/Scrobblix/issues/27), [PR #29](https://github.com/frpboy/Scrobblix/pull/29) | PR #29 was open during this audit and addresses current-main status/checkpoint; preserve its review/CI evidence and avoid duplicating it |
+| AUD-DOC-001 | Release status and continuation checkpoint stale at baseline | P2/documentation | [#27](https://github.com/frpboy/Scrobblix/issues/27) | Current refresh is in this docs PR; close only after it merges and the current-main evidence is rechecked |
 
 The register at `REPOSITORY_AUDIT_REGISTER.json` contains the stable audit IDs, impact, issue links, fix mapping and validation state. Superseded PRs #8 and #14 are not treated as active fixes; current merged state is taken from live GitHub, not stale checkpoint prose.
 
