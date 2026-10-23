@@ -554,7 +554,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                         DateTimeOffset.UtcNow),
                     cancellationToken);
                 authorization = null;
-                _window.SetLastFmConnected(session.UserName);
+                _window.SetLastFmConnected(session.UserName, $"lastfm:{session.UserName.ToLowerInvariant()}");
                 logger.Info("LASTFM", $"Account authorization completed; username={session.UserName}.");
                 await RefreshDashboardAsync(_window, connectionString, cancellationToken);
             }
@@ -787,7 +787,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             return;
         }
 
-        _window!.SetLastFmConnected(account.UserName);
+        _window!.SetLastFmConnected(account.UserName, account.AccountId);
     }
 
     private static async Task ProcessProviderQueueUntilClosedAsync(
