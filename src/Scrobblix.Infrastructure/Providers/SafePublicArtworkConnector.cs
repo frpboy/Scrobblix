@@ -122,7 +122,7 @@ public static class SafePublicArtworkConnector
         // Only accept globally routable IPv6 unicast space (2000::/3), not
         // unspecified/loopback/ULA/link-local/multicast or transition/documentation ranges.
         if ((ipv6[0] & 0xE0) != 0x20
-            || address.IsIPv6Loopback
+            || IPAddress.IsLoopback(address)
             || address.IsIPv6LinkLocal
             || address.IsIPv6Multicast
             || address.IsIPv6Teredo
