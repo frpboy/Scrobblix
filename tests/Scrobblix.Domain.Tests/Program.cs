@@ -1291,8 +1291,11 @@ Assert(await lovedWriter.EnqueueAsync("play-1", "account-1", ProviderActionType.
     "A newer Unlove intent supersedes an unstarted Love intent.");
 var lovedReader = new SqliteQueueReader(connectionString);
 var latestLovedTracks = await lovedReader.GetRecentLovedTracksAsync(50, CancellationToken.None);
-Assert(latestLovedTracks.Any(track => track.PlayId == "play-1" && track.RequestedAction == ProviderActionType.Unlove && track.State == ProviderActionState.Pending),
-    "The Loved read model reflects the newest persisted intent for the same track.");
+Assert(latestLovedTracks.Any(track => track.PlayId == "play-1"
+        && track.AccountId == "account-1"
+        && track.RequestedAction == ProviderActionType.Unlove
+        && track.State == ProviderActionState.Pending),
+    "The Loved read model includes the account identity for the newest persisted track intent.");
 var nowPlayingDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-nowplaying-{Guid.NewGuid():N}.db");
 var nowPlayingConnectionString = $"Data Source={nowPlayingDatabasePath};Pooling=False";
 await new SqliteDatabase(nowPlayingConnectionString).InitializeAsync(CancellationToken.None);
