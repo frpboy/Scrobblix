@@ -99,6 +99,11 @@ Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking comm
 Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
 Assert((trayConnected with { PlaybackState = PlayState.Paused }).PlaybackLabel.StartsWith("Paused:", StringComparison.Ordinal),
     "A paused media session remains the current track without being labelled as actively playing.");
+Assert((trayConnected with { Artist = null, Title = null }).PlaybackLabel == "Now Playing: Metadata unavailable",
+    "Active playback with missing metadata is not falsely reported as nothing playing.");
+Assert(!(trayConnected with { Artist = null, Title = null }).CanLoveTrack
+    && !(trayConnected with { Artist = null, Title = null }).CanCopyTrackDetails,
+    "Insufficient metadata disables current-track actions.");
 Assert((trayPaused with { PendingQueueCount = null }).QueueLabel == "Scrobble queue: status unavailable",
     "Tray does not fabricate a queue count when the read model is unavailable.");
 
