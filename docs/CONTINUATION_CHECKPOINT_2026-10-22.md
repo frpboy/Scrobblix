@@ -1,4 +1,4 @@
-# Scrobblix continuation checkpoint — 2026-10-22
+# Scrobblix continuation checkpoint — 2026-10-23
 
 This checkpoint is a source-of-truth handoff for continuing from the current committed state. Inspect live GitHub state again before relying on any SHA or CI result.
 
@@ -6,8 +6,8 @@ This checkpoint is a source-of-truth handoff for continuing from the current com
 
 - Repository: https://github.com/frpboy/Scrobblix
 - Protected integration target: `main`; do not force-push/reset or make experimental direct changes.
-- Current main SHA at checkpoint: `0436ed83762971ef75dae5be1ffd15bab7e1eae5`.
-- Post-merge CI for that SHA: [run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297), **IN PROGRESS when this checkpoint was written**.
+- Current main SHA at checkpoint (2026-10-23): `90e6405beb5041aee092ca05394cfebc32e690b5`.
+- Exact post-merge Windows CI for that SHA: [run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495), **PASSED**.
 - PR #28 (SQLite restore sidecar rollback): merged to main. Exact-head Windows CI passed at [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272).
 - PR #26 was a duplicate restore candidate and has been closed as superseded by #28.
 - PR #25 privacy fix, #23 migration-history safety, #21 preview-release automation, and #19 compact hamburger navigation are merged.
@@ -29,6 +29,8 @@ Already merged fixes include:
 - Validated preview-release automation (PR #21).
 - Unknown/inconsistent migration-history rejection (PR #23).
 - Fail-closed SQLite restore swap with WAL/SHM rollback set, recoverable rollback artifacts, and Windows regression tests (PR #28).
+- Preserve enriched artwork across repeated current-track polls and avoid unnecessary bitmap reloads (PR #31).
+- Scope provider-action claims to exact provider/account identity; pin artwork connections to validated public DNS addresses, with account-isolation and network-boundary regressions (PR #33; issues #30 and #32 closed).
 
 Architecture constraints:
 - Desktop GSMTC must work without the browser extension; the extension is optional.
@@ -38,7 +40,7 @@ Architecture constraints:
 
 ## Next implementation order
 
-1. **Verify current main CI.** Recheck [run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) against exact SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5`. Update release status only after it completes.
+1. **Keep the mainline evidence current.** Main SHA `90e6405beb5041aee092ca05394cfebc32e690b5` passed [post-merge Windows CI run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495). Recheck live GitHub before using that evidence for a later candidate.
 2. **Execute release qualification issue #17.** Use a dedicated Last.fm test account; reconcile accepted submissions; test duplicate/restart/network-retry behavior, long-running playback, browser native messaging, and Windows lifecycle/accessibility.
 3. **Validate installation and distribution.** Test clean install, upgrade, failed update recovery, rollback/uninstall, retained-data behavior, signing/publisher identity, dependency licensing, SBOM, and artifact provenance.
 4. **Record evidence, not assumptions.** Keep unexecuted environment-dependent cases NOT RUN/BLOCKED. Include exact candidate SHA, environment, outcome, and sanitized evidence.
