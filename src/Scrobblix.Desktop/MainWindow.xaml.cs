@@ -139,9 +139,9 @@ public sealed partial class MainWindow : Window
             return $"{artist} — {title}";
         }
     }
-    public string TrayCurrentLoveCommandLabel => GetCurrentTrackLoveIntent() == ProviderActionType.Love
-        ? "Unlove Track"
-        : "Love Track";
+    public string TrayCurrentLoveCommandLabel => GetNextCurrentTrackLoveAction() == ProviderActionType.Love
+        ? "Love Track"
+        : "Unlove Track";
     public string TrayCurrentLoveStatusText
     {
         get
