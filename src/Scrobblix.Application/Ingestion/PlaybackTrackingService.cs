@@ -14,6 +14,7 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
     private DateTimeOffset _firstObservedUtc;
     private bool _persistedEligiblePlay;
     private PlayObservation? _previousObservation;
+    private long _lastObservationMonotonicMilliseconds;
 
     public async Task<PlaybackTrackingStatus> ObserveAsync(PlayObservation observation, long monotonicMilliseconds, CancellationToken cancellationToken)
     {
@@ -21,6 +22,35 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
         try
         {
             return await ObserveCoreAsync(observation, monotonicMilliseconds, cancellationToken);
+        }
+        finally
+        {
+            _gate.Release();
+        }
+    }
+
+    public async Task<(PlayObservation Observation, PlaybackTrackingStatus Status)?> ObserveSourceUnavailableAsync(
+        string sourceName,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(sourceName);
+        await _gate.WaitAsync(cancellationToken);
+        try
+        {
+            if (_previousObservation is not { PlaybackState: PlayState.Playing } previous
+                || !string.Equals(previous.SourceName, sourceName, StringComparison.OrdinalIgnoreCase))
+            {
+                return null;
+            }
+
+            // Stop at the last positive playback sample, not at the later poll that
+            // discovered the source disappeared. The gap itself is not confirmed listening.
+            var unavailableObservation = previous with { PlaybackState = PlayState.Unknown };
+            var status = await ObserveCoreAsync(
+                unavailableObservation,
+                _lastObservationMonotonicMilliseconds,
+                cancellationToken);
+            return (unavailableObservation, status);
         }
         finally
         {
@@ -71,6 +101,7 @@ public sealed class PlaybackTrackingService(ILocalPlayStore localPlayStore) : ID
         }
 
         _previousObservation = observation;
+        _lastObservationMonotonicMilliseconds = monotonicMilliseconds;
         return new PlaybackTrackingStatus(decision, _tracker.ConfirmedPlayedMilliseconds, didPersistEligiblePlay, didStartPlay, _playId);
     }
 
