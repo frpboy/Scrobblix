@@ -306,7 +306,25 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             {
                 Timeout = TimeSpan.FromSeconds(12),
             };
-            var metadataEnricher = new TrackMetadataEnricher(metadataHttpClient, initialApiKey, Path.Combine(dataDirectory, "artwork"), message => logger.Info("METADATA_PROVIDER", message));
+            // Artwork URLs originate in remote playback metadata, so use a dedicated direct
+            // connection path that checks and pins DNS answers before opening the socket.
+            // This client intentionally bypasses system proxies; a proxy can perform its own
+            // DNS resolution and would bypass the address-pinning guarantee.
+            var artworkHttpClient = new HttpClient(new SocketsHttpHandler
+            {
+                AllowAutoRedirect = false,
+                UseProxy = false,
+                ConnectCallback = SafePublicArtworkConnector.ConnectAsync,
+            })
+            {
+                Timeout = TimeSpan.FromSeconds(12),
+            };
+            var metadataEnricher = new TrackMetadataEnricher(
+                metadataHttpClient,
+                initialApiKey,
+                Path.Combine(dataDirectory, "artwork"),
+                message => logger.Info("METADATA_PROVIDER", message),
+                artworkHttpClient);
             var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
             var localPlayStore = new SqliteLocalPlayStore(connectionString);
             var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
