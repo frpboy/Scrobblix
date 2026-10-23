@@ -133,6 +133,10 @@ for (const cleanup of ["_singleInstanceActivationEvent?.Dispose();", "_singleIns
 // State-aware system tray context-menu contracts.
 const trayMain = read("src/Scrobblix.Desktop/TrayIconService.cs");
 const queueReader = read("src/Scrobblix.Infrastructure/Storage/SqliteQueueReader.cs");
+const retryableScrobbleQuery = queueReader.slice(
+  queueReader.indexOf("GetRetryableFailedScrobblesAsync"),
+  queueReader.indexOf("GetRecentLovedTracksAsync"),
+);
 const manualMatrix = read("Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md");
 const trayImplementationDoc = read("docs/TRAY_CONTEXT_MENU_IMPLEMENTATION.md");
 const actionStore = read("src/Scrobblix.Infrastructure/Storage/SqliteProviderActionStore.cs");
@@ -174,7 +178,7 @@ assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry r
 assert.ok(queueActionSummary.includes("public string? AccountId { get; init; }") && queueReader.includes("a.account_id"), "The recent queue read model must carry provider account identity.");
 assert.ok(code.includes("_lastFmAccountId") && code.includes("string.Equals(action.AccountId, _lastFmAccountId, StringComparison.Ordinal)") && app.includes("SetLastFmConnected(account.UserName, account.AccountId)"), "Current-track Love/Unlove state must be scoped to the actual connected Last.fm account.");
 assert.ok(queueReader.includes('command.Parameters.AddWithValue("$provider", "lastfm")') && queueReader.includes("a.action_type = $scrobble") && queueReader.includes("a.state = $retryExhausted"), "Tray retry read model must select only retry-exhausted Last.fm scrobbles.");
-assert.ok(!queueReader.includes("a.state IN ($retryScheduled") && !queueReader.includes("state = $outcomeUnknown"), "Tray retry read model must not include scheduled or ambiguous-outcome actions.");
+assert.ok(!retryableScrobbleQuery.includes("state IN ($retryScheduled") && !retryableScrobbleQuery.includes("state = $outcomeUnknown"), "Tray retry read model must not include scheduled or ambiguous-outcome actions.");
 assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry candidates include only exhausted Last.fm scrobbles"), "The durable queue eligibility regression assertion must remain in the test executable.");
 for (const testId of ["TRAY-01", "TRAY-02", "TRAY-03", "TRAY-04", "TRAY-05", "TRAY-06", "TRAY-07", "TRAY-08", "TRAY-09"]) {
   assert.ok(manualMatrix.includes(`| ${testId} |`), `Windows tray manual test missing: ${testId}`);
