@@ -151,7 +151,7 @@ var longTrayLabel = (trayConnected with
     Artist = new string('A', 200),
     Title = new string('T', 200),
 }).PlaybackLabel;
-Assert(longTrayLabel.Length < 100 && longTrayLabel.EndsWith("…", StringComparison.Ordinal),
+Assert(longTrayLabel.Length < 100 && longTrayLabel.EndsWith('…'),
     "Tray track labels are truncated so long metadata cannot dominate the native menu.");
 Assert(!(trayConnected with { IsClosed = true }).CanCopyTrackDetails,
     "Disposed-window snapshots disable clipboard actions.");
