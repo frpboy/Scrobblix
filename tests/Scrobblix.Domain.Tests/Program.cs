@@ -109,10 +109,14 @@ Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking comm
 Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
 Assert(trayPaused.LoveCommandLabel == "Love Track",
     "A stopped session does not retain an Unlove label from the prior current track.");
+Assert(trayPaused.CurrentTrackStatusLabel == "No current track",
+    "The Current Track submenu does not describe a stopped session as missing metadata.");
 Assert((trayConnected with { PlaybackState = PlayState.Paused }).PlaybackLabel.StartsWith("Paused:", StringComparison.Ordinal),
     "A paused media session remains the current track without being labelled as actively playing.");
 Assert((trayConnected with { Artist = null, Title = null }).PlaybackLabel == "Now Playing: Metadata unavailable",
     "Active playback with missing metadata is not falsely reported as nothing playing.");
+Assert((trayConnected with { Artist = null, Title = null }).CurrentTrackStatusLabel == "Current track metadata unavailable",
+    "An active track with incomplete metadata gets a distinct current-track status.");
 Assert(!(trayConnected with { Artist = null, Title = null }).CanLoveTrack
     && !(trayConnected with { Artist = null, Title = null }).CanCopyTrackDetails,
     "Insufficient metadata disables current-track actions.");
