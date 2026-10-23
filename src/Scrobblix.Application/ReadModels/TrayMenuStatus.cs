@@ -63,8 +63,8 @@ public sealed record TrayMenuStatus(
     };
 
     public string QueueLabel => PendingQueueCount is int count
-        ? $"Scrobble queue: {Math.Max(0, count):N0} pending"
-        : "Scrobble queue: status unavailable";
+        ? $"Provider actions: {Math.Max(0, count):N0} pending"
+        : "Provider-action queue: status unavailable";
 
     public string QueueRetryStatusLabel => RetryableFailedScrobbleCount is int retryable
         ? retryable > 0
@@ -79,7 +79,7 @@ public sealed record TrayMenuStatus(
             $"Retry scheduled: {queue.RetryScheduledCount:N0}",
             $"Accepted: {queue.AcceptedCount:N0}",
             $"Authentication blocked: {queue.AuthBlockedCount:N0}",
-            $"Permanent failures: {queue.PermanentFailureCount:N0}",
+            $"Failed (permanent or retries exhausted): {queue.PermanentFailureCount:N0}",
             $"Submission outcome unknown: {queue.SubmissionOutcomeUnknownCount:N0}",
         }
         : new[] { "Queue details: status unavailable" };

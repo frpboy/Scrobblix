@@ -1250,6 +1250,23 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         return Interlocked.CompareExchange(ref _lastDashboardRefreshUtcTicks, nowTicks, previousTicks) == previousTicks;
     }
 
+    private static async Task<(string AccountId, string Artist, string Title)?> CaptureTrayLoveLookupRequestAsync(
+        MainWindow window,
+        CancellationToken cancellationToken)
+    {
+        var completion = new TaskCompletionSource<(string AccountId, string Artist, string Title)?>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+        if (!window.DispatcherQueue.TryEnqueue(() =>
+            {
+                completion.TrySetResult(window.GetTrayLoveLookupRequest());
+            }))
+        {
+            return null;
+        }
+
+        return await completion.Task.WaitAsync(cancellationToken);
+    }
+
     private static async Task RefreshDashboardAsync(MainWindow window, string connectionString, CancellationToken cancellationToken)
     {
         var historyReader = new SqliteHistoryReader(connectionString);
@@ -1261,6 +1278,11 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var retryableFailedScrobbleCount = await queueReader.GetRetryableFailedScrobbleCountAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
         var lovedTracks = await queueReader.GetRecentLovedTracksAsync(200, cancellationToken);
+        var currentTrackLoveLookup = await CaptureTrayLoveLookupRequestAsync(window, cancellationToken);
+        var currentTrackLovedSummary = currentTrackLoveLookup is { } loveLookup
+            ? await queueReader.GetLatestLovedTrackForTrackAsync(
+                loveLookup.Artist, loveLookup.Title, loveLookup.AccountId, cancellationToken)
+            : null;
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
         {
@@ -1271,6 +1293,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             window.SetTrayRetryableFailedScrobbleCount(retryableFailedScrobbleCount);
             window.SetQueueActions(queueActions);
             window.SetLovedTracks(lovedTracks);
+            window.SetCurrentTrackLovedSummary(currentTrackLovedSummary);
             window.SetStatisticsSummary(statistics);
         });
     }

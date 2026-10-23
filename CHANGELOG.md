@@ -14,7 +14,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Added
 
-- Expanded the existing Win32 tray menu with live local playback/Last.fm/queue status, tracking pause/resume, current-track Love/Unlove and copy actions, retry for retry-exhausted scrobbles, Queue/Settings/Diagnostics navigation, and safe log-folder access. Added a focused manual Windows tray acceptance matrix; real-machine rows remain NOT RUN until exercised.
+- Expanded the existing Win32 tray menu with live local playback/Last.fm/provider-action queue status, tracking pause/resume, current-track Love/Unlove and copy actions, retry for retry-exhausted scrobbles, Queue/Settings/Diagnostics navigation, and safe log-folder access. Added a focused manual Windows tray acceptance matrix; real-machine rows remain NOT RUN until exercised.
 
 - Added a tag-driven GitHub Preview Release workflow that reuses full CI, publishes the Windows test bundle and browser companion, attaches SHA-256 checksums, and keeps builds marked as prereleases until release-readiness gates are closed.
 - Documented preview release creation, download verification, tag naming, and current unsigned-distribution limitations.

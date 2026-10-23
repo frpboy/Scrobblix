@@ -10,11 +10,11 @@ Each time the context menu opens, Scrobblix builds a fresh menu from an immutabl
 
 The menu contains:
 
-- Disabled status rows: Scrobblix running state, Last.fm connection/account, current playback and pending queue count. Unknown queue state is labelled unavailable, not shown as zero.
+- Disabled status rows: Scrobblix running state, Last.fm connection/account, current playback and pending provider-action count. Unknown queue state is labelled unavailable, not shown as zero.
 - Open Scrobblix: restores and activates the existing window.
 - Pause Tracking / Resume Tracking: calls the same tracking-state transition used by the main window. It stops/starts observation only; it does not clear eligible listening history or queue records.
 - Current Track: the latest local Love/Unlove intent/status, Love or Unlove using the existing event/service path, and Copy Track Details. Provider acceptance is not implied by a locally queued intent.
-- Scrobble Queue: pending, in-flight, retry-scheduled, accepted, authentication-blocked, permanent-failure, and outcome-unknown counts when available; Retry Failed Scrobbles only for eligible exhausted scrobbles; and Open Queue.
+- Provider Action Queue: aggregate pending, in-flight, retry-scheduled, accepted, authentication-blocked, failed (permanent or retries exhausted), and outcome-unknown action counts when available; Retry Failed Scrobbles remains limited to eligible exhausted scrobbles; and Open Queue.
 - Open Log Folder, Open Settings, Open Diagnostics, and Exit Scrobblix.
 
 ## Queue retry boundary

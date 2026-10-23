@@ -91,6 +91,63 @@ public sealed class SqliteQueueReader(string connectionString)
         return result;
     }
 
+    /// <summary>
+    /// Reads the latest Love/Unlove action for an exact artist/title and Last.fm account,
+    /// without the recent-history limit used by the Loved page.
+    /// </summary>
+    public async Task<LovedTrackSummary?> GetLatestLovedTrackForTrackAsync(
+        string artist,
+        string title,
+        string accountId,
+        CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(artist);
+        ArgumentException.ThrowIfNullOrWhiteSpace(title);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT p.play_id, p.artist, p.title, p.album, p.artwork_path,
+                   a.action_type, a.state, a.attempt_count, a.last_reason_code, a.updated_utc, a.account_id
+            FROM provider_actions a
+            JOIN plays p ON p.play_id = a.play_id
+            WHERE a.provider = 'lastfm'
+              AND a.account_id = $accountId
+              AND a.action_type IN ($love, $unlove)
+              AND LOWER(TRIM(COALESCE(p.artist, ''))) = LOWER(TRIM($artist))
+              AND LOWER(TRIM(COALESCE(p.title, ''))) = LOWER(TRIM($title))
+            ORDER BY a.created_utc DESC, a.action_id DESC
+            LIMIT 1;
+            """;
+        command.Parameters.AddWithValue("$accountId", accountId);
+        command.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+        command.Parameters.AddWithValue("$unlove", (int)ProviderActionType.Unlove);
+        command.Parameters.AddWithValue("$artist", artist.Trim());
+        command.Parameters.AddWithValue("$title", title.Trim());
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        if (!await reader.ReadAsync(cancellationToken))
+        {
+            return null;
+        }
+
+        return new LovedTrackSummary(
+            reader.GetString(0),
+            reader.IsDBNull(1) ? null : reader.GetString(1),
+            reader.IsDBNull(2) ? null : reader.GetString(2),
+            reader.IsDBNull(3) ? null : reader.GetString(3),
+            reader.IsDBNull(4) ? null : reader.GetString(4),
+            (ProviderActionType)reader.GetInt32(5),
+            (ProviderActionState)reader.GetInt32(6),
+            reader.GetInt32(7),
+            reader.IsDBNull(8) ? null : reader.GetString(8),
+            DateTimeOffset.Parse(reader.GetString(9), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind))
+        {
+            AccountId = reader.IsDBNull(10) ? null : reader.GetString(10),
+        };
+    }
+
     public async Task<IReadOnlyList<LovedTrackSummary>> GetRecentLovedTracksAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);

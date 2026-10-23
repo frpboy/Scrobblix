@@ -89,14 +89,14 @@ var trayConnected = new TrayMenuStatus(
 Assert(trayConnected.TrackingCommandLabel == "Pause Tracking", "Tray tracking command follows the authoritative enabled state.");
 Assert(trayConnected.LastFmLabel == "Last.fm: Connected as listener", "Tray shows the authenticated Last.fm username.");
 Assert(trayConnected.PlaybackLabel == "Now Playing: Test Artist — Test Track", "Tray current-track status comes from real playback metadata.");
-Assert(trayConnected.QueueLabel == "Scrobble queue: 3 pending", "Tray queue status renders the real pending count.");
+Assert(trayConnected.QueueLabel == "Provider actions: 3 pending", "Tray queue status labels aggregate provider-action counts accurately.");
 Assert(trayConnected.QueueDetailLabels.Contains("In flight: 1")
     && trayConnected.QueueDetailLabels.Contains("Retry scheduled: 2")
     && trayConnected.QueueDetailLabels.Contains("Accepted: 4")
     && trayConnected.QueueDetailLabels.Contains("Authentication blocked: 1")
-    && trayConnected.QueueDetailLabels.Contains("Permanent failures: 1")
+    && trayConnected.QueueDetailLabels.Contains("Failed (permanent or retries exhausted): 1")
     && trayConnected.QueueDetailLabels.Contains("Submission outcome unknown: 1"),
-    "The queue submenu distinguishes pending, in-flight, scheduled, accepted, blocked, failed, and uncertain states.");
+    "The provider-action submenu distinguishes pending, in-flight, scheduled, accepted, blocked, failed, and uncertain action states.");
 var unavailableQueueDetails = (trayConnected with { QueueSnapshot = null }).QueueDetailLabels;
 Assert(unavailableQueueDetails.Count == 1 && unavailableQueueDetails[0] == "Queue details: status unavailable",
     "The tray does not fabricate detailed queue statuses when its database snapshot is unavailable.");
@@ -899,7 +899,69 @@ Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(trayScheduledId, trayQu
 
 Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 0,
     "A successfully reopened tray retry no longer appears in the exhausted-failure count.");
-File.Delete(trayQueueDatabasePath);
+
+// Prove the tray's exact current-track Love lookup is not constrained by the Loved page's
+// recent-200 window. The oldest target action must still be returned for its current account.
+const string longWindowPlayId = "tray-love-outside-recent-window";
+const string longWindowArtist = "Older Saved Artist";
+const string longWindowTitle = "Older Saved Track";
+var longWindowPlay = historyRecord with
+{
+    PlayId = longWindowPlayId,
+    Artist = longWindowArtist,
+    Title = longWindowTitle,
+};
+Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+    longWindowPlay, "lastfm", "tray-account", trayQueueTime.AddMinutes(-1), CancellationToken.None),
+    "The out-of-window target play is persisted.");
+Assert(await new SqliteLovedActionWriter(trayQueueConnectionString).EnqueueAsync(
+    longWindowPlayId, "tray-account", ProviderActionType.Love, trayQueueTime.AddMinutes(-1), CancellationToken.None),
+    "The out-of-window target Love action is persisted.");
+await using (var targetLoveStateConnection = new SqliteConnection(trayQueueConnectionString))
+{
+    await targetLoveStateConnection.OpenAsync(CancellationToken.None);
+    await using var targetLoveStateCommand = targetLoveStateConnection.CreateCommand();
+    targetLoveStateCommand.CommandText = "UPDATE provider_actions SET state = $accepted WHERE play_id = $playId AND account_id = $accountId AND action_type = $love;";
+    targetLoveStateCommand.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+    targetLoveStateCommand.Parameters.AddWithValue("$playId", longWindowPlayId);
+    targetLoveStateCommand.Parameters.AddWithValue("$accountId", "tray-account");
+    targetLoveStateCommand.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+    Assert(await targetLoveStateCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+        "The out-of-window target Love action is marked provider-accepted.");
+}
+
+var trayLovedWriter = new SqliteLovedActionWriter(trayQueueConnectionString);
+for (var index = 0; index < 205; index++)
+{
+    var newerPlayId = $"tray-love-window-{index:D3}";
+    var newerTime = trayQueueTime.AddMinutes(index + 1);
+    var newerPlay = historyRecord with
+    {
+        PlayId = newerPlayId,
+        Artist = $"Recent Artist {index:D3}",
+        Title = $"Recent Track {index:D3}",
+    };
+    Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+        newerPlay, "lastfm", "tray-account", newerTime, CancellationToken.None),
+        $"Recent Love-window play {index} is persisted.");
+    Assert(await trayLovedWriter.EnqueueAsync(
+        newerPlayId, "tray-account", ProviderActionType.Love, newerTime, CancellationToken.None),
+        $"Recent Love-window action {index} is persisted.");
+}
+
+var boundedLovedWindow = await trayQueueReader.GetRecentLovedTracksAsync(200, CancellationToken.None);
+Assert(!boundedLovedWindow.Any(track => track.PlayId == longWindowPlayId),
+    "The target Love intent is outside the Loved page's recent-200 read model.");
+var exactCurrentTrackLove = await trayQueueReader.GetLatestLovedTrackForTrackAsync(
+    longWindowArtist, longWindowTitle, "tray-account", CancellationToken.None);
+Assert(exactCurrentTrackLove is
+    {
+        PlayId: longWindowPlayId,
+        AccountId: "tray-account",
+        RequestedAction: ProviderActionType.Love,
+        State: ProviderActionState.Accepted,
+    },
+    "The tray's exact current-track lookup returns an older accepted Love intent outside the recent-200 window.");
 File.Delete(trayQueueDatabasePath);
 
 

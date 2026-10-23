@@ -38,6 +38,7 @@ public sealed partial class MainWindow : Window
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
     private IReadOnlyList<QueueActionSummary> _queueActions = Array.Empty<QueueActionSummary>();
     private IReadOnlyList<LovedTrackSummary> _lovedTrackRecords = Array.Empty<LovedTrackSummary>();
+    private LovedTrackSummary? _currentTrackLovedSummary;
     private PlayObservation? _displayedObservation;
     private PlaybackTrackingStatus? _displayedTrackingStatus;
 
@@ -705,10 +706,15 @@ public sealed partial class MainWindow : Window
             && !string.IsNullOrWhiteSpace(_displayedPlayId);
         var savedLoveState = !hasActivePlayback || !hasTrackMetadata || string.IsNullOrWhiteSpace(_lastFmAccountId)
             ? null
-            : _lovedTrackRecords.FirstOrDefault(track =>
-                string.Equals(track.AccountId, _lastFmAccountId, StringComparison.Ordinal)
-                && string.Equals(track.Artist?.Trim(), currentArtist, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(track.Title?.Trim(), currentTitle, StringComparison.OrdinalIgnoreCase));
+            : _currentTrackLovedSummary is { } exactTrackLove
+                && string.Equals(exactTrackLove.AccountId, _lastFmAccountId, StringComparison.Ordinal)
+                && string.Equals(exactTrackLove.Artist?.Trim(), currentArtist, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(exactTrackLove.Title?.Trim(), currentTitle, StringComparison.OrdinalIgnoreCase)
+                    ? exactTrackLove
+                    : _lovedTrackRecords.FirstOrDefault(track =>
+                        string.Equals(track.AccountId, _lastFmAccountId, StringComparison.Ordinal)
+                        && string.Equals(track.Artist?.Trim(), currentArtist, StringComparison.OrdinalIgnoreCase)
+                        && string.Equals(track.Title?.Trim(), currentTitle, StringComparison.OrdinalIgnoreCase));
         var loveIntent = _currentTrackLoveIntent ?? savedLoveState?.RequestedAction;
         var loveActionState = savedLoveState?.RequestedAction == loveIntent
             ? savedLoveState?.State
@@ -1413,6 +1419,25 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public (string AccountId, string Artist, string Title)? GetTrayLoveLookupRequest()
+    {
+        var observation = _displayedObservation;
+        if (_isClosed
+            || string.IsNullOrWhiteSpace(_lastFmAccountId)
+            || observation is null
+            || observation.PlaybackState is not (PlayState.Playing or PlayState.Paused)
+            || string.IsNullOrWhiteSpace(observation.Artist)
+            || string.IsNullOrWhiteSpace(observation.Title))
+        {
+            return null;
+        }
+
+        return (_lastFmAccountId, observation.Artist.Trim(), observation.Title.Trim());
+    }
+
+    public void SetCurrentTrackLovedSummary(LovedTrackSummary? summary) =>
+        _currentTrackLovedSummary = summary;
+
     public void SetLovedTracks(IReadOnlyList<LovedTrackSummary> tracks)
     {
         _lovedTrackRecords = tracks;
@@ -1518,6 +1543,7 @@ public sealed partial class MainWindow : Window
         }
 
         var playId = _displayedPlayId;
+        var accountId = _lastFmAccountId;
         var requestAction = LovedTrackActionRequested;
         if (string.IsNullOrWhiteSpace(playId))
         {
@@ -1538,6 +1564,14 @@ public sealed partial class MainWindow : Window
         {
             var queued = await requestAction.Invoke(playId, actionType);
             if (_isClosed) return;
+
+            // The request was queued for the captured play/account. Playback or Last.fm may
+            // change while storage is awaited; never apply its result to an unrelated current track.
+            if (!string.Equals(_displayedPlayId, playId, StringComparison.Ordinal)
+                || !string.Equals(_lastFmAccountId, accountId, StringComparison.Ordinal))
+            {
+                return;
+            }
 
             if (!queued)
             {

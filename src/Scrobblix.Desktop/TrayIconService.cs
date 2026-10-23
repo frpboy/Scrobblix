@@ -202,7 +202,7 @@ internal sealed class TrayIconService : IDisposable
                 }
 
                 AppendItem(queueMenu, OpenQueueCommand, "Open Queue", status.IsClosed);
-                AppendSubmenu(menu, queueMenu, "Scrobble Queue");
+                AppendSubmenu(menu, queueMenu, "Provider Action Queue");
             }
 
             AppendSeparator(menu);
