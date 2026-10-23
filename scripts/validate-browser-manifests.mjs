@@ -69,4 +69,3 @@ requireCondition(popupHtml.includes('id="native-diagnostic"'), "Popup must displ
 
 const setupScript = await readFile(resolve(root, "scripts/setup-browser-companion.ps1"), "utf8");
 requireCondition(setupScript.includes("Build/package and registration are separate steps"), "Setup helper must keep package build and browser registration in separate invocations.");
-requireCondition(setupScript.includes("Build/package and registration are separate steps"), "Setup helper must force package build and browser registration into separate invocations.");
