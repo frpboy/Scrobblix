@@ -695,18 +695,20 @@ public sealed partial class MainWindow : Window
     public TrayMenuStatus GetTrayMenuStatus()
     {
         var observation = _displayedObservation;
+        var currentArtist = observation?.Artist?.Trim();
+        var currentTitle = observation?.Title?.Trim();
         var hasActivePlayback = !_isClosed
             && (observation?.PlaybackState is PlayState.Playing or PlayState.Paused);
-        var hasTrackMetadata = !string.IsNullOrWhiteSpace(observation?.Artist)
-            && !string.IsNullOrWhiteSpace(observation?.Title);
+        var hasTrackMetadata = !string.IsNullOrWhiteSpace(currentArtist)
+            && !string.IsNullOrWhiteSpace(currentTitle);
         var hasCurrentPlay = hasActivePlayback && hasTrackMetadata
             && !string.IsNullOrWhiteSpace(_displayedPlayId);
         var savedLoveState = !hasActivePlayback || !hasTrackMetadata || string.IsNullOrWhiteSpace(_lastFmAccountId)
             ? null
             : _lovedTrackRecords.FirstOrDefault(track =>
                 string.Equals(track.AccountId, _lastFmAccountId, StringComparison.Ordinal)
-                && string.Equals(track.Artist?.Trim(), observation!.Artist!.Trim(), StringComparison.OrdinalIgnoreCase)
-                && string.Equals(track.Title?.Trim(), observation.Title!.Trim(), StringComparison.OrdinalIgnoreCase));
+                && string.Equals(track.Artist?.Trim(), currentArtist, StringComparison.OrdinalIgnoreCase)
+                && string.Equals(track.Title?.Trim(), currentTitle, StringComparison.OrdinalIgnoreCase));
         var loveIntent = _currentTrackLoveIntent ?? savedLoveState?.RequestedAction;
         var loveActionState = savedLoveState?.RequestedAction == loveIntent
             ? savedLoveState?.State
