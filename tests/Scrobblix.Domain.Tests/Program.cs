@@ -735,6 +735,59 @@ Assert(queueActions.Count >= 2
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
+// The tray retry read model must include only retry-exhausted Last.fm scrobbles,
+// never successful or scheduled retries, Love actions, or uncertain submissions.
+var trayQueueDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-tray-queue-{Guid.NewGuid():N}.db");
+var trayQueueConnectionString = $"Data Source={trayQueueDatabasePath};Pooling=False";
+await new SqliteDatabase(trayQueueConnectionString).InitializeAsync(CancellationToken.None);
+var trayQueuePlayStore = new SqliteEligiblePlayStore(trayQueueConnectionString);
+var trayQueueTime = DateTimeOffset.UtcNow;
+foreach (var trayQueuePlayId in new[] { "tray-retryable", "tray-scheduled", "tray-accepted", "tray-love" })
+{
+    var trayQueuePlay = historyRecord with { PlayId = trayQueuePlayId };
+    Assert(await trayQueuePlayStore.TryPersistAndQueueAsync(
+        trayQueuePlay, "lastfm", "tray-account", trayQueueTime, CancellationToken.None),
+        $"Tray queue fixture {trayQueuePlayId} is persisted.");
+}
+
+Assert(await new SqliteLovedActionWriter(trayQueueConnectionString).EnqueueAsync(
+    "tray-love", "tray-account", ProviderActionType.Love, trayQueueTime, CancellationToken.None),
+    "The tray queue fixture includes a separate Love action that must not be retried as a scrobble.");
+
+await using (var trayQueueUpdateConnection = new SqliteConnection(trayQueueConnectionString))
+{
+    await trayQueueUpdateConnection.OpenAsync(CancellationToken.None);
+    foreach (var update in new[]
+    {
+        (PlayId: "tray-retryable", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.RetryExhausted),
+        (PlayId: "tray-scheduled", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.RetryScheduled),
+        (PlayId: "tray-accepted", ActionType: ProviderActionType.Scrobble, State: ProviderActionState.Accepted),
+        (PlayId: "tray-love", ActionType: ProviderActionType.Love, State: ProviderActionState.RetryExhausted),
+    })
+    {
+        await using var updateCommand = trayQueueUpdateConnection.CreateCommand();
+        updateCommand.CommandText = "UPDATE provider_actions SET state = $state WHERE play_id = $playId AND action_type = $actionType;";
+        updateCommand.Parameters.AddWithValue("$state", (int)update.State);
+        updateCommand.Parameters.AddWithValue("$playId", update.PlayId);
+        updateCommand.Parameters.AddWithValue("$actionType", (int)update.ActionType);
+        Assert(await updateCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            $"Tray queue fixture {update.PlayId}/{update.ActionType} moves to {update.State}.");
+    }
+}
+
+var trayQueueReader = new SqliteQueueReader(trayQueueConnectionString);
+Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 1,
+    "Tray retry count includes only retry-exhausted Last.fm scrobble actions.");
+var trayRetryableIds = await trayQueueReader.GetRetryableFailedScrobbleActionIdsAsync(CancellationToken.None);
+var trayQueueRows = await trayQueueReader.GetRecentActionsAsync(20, CancellationToken.None);
+var expectedTrayRetryableId = trayQueueRows.Single(action =>
+    action.PlayId == "tray-retryable" && action.ActionType == ProviderActionType.Scrobble).ActionId;
+Assert(trayRetryableIds.Count == 1 && trayRetryableIds[0] == expectedTrayRetryableId,
+    "Tray retry candidates exclude scheduled retries, accepted scrobbles, and exhausted Love actions.");
+File.Delete(trayQueueDatabasePath);
+
+
+
 var unknownQueuePlay = retryRecord with { PlayId = "play-outcome-unknown" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(unknownQueuePlay, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
     "An additional eligible action is persisted for the unknown-outcome queue test.");
