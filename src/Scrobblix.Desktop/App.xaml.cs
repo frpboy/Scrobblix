@@ -65,6 +65,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         ScrobblixNotificationService? notificationService = null;
         _window.Closed += (_, _) =>
         {
+            _window?.MarkShutdownStarted();
             trackingCancellation?.Cancel();
             applicationCancellation.Cancel();
             StopSingleInstanceActivationListener();
@@ -245,6 +246,28 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             _window.SetQueueSummary(queueSummary);
             _window.SetQueueActions(await queueReader.GetRecentActionsAsync(50, CancellationToken.None));
             _window.SetLovedTracks(await queueReader.GetRecentLovedTracksAsync(200, CancellationToken.None));
+            _window.SetTrayRetryableFailedScrobblesCount(
+                (await queueReader.GetRetryableFailedScrobblesAsync(CancellationToken.None)).Count);
+
+            var trayRetryStore = new SqliteProviderActionStore(connectionString);
+            _window.TrayRetryFailedScrobblesRequested += async () =>
+            {
+                var retryable = await queueReader.GetRetryableFailedScrobblesAsync(applicationCancellation.Token);
+                var scheduled = 0;
+                foreach (var action in retryable)
+                {
+                    applicationCancellation.Token.ThrowIfCancellationRequested();
+                    if (await trayRetryStore.RetryNowAsync(
+                        action.ActionId, DateTimeOffset.UtcNow, applicationCancellation.Token))
+                    {
+                        scheduled++;
+                    }
+                }
+
+                logger.Info("TRAY_QUEUE", $"User requested retry of explicitly retryable failed scrobbles; scheduled_count={scheduled}; candidate_count={retryable.Count}.");
+                await RefreshDashboardAsync(_window!, connectionString, applicationCancellation.Token);
+                return scheduled;
+            };
 
             _window.QueueRetryNowRequested += async actionId =>
             {
@@ -1204,6 +1227,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var queueReader = new SqliteQueueReader(connectionString);
         var queueSummary = await queueReader.GetSummaryAsync(cancellationToken);
         var queueActions = await queueReader.GetRecentActionsAsync(50, cancellationToken);
+        var retryableFailedScrobbles = await queueReader.GetRetryableFailedScrobblesAsync(cancellationToken);
         var lovedTracks = await queueReader.GetRecentLovedTracksAsync(200, cancellationToken);
         var statistics = await new SqliteStatisticsReader(connectionString).GetAsync(cancellationToken);
         window.DispatcherQueue.TryEnqueue(() =>
@@ -1213,6 +1237,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             window.SetTodaySummary(todaySummary);
             window.SetQueueSummary(queueSummary);
             window.SetQueueActions(queueActions);
+            window.SetTrayRetryableFailedScrobblesCount(retryableFailedScrobbles.Count);
             window.SetLovedTracks(lovedTracks);
             window.SetStatisticsSummary(statistics);
         });

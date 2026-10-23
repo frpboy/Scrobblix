@@ -25,6 +25,11 @@ public sealed partial class MainWindow : Window
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
     private bool _updatingNavigationPreference;
+    private bool _currentTrackLoveActionInProgress;
+    private bool _isShuttingDown;
+    private string? _lastFmUserName;
+    private QueueSummary? _queueSummary;
+    private int? _retryableFailedScrobbleCount;
     private bool _preferredNavigationCompact;
     private bool _isWidthConstrained;
     private global::Windows.UI.ViewManagement.AccessibilitySettings? _accessibilitySettings;
@@ -50,6 +55,8 @@ public sealed partial class MainWindow : Window
     public event Func<string, Task<bool>>? QueueCancelRequested;
     public event Func<string, Task<bool>>? QueueConfirmOutcomeAcceptedRequested;
 
+    public event Func<Task<int>>? TrayRetryFailedScrobblesRequested;
+
     public event Func<string, ProviderActionType, Task<bool>>? LovedTrackActionRequested;
 
     public event Func<string, Task>? BackupRequested;
@@ -62,6 +69,130 @@ public sealed partial class MainWindow : Window
     public event Func<bool, Task>? NavigationCompactPreferenceChanged;
 
     private string? _logDirectory;
+
+    public bool TrayTrackingEnabled => _trackingMode.IsEnabled;
+    public bool TrayLastFmConnected => _isLastFmConnected;
+    public bool TrayCanCopyCurrentTrackDetails =>
+        !_isShuttingDown
+        && _displayedObservation?.PlaybackState is PlayState.Playing or PlayState.Paused
+        && TrayCurrentTrackDetails is not null;
+    public bool TrayCanOpenLogFolder => !string.IsNullOrWhiteSpace(_logDirectory) && Directory.Exists(_logDirectory) && !_isShuttingDown;
+    public bool TrayCanRetryFailedScrobbles => !_isShuttingDown && _retryableFailedScrobbleCount is > 0;
+    public string TrayLastFmStatusText => !_isLastFmConnected
+        ? "Last.fm: Not connected"
+        : string.IsNullOrWhiteSpace(_lastFmUserName)
+            ? "Last.fm: Connected"
+            : $"Last.fm: Connected as {TruncateForTray(_lastFmUserName, 42)}";
+    public string TrayPendingQueueStatusText => _queueSummary is null
+        ? "Scrobble queue: Unavailable"
+        : $"Scrobble queue: {_queueSummary.PendingCount:N0} pending";
+    public string TrayQueueStatusText => _queueSummary is null
+        ? "Queue status unavailable"
+        : $"Pending {_queueSummary.PendingCount:N0} · In flight {_queueSummary.InFlightCount:N0} · Retry scheduled {_queueSummary.RetryScheduledCount:N0} · Failed {_queueSummary.PermanentFailureCount:N0} · Outcome unknown {_queueSummary.SubmissionOutcomeUnknownCount:N0}";
+    public string TrayRetryableFailedScrobblesText => _retryableFailedScrobbleCount is { } count
+        ? $"Retryable failed scrobbles: {count:N0}"
+        : "Retryable failed scrobbles: Unavailable";
+    public string TrayPlaybackStatusText
+    {
+        get
+        {
+            var observation = _displayedObservation;
+            if (observation is null
+                || string.IsNullOrWhiteSpace(observation.Artist)
+                || string.IsNullOrWhiteSpace(observation.Title))
+            {
+                return "Nothing playing";
+            }
+
+            var details = $"{TruncateForTray(observation.Artist, 48)} — {TruncateForTray(observation.Title, 76)}";
+            return observation.PlaybackState switch
+            {
+                PlayState.Playing => $"Now Playing: {details}",
+                PlayState.Paused => $"Paused: {details}",
+                _ => "Nothing playing",
+            };
+        }
+    }
+    public string TrayCurrentTrackSummaryText
+    {
+        get
+        {
+            if (_displayedObservation?.PlaybackState is not (PlayState.Playing or PlayState.Paused)
+                || TrayCurrentTrackDetails is not { } details)
+            {
+                return "No current track metadata";
+            }
+
+            return $"Current track: {TruncateForTray(details, 126)}";
+        }
+    }
+    public string? TrayCurrentTrackDetails
+    {
+        get
+        {
+            var observation = _displayedObservation;
+            var artist = observation?.Artist?.Trim();
+            var title = observation?.Title?.Trim();
+            if (string.IsNullOrWhiteSpace(artist) && string.IsNullOrWhiteSpace(title)) return null;
+            if (string.IsNullOrWhiteSpace(artist)) return title;
+            if (string.IsNullOrWhiteSpace(title)) return artist;
+            return $"{artist} — {title}";
+        }
+    }
+    public string TrayCurrentLoveCommandLabel => GetCurrentTrackLoveIntent() == ProviderActionType.Love
+        ? "Unlove Track"
+        : "Love Track";
+    public string TrayCurrentLoveStatusText
+    {
+        get
+        {
+            var action = GetCurrentTrackLoveAction();
+            if (action is null)
+            {
+                return _currentTrackLoveIntent is { } intent
+                    ? $"{(intent == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; provider result not yet confirmed"
+                    : "No Love/Unlove request for this track";
+            }
+
+            var verb = action.ActionType == ProviderActionType.Love ? "Love" : "Unlove";
+            return action.State switch
+            {
+                ProviderActionState.Pending => $"{verb}: queued; awaiting Last.fm",
+                ProviderActionState.InFlight => $"{verb}: sending to Last.fm",
+                ProviderActionState.RetryScheduled => $"{verb}: retry scheduled",
+                ProviderActionState.Accepted => $"{verb}: confirmed by Last.fm",
+                ProviderActionState.AuthBlocked => $"{verb}: blocked by Last.fm authentication",
+                ProviderActionState.PermanentFailure => $"{verb}: rejected by provider",
+                ProviderActionState.RetryExhausted => $"{verb}: retries exhausted; review Queue",
+                ProviderActionState.SubmissionOutcomeUnknown => $"{verb}: outcome unknown; verify Last.fm before retrying",
+                ProviderActionState.ProviderIgnored => $"{verb}: ignored by provider",
+                ProviderActionState.Cancelled => $"{verb}: cancelled or superseded",
+                _ => $"{verb}: {action.State}",
+            };
+        }
+    }
+    public bool TrayCanLoveCurrentTrack
+    {
+        get
+        {
+            var observation = _displayedObservation;
+            var action = GetCurrentTrackLoveAction();
+            var hasCurrentPlayback = observation?.PlaybackState is PlayState.Playing or PlayState.Paused;
+            var actionIsStillActive = action?.State is ProviderActionState.Pending
+                or ProviderActionState.InFlight
+                or ProviderActionState.RetryScheduled
+                or ProviderActionState.AuthBlocked
+                or ProviderActionState.SubmissionOutcomeUnknown;
+            return !_isShuttingDown
+                && !_currentTrackLoveActionInProgress
+                && _isLastFmConnected
+                && hasCurrentPlayback
+                && !string.IsNullOrWhiteSpace(_displayedPlayId)
+                && !string.IsNullOrWhiteSpace(observation?.Artist)
+                && !string.IsNullOrWhiteSpace(observation?.Title)
+                && !actionIsStillActive;
+        }
+    }
 
     public MainWindow()
     {
@@ -249,6 +380,17 @@ public sealed partial class MainWindow : Window
         {
             SelectDestination(destination);
         }
+    }
+
+    public void NavigateFromTray(string destination)
+    {
+        if (_isShuttingDown) return;
+        if (destination is not ("home" or "history" or "statistics" or "loved" or "queue" or "sources" or "diagnostics" or "settings"))
+        {
+            return;
+        }
+
+        SelectDestination(destination);
     }
 
     private void SelectDestination(string destination)
@@ -737,15 +879,27 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void OpenLogFolderButton_Click(object sender, RoutedEventArgs args)
+    private void OpenLogFolderButton_Click(object sender, RoutedEventArgs args) =>
+        OpenLogFolderFromTray();
+
+    public void OpenLogFolderFromTray()
     {
+        if (_isShuttingDown) return;
         if (string.IsNullOrWhiteSpace(_logDirectory) || !Directory.Exists(_logDirectory))
         {
-            DiagnosticLogRequested?.Invoke("Open log folder requested while the log directory was unavailable.");
+            DiagnosticLogRequested?.Invoke("Open log folder requested while the configured log directory was unavailable.");
             return;
         }
 
-        Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
+        try
+        {
+            Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
+        }
+        catch (Exception exception) when (exception is System.ComponentModel.Win32Exception
+            or InvalidOperationException or IOException or UnauthorizedAccessException or ArgumentException)
+        {
+            ReportTrayActionFailure("Open Log Folder", exception);
+        }
     }
 
     public void SetDesktopNotificationsEnabled(bool enabled)
@@ -984,6 +1138,7 @@ public sealed partial class MainWindow : Window
     {
         _queueActions = actions;
         UpdateRailAttention();
+        UpdateLovedButtons();
         QueuePageActionList.Children.Clear();
         if (actions.Count == 0)
         {
@@ -1187,11 +1342,15 @@ public sealed partial class MainWindow : Window
 
     public void SetQueueSummary(QueueSummary summary)
     {
+        _queueSummary = summary;
         QueueStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueuePageDetailText.Text = DashboardStatusText.QueueDetail(summary);
     }
+
+    public void SetTrayRetryableFailedScrobblesCount(int count) =>
+        _retryableFailedScrobbleCount = Math.Max(0, count);
 
     public void SetStatisticsSummary(ListeningStatistics summary)
     {
@@ -1304,7 +1463,16 @@ public sealed partial class MainWindow : Window
 
     private async void CurrentTrackLoveButton_Click(object sender, RoutedEventArgs args)
     {
-        var nextAction = _currentTrackLoveIntent == ProviderActionType.Love
+        var nextAction = GetCurrentTrackLoveIntent() == ProviderActionType.Love
+            ? ProviderActionType.Unlove
+            : ProviderActionType.Love;
+        await RequestLovedTrackActionAsync(nextAction);
+    }
+
+    public async Task RequestCurrentTrackLoveFromTrayAsync()
+    {
+        if (!TrayCanLoveCurrentTrack) return;
+        var nextAction = GetCurrentTrackLoveIntent() == ProviderActionType.Love
             ? ProviderActionType.Unlove
             : ProviderActionType.Love;
         await RequestLovedTrackActionAsync(nextAction);
@@ -1312,6 +1480,12 @@ public sealed partial class MainWindow : Window
 
     private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
     {
+        if (_isShuttingDown || _currentTrackLoveActionInProgress) return;
+        if (!TrayCanLoveCurrentTrack)
+        {
+            SetLovedActionFeedback("Love/Unlove is unavailable until a connected Last.fm account and a safe current-track state are available.");
+            return;
+        }
         if (string.IsNullOrWhiteSpace(_displayedPlayId))
         {
             SetLovedActionFeedback("Wait for Scrobblix to save the current listening session before requesting Love/Unlove.");
@@ -1323,6 +1497,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
+        _currentTrackLoveActionInProgress = true;
         CurrentTrackLoveButton.IsEnabled = false;
         try
         {
@@ -1337,11 +1512,92 @@ public sealed partial class MainWindow : Window
                 SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; provider acceptance is shown on the Loved page.");
             }
         }
+        catch (OperationCanceledException) when (_isShuttingDown)
+        {
+        }
+        catch (Exception exception)
+        {
+            if (!_isShuttingDown)
+            {
+                SetLovedActionFeedback($"Love/Unlove could not be queued ({exception.GetType().Name}). No provider success is implied.");
+                ReportTrayActionFailure("Love/Unlove", exception);
+            }
+        }
         finally
         {
-            UpdateLovedButtons();
+            _currentTrackLoveActionInProgress = false;
+            if (!_isShuttingDown) UpdateLovedButtons();
         }
     }
+
+    private ProviderActionType? GetCurrentTrackLoveIntent() =>
+        GetCurrentTrackLoveAction()?.ActionType ?? _currentTrackLoveIntent;
+
+    private QueueActionSummary? GetCurrentTrackLoveAction() =>
+        string.IsNullOrWhiteSpace(_displayedPlayId)
+            ? null
+            : _queueActions.FirstOrDefault(action =>
+                string.Equals(action.PlayId, _displayedPlayId, StringComparison.Ordinal)
+                && string.Equals(action.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
+                && action.ActionType is ProviderActionType.Love or ProviderActionType.Unlove);
+
+    public void CopyTrackDetailsFromTray()
+    {
+        if (_isShuttingDown || !TrayCanCopyCurrentTrackDetails || TrayCurrentTrackDetails is not { } details) return;
+        try
+        {
+            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(details);
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.Flush();
+        }
+        catch (Exception exception)
+        {
+            ReportTrayActionFailure("Copy Track Details", exception);
+        }
+    }
+
+    public async Task<int> RetryFailedScrobblesFromTrayAsync()
+    {
+        if (_isShuttingDown || TrayRetryFailedScrobblesRequested is not { } handler) return 0;
+        try
+        {
+            return await handler.Invoke();
+        }
+        catch (OperationCanceledException) when (_isShuttingDown)
+        {
+            return 0;
+        }
+        catch (Exception exception)
+        {
+            if (!_isShuttingDown) ReportTrayActionFailure("Retry Failed Scrobbles", exception);
+            return 0;
+        }
+    }
+
+    public void ToggleTrackingFromTray()
+    {
+        if (_isShuttingDown) return;
+        ToggleTracking();
+    }
+
+    public void MarkShutdownStarted() => _isShuttingDown = true;
+
+    public void ReportTrayActionFailure(string operation, Exception exception)
+    {
+        DiagnosticLogRequested?.Invoke($"{operation} failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+    }
+
+    private static string TruncateForTray(string? value, int maximumLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return "Unavailable";
+        var text = value.Trim();
+        return text.Length <= maximumLength ? text : text[..Math.Max(1, maximumLength - 1)] + "…";
+    }
+
+    private void UpdateLovedButtons()
+    {
+        var canAct = TrayCanLoveCurrentTrack;
 
     public void SetTodaySummary(TodaySummary summary)
     {
@@ -1355,6 +1611,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmUnavailable()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1365,6 +1622,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmReadyToConnect()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
@@ -1383,6 +1641,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmConnected(string userName)
     {
         _isLastFmConnected = true;
+        _lastFmUserName = userName;
         UpdateLovedButtons();
         SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1393,6 +1652,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmConnectionError()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
@@ -1476,9 +1736,11 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void TrackingToggleButton_Click(object sender, RoutedEventArgs args)
+    private void TrackingToggleButton_Click(object sender, RoutedEventArgs args) => ToggleTracking();
+
+    private void ToggleTracking()
     {
-        if (!_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
+        if (_isShuttingDown || !_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
         {
             return;
         }
