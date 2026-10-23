@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private ProviderActionType? _currentTrackLoveIntent;
     private bool _isLastFmConnected;
     private string? _lastFmUserName;
+    private string? _lastFmAccountId;
     private QueueSummary? _queueSummary;
     private int? _trayRetryableFailedScrobbleCount;
     private bool _trayLovedActionInProgress;
@@ -1613,8 +1614,17 @@ public sealed partial class MainWindow : Window
         DisconnectLastFmButton.IsEnabled = false;
     }
 
-    public void SetLastFmConnected(string userName)
+    public void SetLastFmConnected(string userName, string accountId)
     {
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        if (!string.Equals(_lastFmAccountId, accountId, StringComparison.Ordinal))
+        {
+            // The local Love/Unlove intent belongs to the account that queued it.
+            // Never carry account A's current-track toggle into account B.
+            _currentTrackLoveIntent = null;
+        }
+
+        _lastFmAccountId = accountId;
         _isLastFmConnected = true;
         _lastFmUserName = userName;
         UpdateLovedButtons();
