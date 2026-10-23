@@ -26,7 +26,7 @@ The queue reader exposes a read-only query for Last.fm Scrobble actions in Retry
 - The existing single-instance activation and restore path is preserved.
 - The native popup is destroyed after selection; the existing tray icon/window subclass cleanup remains idempotent.
 - Tracking and asynchronous queue/Love actions use existing application event/service routes and guard against rapid repeat clicks.
-- Clipboard content is plain Artist — Track; failures are logged by exception type only.
+- Clipboard content is plain Artist, Track; failures are logged by exception type only.
 - Explorer launch uses the logging directory resolved by the app. Missing-directory and launch failures are reported without creating arbitrary folders.
 - Account secrets and session keys are never placed into menu labels or logs.
 - Menu state refreshes on the next opening using the newest local snapshots; there is no aggressive polling or new event subscription to leak.

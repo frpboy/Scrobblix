@@ -54,10 +54,10 @@ public sealed record TrayMenuStatus(
     public string PlaybackLabel => PlaybackState switch
     {
         PlayState.Playing => HasTrackMetadata
-            ? $"Now Playing: {Truncate(Artist, 34)} — {Truncate(Title, 42)}"
+            ? $"Now Playing: {Truncate(Artist, 34)}, {Truncate(Title, 42)}"
             : "Now Playing: Metadata unavailable",
         PlayState.Paused => HasTrackMetadata
-            ? $"Paused: {Truncate(Artist, 34)} — {Truncate(Title, 42)}"
+            ? $"Paused: {Truncate(Artist, 34)}, {Truncate(Title, 42)}"
             : "Playback paused",
         _ => "Nothing playing",
     };
@@ -120,7 +120,7 @@ public sealed record TrayMenuStatus(
             : "Love Track";
 
     public string TrackDetails => HasCurrentTrack
-        ? $"{Artist!.Trim()} — {Title!.Trim()}"
+        ? $"{Artist!.Trim()}, {Title!.Trim()}"
         : string.Empty;
 
     public static string Truncate(string? value, int maximumLength)

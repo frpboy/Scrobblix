@@ -88,7 +88,7 @@ var trayConnected = new TrayMenuStatus(
     QueueSnapshot: new QueueSummary(3, 1, 4, 2, 1, 1, 1));
 Assert(trayConnected.TrackingCommandLabel == "Pause Tracking", "Tray tracking command follows the authoritative enabled state.");
 Assert(trayConnected.LastFmLabel == "Last.fm: Connected as listener", "Tray shows the authenticated Last.fm username.");
-Assert(trayConnected.PlaybackLabel == "Now Playing: Test Artist — Test Track", "Tray current-track status comes from real playback metadata.");
+Assert(trayConnected.PlaybackLabel == "Now Playing: Test Artist, Test Track", "Tray current-track status comes from real playback metadata.");
 Assert(trayConnected.QueueLabel == "Provider actions: 3 pending", "Tray queue status labels aggregate provider-action counts accurately.");
 Assert(trayConnected.QueueDetailLabels.Contains("In flight: 1")
     && trayConnected.QueueDetailLabels.Contains("Retry scheduled: 2")
@@ -103,7 +103,7 @@ Assert(unavailableQueueDetails.Count == 1 && unavailableQueueDetails[0] == "Queu
 Assert(trayConnected.CanLoveTrack && trayConnected.CanCopyTrackDetails, "Connected current tracks enable Love and copy actions.");
 Assert(trayConnected.LoveCommandLabel == "Love Track", "No local Love intent defaults to the Love operation.");
 Assert(trayConnected.CanRetryFailedScrobbles, "Retry is enabled only when retryable failed scrobbles exist and the account is connected.");
-Assert(trayConnected.TrackDetails == "Test Artist — Test Track", "Copy details use a plain artist/title representation.");
+Assert(trayConnected.TrackDetails == "Test Artist, Test Track", "Copy details use a plain artist/title representation.");
 
 var trayPaused = trayConnected with { TrackingEnabled = false, PlaybackState = null, CurrentLoveIntent = ProviderActionType.Love };
 Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking command changes when tracking is paused.");
@@ -121,7 +121,7 @@ Assert((trayConnected with { Artist = null, Title = null }).CurrentTrackStatusLa
 Assert(!(trayConnected with { Artist = null, Title = null }).CanLoveTrack
     && !(trayConnected with { Artist = null, Title = null }).CanCopyTrackDetails,
     "Insufficient metadata disables current-track actions.");
-Assert((trayPaused with { PendingQueueCount = null, QueueSnapshot = null }).QueueLabel == "Scrobble queue: status unavailable",
+Assert((trayPaused with { PendingQueueCount = null, QueueSnapshot = null }).QueueLabel == "Provider-action queue: status unavailable",
     "Tray does not fabricate a queue count when the read model is unavailable.");
 
 var trayDisconnected = trayConnected with { LastFmConnected = false, LastFmUserName = null };

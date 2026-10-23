@@ -85,7 +85,7 @@ internal sealed class TrayIconService : IDisposable
             Flags = NifMessage | NifIcon | NifTip | NifGuid,
             CallbackMessage = TrayCallbackMessage,
             IconHandle = systemIcon,
-            Tip = "Scrobblix — listening companion",
+            Tip = "Scrobblix listening companion",
             ItemGuid = TrayGuid,
             Info = string.Empty,
             InfoTitle = string.Empty,
@@ -160,7 +160,7 @@ internal sealed class TrayIconService : IDisposable
         try
         {
             var status = _mainWindow.GetTrayMenuStatus();
-            AppendStatusItem(menu, "Scrobblix — Running");
+            AppendStatusItem(menu, "Scrobblix is running");
             AppendStatusItem(menu, status.LastFmLabel);
             AppendStatusItem(menu, status.PlaybackLabel);
             AppendStatusItem(menu, status.QueueLabel);
