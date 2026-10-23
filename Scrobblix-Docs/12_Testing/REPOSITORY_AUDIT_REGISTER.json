@@ -147,6 +147,26 @@
       ],
       "validation": "PR #37 exact-head Windows CI passed in run 39901751712; tests prove SubmissionOutcomeUnknown and RetryExhausted completion preserve reason and clear lease fields."
     }
+,
+    ,
+    {
+      "id": "AUD-PLAY-001",
+      "title": "Confirmed-time accrual across a sustained missing GSMTC session",
+      "severity": "P2",
+      "status": "fix_in_progress",
+      "issue": 39,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/39",
+      "fixPR": 40,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/40",
+      "evidence": [
+        "src/Scrobblix.Desktop/App.xaml.cs",
+        "src/Scrobblix.Application/Ingestion/PlaybackTrackingService.cs",
+        "src/Scrobblix.Domain/Playback/CanonicalPlayTracker.cs",
+        "src/Scrobblix.Domain/Playback/ConfirmedPlayedTime.cs",
+        "tests/Scrobblix.Domain.Tests/Program.cs"
+      ],
+      "validation": "Regression coverage added for a long GSMTC source gap, same-track resume, and browser-source isolation. Exact-head Windows CI run 39903263712 was in progress at the checkpoint; fix not yet merged."
+    }
   ],
   "releaseGates": {
     "status": "not_ready_for_private_beta",
