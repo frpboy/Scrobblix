@@ -40,13 +40,53 @@ requireCondition(nativeHostValidator.includes("MatchesFirefoxExtensionId"), "Nat
 requireCondition(nativeHostProgram.includes("firefoxCallerId"), "Native host must parse Firefox native-messaging arguments.");
 requireCondition(nativeHostProgram.includes("var trustedEnvelope"), "Native host must compute sender trust before message dispatch.");
 requireCondition(nativeHostProgram.indexOf("if (!trustedEnvelope)") < nativeHostProgram.indexOf('else if (type == "ping.v1")'), "Native host must reject an untrusted sender before responding to ping.");
+requireCondition(nativeHostProgram.includes('new { protocolVersion = 1, type = "pong.v1", messageId }'), "Native host pong must include protocolVersion for the browser handshake.");
+
 const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
 const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
 requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host setup must support different Chrome and Edge extension IDs.");
-requireCondition(nativeHostInstaller.includes("allowed_origins = $allowedOrigins"), "Native-host manifest must allow-list every supplied Chromium extension ID.");
-requireCondition(nativeHostInstaller.includes("($extensionIds -join ';')"), "Desktop allow-list must contain every registered Chromium extension ID.");
+requireCondition(nativeHostInstaller.includes("$manifest.allowed_origins = @($mergedChromiumIds"), "Native-host manifest must preserve every requested and previously registered Chromium extension ID.");
+requireCondition(nativeHostInstaller.includes("($mergedChromiumIds -join ';')"), "Browser-specific registration must preserve previously allowed Chromium extension IDs.");
+requireCondition(nativeHostInstaller.includes("$existingChromiumIds + $extensionIds"), "Registration must merge the existing per-user Chromium allow-list with supplied IDs.");
 requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
 requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "The installer must write the Firefox add-on allow-list.");
 requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
 
 console.log("Chromium and Firefox manifests, emitted scripts, and Firefox host identity hooks are valid.");
+
+const serviceWorker = await readFile(resolve(root, "browser-extension/src/service-worker.ts"), "utf8");
+const popupSource = await readFile(resolve(root, "browser-extension/src/popup.ts"), "utf8");
+const popupHtml = await readFile(resolve(root, "browser-extension/popup.html"), "utf8");
+requireCondition(serviceWorker.includes('const hostName = "com.frpboy.scrobblix"'), "Extension must request the documented native host name.");
+requireCondition(serviceWorker.includes('"HOST_NOT_REGISTERED"'), "Connection diagnostics must classify host-resolution failures.");
+requireCondition(serviceWorker.includes('isErrorResponse(response) && response.messageId === messageId'), "Native host diagnostic errors must correlate to the current request ID.");
+requireCondition(serviceWorker.includes('"EXTENSION_NOT_AUTHORIZED"'), "Connection diagnostics must distinguish authorization failures.");
+requireCondition(serviceWorker.includes('"CONNECTION_TIMEOUT"'), "Connection diagnostics must classify handshake timeout.");
+requireCondition(serviceWorker.includes('candidate.messageId === messageId'), "Connection success must validate the reply message ID.");
+requireCondition(serviceWorker.includes('candidate.protocolVersion === 1'), "Connection success must validate the protocol version.");
+requireCondition(serviceWorker.includes('candidate.type === expectedType'), "Connection success must validate the exact pong response type.");
+requireCondition(serviceWorker.includes("firefoxPortError"), "Firefox native-host failures must read the native port error when available.");
+requireCondition(serviceWorker.includes("forbidden|access.*denied"), "Chromium forbidden-host failures must classify as extension authorization errors.");
+requireCondition(serviceWorker.includes("no such native application"), "Firefox missing-host failures must classify as host registration errors.");
+requireCondition(serviceWorker.includes("failed to start native messaging host"), "Chromium host launch failures must provide startup recovery guidance.");
+requireCondition(popupSource.includes("connectionTestRunning"), "Popup test button must prevent overlapping connection tests.");
+requireCondition(popupSource.includes("response.code === \"CONNECTION_SUCCESS\""), "Popup must not report success without the explicit success category.");
+requireCondition(popupHtml.includes('id="native-recovery"'), "Popup must display actionable recovery instructions.");
+requireCondition(popupHtml.includes('id="native-diagnostic"'), "Popup must display a diagnostic identifier.");
+
+const setupScript = await readFile(resolve(root, "scripts/setup-browser-companion.ps1"), "utf8");
+requireCondition(setupScript.includes("Build/package and registration are separate steps"), "Setup helper must keep package build and browser registration in separate invocations.");
+
+const ciWorkflow = await readFile(resolve(root, ".github/workflows/ci.yml"), "utf8");
+requireCondition(ciWorkflow.includes('"$companion/chromium/popup.html"'), "CI browser companion ZIP must include the Chromium popup HTML.");
+requireCondition(ciWorkflow.includes('"$companion/chromium/popup.css"'), "CI browser companion ZIP must include the Chromium popup stylesheet.");
+requireCondition(ciWorkflow.includes('"$companion/firefox/popup.html"'), "CI browser companion ZIP must include the Firefox popup HTML.");
+requireCondition(ciWorkflow.includes('"$companion/firefox/popup.css"'), "CI browser companion ZIP must include the Firefox popup stylesheet.");
+requireCondition(ciWorkflow.includes('"$companion/chromium/dist/popup.js"'), "CI must validate the Chromium popup script in the packaged artifact.");
+requireCondition(ciWorkflow.includes('"$companion/firefox/dist/popup.js"'), "CI must validate the Firefox popup script in the packaged artifact.");
+
+requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'popup.html')"), "Browser package setup must copy popup.html into the Chromium extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'popup.css')"), "Browser package setup must copy popup.css into the Chromium extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.html')"), "Browser package setup must copy popup.html into the Firefox extension folder.");
+requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.css')"), "Browser package setup must copy popup.css into the Firefox extension folder.");
+requireCondition(setupScript.includes("popup.js')"), "The setup script must require the built popup script in each browser package.");

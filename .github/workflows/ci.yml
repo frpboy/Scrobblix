@@ -172,6 +172,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$bundle/scripts" | Out-Null
           Copy-Item -Path 'browser-extension/manifest.json' -Destination "$bundle/browser-extension/manifest.json" -Force
           Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$bundle/browser-extension-firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$bundle/browser-extension/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$bundle/browser-extension/popup.css" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$bundle/browser-extension-firefox/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$bundle/browser-extension-firefox/popup.css" -Force
           Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension-firefox/dist/" -Recurse -Force
           Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension/README.md" -Force
           Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension-firefox/README.md" -Force
@@ -193,6 +197,9 @@ jobs:
             "$bundle/desktop/Scrobblix.Desktop.exe",
             "$bundle/native-host/Scrobblix.NativeHost.exe",
             "$bundle/browser-extension/manifest.json",
+            "$bundle/browser-extension/popup.html",
+            "$bundle/browser-extension/popup.css",
+            "$bundle/browser-extension/dist/popup.js",
             "$bundle/browser-extension/dist/service-worker.js",
             "$bundle/browser-extension/dist/media-observer.js",
             "$bundle/browser-extension-firefox/manifest.json",
@@ -217,6 +224,10 @@ jobs:
           New-Item -ItemType Directory -Force -Path "$companion/scripts" | Out-Null
           Copy-Item -Path 'browser-extension/manifest.json' -Destination "$companion/chromium/manifest.json" -Force
           Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$companion/firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$companion/chromium/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$companion/chromium/popup.css" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$companion/firefox/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$companion/firefox/popup.css" -Force
           Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/chromium/dist/" -Recurse -Force
           Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/firefox/dist/" -Recurse -Force
           Copy-Item -Path 'browser-extension/README.md' -Destination "$companion/chromium/README.md" -Force
@@ -239,9 +250,15 @@ jobs:
           ) | Set-Content -Path "$companion/INSTALL.txt" -Encoding utf8
           $requiredCompanionFiles = @(
             "$companion/chromium/manifest.json",
+            "$companion/chromium/popup.html",
+            "$companion/chromium/popup.css",
+            "$companion/chromium/dist/popup.js",
             "$companion/chromium/dist/service-worker.js",
             "$companion/chromium/dist/media-observer.js",
             "$companion/firefox/manifest.json",
+            "$companion/firefox/popup.html",
+            "$companion/firefox/popup.css",
+            "$companion/firefox/dist/popup.js",
             "$companion/firefox/dist/service-worker.js",
             "$companion/firefox/dist/media-observer.js",
             "$companion/native-host/Scrobblix.NativeHost.exe",

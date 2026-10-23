@@ -67,32 +67,65 @@ $trustPath = 'HKCU:\Software\Scrobblix\NativeMessaging'
 
 if ($registerChromium) {
     $manifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.json'
-    $allowedOrigins = @($extensionIds | ForEach-Object { "chrome-extension://$_/" })
     $manifest = [ordered]@{
         name = 'com.frpboy.scrobblix'
         description = 'Scrobblix local playback metadata bridge'
         path = $installedExecutable
         type = 'stdio'
-        allowed_origins = $allowedOrigins
+        allowed_origins = @()
     }
+
+    # Preserve any previously registered Chrome/Edge identity when repairing only one browser.
+    $existingChromiumIds = @()
+    if (Test-Path -LiteralPath $trustPath) {
+        $existingValue = (Get-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -ErrorAction SilentlyContinue).AllowedChromeExtensionIds
+        if ($existingValue) {
+            $existingChromiumIds = @(
+                $existingValue -split '[;,\r\n]' |
+                    ForEach-Object { $_.Trim() } |
+                    Where-Object { $_ -cmatch '^[a-p]{32}$' }
+            )
+        }
+    }
+    $mergedChromiumIds = @($existingChromiumIds + $extensionIds | Select-Object -Unique)
+    $manifest.allowed_origins = @($mergedChromiumIds | ForEach-Object { "chrome-extension://$_/" })
     $manifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $manifestPath -Encoding utf8
+
+    # Validate the generated artifact before changing browser registration.
+    $parsedManifest = Get-Content -LiteralPath $manifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($parsedManifest.name -cne 'com.frpboy.scrobblix' -or $parsedManifest.type -cne 'stdio') {
+        throw 'Generated Chromium native-host manifest has an unexpected name or transport type.'
+    }
+    if (-not (Test-Path -LiteralPath $parsedManifest.path -PathType Leaf)) {
+        throw 'Generated Chromium native-host manifest points to a missing executable.'
+    }
+    if (@($parsedManifest.allowed_origins).Count -ne $mergedChromiumIds.Count) {
+        throw 'Generated Chromium native-host manifest does not preserve every installed extension ID.'
+    }
 
     if ($RegisterChrome) {
         $registryPath = 'HKCU:\Software\Google\Chrome\NativeMessagingHosts\com.frpboy.scrobblix'
         New-Item -Path $registryPath -Force | Out-Null
         Set-Item -LiteralPath $registryPath -Value $manifestPath
+        $registeredManifestPath = (Get-ItemProperty -LiteralPath $registryPath -ErrorAction Stop).'(default)'
+        if ($registeredManifestPath -ne $manifestPath) {
+            throw 'Chrome native-host registration did not retain the expected manifest path.'
+        }
     }
     if ($RegisterEdge) {
         $registryPath = 'HKCU:\Software\Microsoft\Edge\NativeMessagingHosts\com.frpboy.scrobblix'
         New-Item -Path $registryPath -Force | Out-Null
         Set-Item -LiteralPath $registryPath -Value $manifestPath
+        $registeredManifestPath = (Get-ItemProperty -LiteralPath $registryPath -ErrorAction Stop).'(default)'
+        if ($registeredManifestPath -ne $manifestPath) {
+            throw 'Edge native-host registration did not retain the expected manifest path.'
+        }
     }
 
     New-Item -Path $trustPath -Force | Out-Null
-    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value ($extensionIds -join ';') -Type String
-    Write-Host "Chromium extension IDs allow-listed: $($extensionIds -join ', ')"
+    Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value ($mergedChromiumIds -join ';') -Type String
+    Write-Host "Chromium extension IDs allow-listed: $($mergedChromiumIds -join ', ')"
 }
-
 if ($RegisterFirefox) {
     $firefoxManifestPath = Join-Path $destinationDirectory 'com.frpboy.scrobblix.firefox.json'
     $firefoxManifest = [ordered]@{
@@ -103,9 +136,23 @@ if ($RegisterFirefox) {
         allowed_extensions = @($FirefoxExtensionId)
     }
     $firefoxManifest | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $firefoxManifestPath -Encoding utf8
+    $parsedFirefoxManifest = Get-Content -LiteralPath $firefoxManifestPath -Raw | ConvertFrom-Json -ErrorAction Stop
+    if ($parsedFirefoxManifest.name -cne 'com.frpboy.scrobblix' -or $parsedFirefoxManifest.type -cne 'stdio') {
+        throw 'Generated Firefox native-host manifest has an unexpected name or transport type.'
+    }
+    if (-not (Test-Path -LiteralPath $parsedFirefoxManifest.path -PathType Leaf)) {
+        throw 'Generated Firefox native-host manifest points to a missing executable.'
+    }
+    if (@($parsedFirefoxManifest.allowed_extensions) -cnotcontains $FirefoxExtensionId) {
+        throw 'Generated Firefox native-host manifest does not authorize the configured add-on ID.'
+    }
+
     $firefoxRegistryPath = 'HKCU:\Software\Mozilla\NativeMessagingHosts\com.frpboy.scrobblix'
     New-Item -Path $firefoxRegistryPath -Force | Out-Null
     Set-Item -LiteralPath $firefoxRegistryPath -Value $firefoxManifestPath
+    if ((Get-Item -LiteralPath $firefoxRegistryPath).GetValue('') -ne $firefoxManifestPath) {
+        throw 'Firefox native-host registration did not retain the expected manifest path.'
+    }
 
     New-Item -Path $trustPath -Force | Out-Null
     Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedFirefoxExtensionIds' -Value $FirefoxExtensionId -Type String
@@ -115,3 +162,5 @@ if ($RegisterFirefox) {
 Write-Host 'Scrobblix native messaging host registration updated.'
 Write-Host "Native host: $installedExecutable"
 Write-Host 'Restart any registered browser completely before testing the companion.'
+
+

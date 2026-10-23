@@ -3,7 +3,25 @@ const popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser
 export {};
 
 type CustomSite = { id: string; origin: string; pattern: string };
-type NativeHostStatus = { state: "connected" | "unavailable"; detail: string };
+type DiagnosticCode =
+  | "HOST_NOT_REGISTERED"
+  | "MANIFEST_MISSING_OR_INVALID"
+  | "HOST_EXECUTABLE_MISSING"
+  | "EXTENSION_NOT_AUTHORIZED"
+  | "HOST_STARTUP_FAILED"
+  | "PROTOCOL_ERROR"
+  | "CONNECTION_TIMEOUT"
+  | "CONNECTION_SUCCESS"
+  | "UNKNOWN_CONNECTION_ERROR";
+
+type NativeHostStatus = {
+  state: "connected" | "unavailable";
+  code: DiagnosticCode;
+  detail: string;
+  recovery: string;
+  restartRequired: boolean;
+  diagnosticId: string;
+};
 
 const statusText = document.querySelector<HTMLElement>("#native-status")!;
 const currentSiteText = document.querySelector<HTMLElement>("#current-site")!;
@@ -11,8 +29,15 @@ const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
 const trackButton = document.querySelector<HTMLButtonElement>("#track-site")!;
 const customSites = document.querySelector<HTMLUListElement>("#custom-sites")!;
 const connectionButton = document.querySelector<HTMLButtonElement>("#test-connection")!;
+const connectionRecovery = document.querySelector<HTMLElement>("#native-recovery")!;
+const connectionCode = document.querySelector<HTMLElement>("#native-diagnostic")!;
 
 let currentSite: { origin: string; pattern: string } | undefined;
+let connectionTestRunning = false;
+
+// Wire the diagnostic control synchronously before async storage, tab, or permission
+// initialization. It must remain usable even when one of those setup calls stalls.
+connectionButton.addEventListener("click", () => void testConnection());
 
 void initialise();
 
@@ -34,7 +59,6 @@ async function initialise(): Promise<void> {
   await refreshTrackAction(settings.customSites);
   renderCustomSites(settings.customSites);
   trackButton.addEventListener("click", () => void trackCurrentSite());
-  connectionButton.addEventListener("click", () => void testConnection());
   await testConnection();
 }
 
@@ -102,12 +126,53 @@ async function removeSite(site: CustomSite): Promise<void> {
 }
 
 async function testConnection(): Promise<void> {
+  if (connectionTestRunning) return;
+  connectionTestRunning = true;
+  connectionButton.disabled = true;
+  connectionButton.textContent = "Testing connection…";
+  statusText.textContent = "Checking native messaging host…";
+  statusText.dataset.state = "checking";
+  connectionRecovery.textContent = "";
+  connectionCode.textContent = "";
+
   try {
-    const response = await popupApi.runtime.sendMessage({ type: "companion.test-native-host" }) as NativeHostStatus;
+    const response = await popupApi.runtime.sendMessage({ type: "companion.test-native-host" }) as NativeHostStatus | undefined;
+    if (!response || typeof response !== "object" || typeof response.detail !== "string"
+        || typeof response.code !== "string" || typeof response.diagnosticId !== "string") {
+      renderFailure({
+        state: "unavailable",
+        code: "UNKNOWN_CONNECTION_ERROR",
+        detail: "The extension service worker returned an invalid diagnostic response.",
+        recovery: "Reload the Scrobblix extension and retry Test connection.",
+        restartRequired: false,
+        diagnosticId: `NM-UI-${Date.now().toString(36).toUpperCase()}`,
+      });
+      return;
+    }
+
     statusText.textContent = response.detail;
-    statusText.dataset.state = response.state;
+    statusText.dataset.state = response.state === "connected" && response.code === "CONNECTION_SUCCESS" ? "connected" : "unavailable";
+    connectionRecovery.textContent = response.recovery;
+    connectionCode.textContent = `${response.code} · ${response.diagnosticId}${response.restartRequired ? " · Restart required after repair" : ""}`;
   } catch {
-    statusText.textContent = "Native host is unavailable.";
-    statusText.dataset.state = "unavailable";
+    renderFailure({
+      state: "unavailable",
+      code: "UNKNOWN_CONNECTION_ERROR",
+      detail: "The extension could not complete its connection diagnostic.",
+      recovery: "Reload the extension. If the problem continues, open the extension's service-worker console and report the diagnostic time.",
+      restartRequired: false,
+      diagnosticId: `NM-UI-${Date.now().toString(36).toUpperCase()}`,
+    });
+  } finally {
+    connectionTestRunning = false;
+    connectionButton.disabled = false;
+    connectionButton.textContent = "Test connection";
   }
+}
+
+function renderFailure(status: NativeHostStatus): void {
+  statusText.textContent = status.detail;
+  statusText.dataset.state = "unavailable";
+  connectionRecovery.textContent = status.recovery;
+  connectionCode.textContent = `${status.code} · ${status.diagnosticId}${status.restartRequired ? " · Restart required after repair" : ""}`;
 }

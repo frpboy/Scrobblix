@@ -27,6 +27,9 @@ $uninstallerPath = Join-Path $repoRoot 'scripts\uninstall-native-host.ps1'
 if ($RegisterOnly -and $Browser -eq 'BuildOnly') {
     throw 'RegisterOnly needs a target browser: Chrome, Edge, ChromeAndEdge, or Firefox.'
 }
+if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
+    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
+}
 if ($Browser -in @('Chrome', 'Edge', 'ChromeAndEdge') -and @($ExtensionId).Count -eq 0) {
     throw 'Build the package first, load the unpacked extension from artifacts\Scrobblix\BrowserCompanion\chromium, copy its real ID from the browser, then rerun with -RegisterOnly -Browser Chrome/Edge/ChromeAndEdge -ExtensionId <ID>.'
 }
@@ -43,6 +46,8 @@ try {
             throw 'Run this script from a Scrobblix source clone; browser-extension/package.json was not found.'
         }
 
+        # BuildOnly replaces generated package artifacts. Registration-only is a separate
+        # invocation and never rebuilds or deletes the currently loaded extension package.
         if (Test-Path -LiteralPath $packageRoot) {
             Remove-Item -LiteralPath $packageRoot -Recurse -Force
         }
@@ -75,6 +80,10 @@ try {
 
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\manifest.json') -Destination (Join-Path $chromiumRoot 'manifest.json') -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\manifest.firefox.json') -Destination (Join-Path $firefoxRoot 'manifest.json') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.html') -Destination (Join-Path $chromiumRoot 'popup.html') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.css') -Destination (Join-Path $chromiumRoot 'popup.css') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.html') -Destination (Join-Path $firefoxRoot 'popup.html') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.css') -Destination (Join-Path $firefoxRoot 'popup.css') -Force
         Copy-Item -Path (Join-Path $repoRoot 'browser-extension\dist\*') -Destination (Join-Path $chromiumRoot 'dist') -Recurse -Force
         Copy-Item -Path (Join-Path $repoRoot 'browser-extension\dist\*') -Destination (Join-Path $firefoxRoot 'dist') -Recurse -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\README.md') -Destination (Join-Path $chromiumRoot 'README.md') -Force
@@ -84,9 +93,15 @@ try {
 
         $requiredFiles = @(
             (Join-Path $chromiumRoot 'manifest.json'),
+            (Join-Path $chromiumRoot 'popup.html'),
+            (Join-Path $chromiumRoot 'popup.css'),
+            (Join-Path $chromiumRoot 'dist\popup.js'),
             (Join-Path $chromiumRoot 'dist\service-worker.js'),
             (Join-Path $chromiumRoot 'dist\media-observer.js'),
             (Join-Path $firefoxRoot 'manifest.json'),
+            (Join-Path $firefoxRoot 'popup.html'),
+            (Join-Path $firefoxRoot 'popup.css'),
+            (Join-Path $firefoxRoot 'dist\popup.js'),
             (Join-Path $firefoxRoot 'dist\service-worker.js'),
             (Join-Path $firefoxRoot 'dist\media-observer.js'),
             (Join-Path $nativeHostRoot 'Scrobblix.NativeHost.exe'),

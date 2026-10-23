@@ -53,7 +53,7 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
         }
         else if (type == "ping.v1")
         {
-            await WriteAsync(output, new { type = "pong.v1", messageId });
+            await WriteAsync(output, new { protocolVersion = 1, type = "pong.v1", messageId });
         }
         else if (type != "playback.observation.v1")
         {
