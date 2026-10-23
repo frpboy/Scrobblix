@@ -884,46 +884,77 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         CancellationToken cancellationToken)
     {
         long? sourceUnavailableSince = null;
-        try
-        {
-            while (!cancellationToken.IsCancellationRequested)
-            {
-                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
-                var observation = await source.GetCurrentAsync(cancellationToken);
-                if (observation is not null)
-                {
-                    sourceUnavailableSince = null;
-                    await ProcessObservationAsync(
-                        observation, observationIngestion, tracking, trackingClock, sourceArbitrator,
-                        observationGate, metadataEnricher, localPlayStore, metadataStarted,
-                        connectionString, logger, window, cancellationToken);
-                }
-                else
-                {
-                    var monotonicNow = trackingClock.ElapsedMilliseconds;
-                    sourceUnavailableSince ??= monotonicNow;
-                    if (monotonicNow - sourceUnavailableSince.Value >= TimeSpan.FromSeconds(6).TotalMilliseconds)
-                    {
-                        var lostSource = await tracking.ObserveSourceUnavailableAsync("gsmtc", cancellationToken);
-                        if (lostSource is { } gap)
-                        {
-                            window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(gap.Observation, gap.Status));
-                            logger.Warning("PLAYBACK_SOURCE",
-                                $"Windows media session unavailable; confirmed playback was stopped at the last positive sample; play_id={gap.Status.PlayId ?? "(none)"}; confirmed_ms={gap.Status.ConfirmedPlayedMilliseconds}.");
-                        }
-                    }
+        var poller = new PlaybackObservationPollingService(source, observationIngestion);
 
-                    logger.Info("PLAYBACK_SOURCE", "Windows media controls returned no current session.");
+        async Task ProcessCurrentObservationAsync(PlayObservation observation, CancellationToken token)
+        {
+            await ProcessObservationAsync(
+                observation, observationIngestion, tracking, trackingClock, sourceArbitrator,
+                observationGate, metadataEnricher, localPlayStore, metadataStarted,
+                connectionString, logger, window, token);
+            // Only a successfully processed sample proves that this source has recovered.
+            sourceUnavailableSince = null;
+        }
+
+        async Task MarkSourceUnavailableAsync(CancellationToken token)
+        {
+            var monotonicNow = trackingClock.ElapsedMilliseconds;
+            sourceUnavailableSince ??= monotonicNow;
+            if (monotonicNow - sourceUnavailableSince.Value >= TimeSpan.FromSeconds(6).TotalMilliseconds)
+            {
+                var lostSource = await tracking.ObserveSourceUnavailableAsync("gsmtc", token);
+                if (lostSource is { } gap)
+                {
+                    window.DispatcherQueue.TryEnqueue(() => window.SetCurrentPlayback(gap.Observation, gap.Status));
+                    logger.Warning("PLAYBACK_SOURCE",
+                        $"Windows media session unavailable; confirmed playback was stopped at the last positive sample; play_id={gap.Status.PlayId ?? "(none)"}; confirmed_ms={gap.Status.ConfirmedPlayedMilliseconds}.");
                 }
             }
+        }
+
+        void ReportPollingFailure(Exception exception, int consecutiveFailures)
+        {
+            if (consecutiveFailures == 1 || consecutiveFailures % 5 == 0)
+            {
+                logger.Warning("TRACKING",
+                    $"Windows media polling failed; retrying; consecutive_failures={consecutiveFailures}; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+            }
+
+            var severity = consecutiveFailures >= 3 ? InfoBarSeverity.Error : InfoBarSeverity.Warning;
+            var title = consecutiveFailures >= 3
+                ? "Playback detection needs attention"
+                : "Playback detection recovering";
+            var message = consecutiveFailures >= 3
+                ? $"Windows media polling is still failing after {consecutiveFailures} attempts. Scrobblix is retrying; playback may be missed until recovery."
+                : "Windows media polling encountered a temporary error. Scrobblix is retrying automatically.";
+            window.DispatcherQueue.TryEnqueue(() => window.SetStartupStatus(message, severity, title));
+        }
+
+        void ReportPollingRecovered(int previousFailures)
+        {
+            logger.Info("TRACKING",
+                $"Windows media polling recovered after transient failures; consecutive_failures={previousFailures}.");
+            window.DispatcherQueue.TryEnqueue(() => window.SetStartupStatus(
+                "Windows media polling recovered. Scrobblix will continue checking for supported playback.",
+                InfoBarSeverity.Informational,
+                "Playback detection recovered"));
+        }
+
+        try
+        {
+            await poller.RunAsync(
+                ProcessCurrentObservationAsync,
+                MarkSourceUnavailableAsync,
+                ReportPollingFailure,
+                ReportPollingRecovered,
+                cancellationToken,
+                TimeSpan.FromSeconds(2),
+                TimeSpan.FromSeconds(30));
+            logger.Info("TRACKING", "Windows media polling stopped.");
         }
         catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
         {
             logger.Info("TRACKING", "Windows media polling stopped.");
-        }
-        catch (Exception exception)
-        {
-            logger.Error("TRACKING", $"Windows media polling crashed; exception={exception.GetType().Name}; message={exception.Message}");
         }
     }
 
