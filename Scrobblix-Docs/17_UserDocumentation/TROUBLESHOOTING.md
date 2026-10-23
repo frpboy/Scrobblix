@@ -64,3 +64,21 @@ Stop normal processing, preserve the affected database, and use the built-in int
 ## Support bundle
 
 A support bundle must be previewed and user-approved. It should contain versions, health summaries, redacted logs, migration state, configuration flags, and selected diagnostic events. Credentials, authorization tokens, full browsing history, and unrelated personal files must never be included.
+
+### Browser popup: "Specified native messaging host not found"
+
+This error indicates that the browser could not resolve the registered host name. It does **not** prove the native executable started. In the current Scrobblix extension the requested host name is `com.frpboy.scrobblix`.
+
+1. Confirm the browser companion is loaded in the browser where the error appears.
+2. Copy that browser's actual extension ID from its extensions page. Chrome and Edge IDs may differ.
+3. From the Scrobblix source tree, run registration-only repair for just the affected browser:
+   ```powershell
+   .\scripts\setup-browser-companion.ps1 -RegisterOnly -Browser Chrome -ExtensionId "ACTUAL_EXTENSION_ID"
+   ```
+   Use `-Browser Edge` for Edge. For both Chromium browsers, pass both real IDs with `-Browser ChromeAndEdge -ExtensionId @("CHROME_ID","EDGE_ID")`. For Firefox, use `-Browser Firefox -FirefoxExtensionId "scrobblix@frpboy.in"`.
+4. If the helper reports a missing package, build it first with `.\scripts\setup-browser-companion.ps1 -Browser BuildOnly`. A build does not register the host.
+5. Fully exit and restart the affected browser, then press **Test connection** again.
+
+The popup diagnostic should show a category and recovery hint. `HOST_NOT_REGISTERED` is host resolution; `HOST_STARTUP_FAILED` means the registration was resolved but the process did not complete startup; `PROTOCOL_ERROR` means a host responded incorrectly. A green/connected result is displayed only after a valid versioned pong reply.
+
+Do not guess extension IDs, elevate the setup script, delete listening history, or run the uninstaller just to troubleshoot. If the error remains, capture the diagnostic ID and (without publishing private paths or unrelated registry values) verify that the affected browser's per-user registration points to an existing valid manifest whose executable path exists. Actual Chrome, Edge and Firefox qualification must be recorded separately.
