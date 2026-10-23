@@ -227,9 +227,10 @@ internal sealed class TrayIconService : IDisposable
         }
         catch (Exception exception)
         {
-            // Tray UI must never take down the listening process. Log only the failure class;
-            // this avoids putting track names, account details or credentials into diagnostics.
-            System.Diagnostics.Debug.WriteLine($"Scrobblix tray menu failed: {exception.GetType().Name}");
+            // Tray UI must never take down the listening process. Report only the operation and
+            // exception type/HRESULT; never include track names, account details or credentials.
+            try { _mainWindow.ReportTrayFailure("context menu", exception); }
+            catch { System.Diagnostics.Debug.WriteLine($"Scrobblix tray menu failed: {exception.GetType().Name}"); }
         }
         finally
         {
