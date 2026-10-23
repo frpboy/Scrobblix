@@ -10,6 +10,17 @@ namespace Scrobblix.Infrastructure.Providers;
 /// </summary>
 public static class SafePublicArtworkConnector
 {
+    public static HttpClient CreateHttpClient(TimeSpan? timeout = null) =>
+        new(new SocketsHttpHandler
+        {
+            AllowAutoRedirect = false,
+            UseProxy = false,
+            ConnectCallback = ConnectAsync,
+        })
+        {
+            Timeout = timeout ?? TimeSpan.FromSeconds(12),
+        };
+
     public static ValueTask<Stream> ConnectAsync(
         SocketsHttpConnectionContext context,
         CancellationToken cancellationToken)
@@ -113,12 +124,12 @@ public static class SafePublicArtworkConnector
         if ((ipv6[0] & 0xE0) != 0x20
             || address.IsIPv6Loopback
             || address.IsIPv6LinkLocal
-            || address.IsIPv6SiteLocal
             || address.IsIPv6Multicast
             || address.IsIPv6Teredo
             || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0x0D && ipv6[3] == 0xB8)
             || (ipv6[0] == 0x20 && ipv6[1] == 0x02)
-            || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0 && ipv6[3] == 0))
+            || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0 && ipv6[3] == 0)
+            || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] <= 0x01))
         {
             return false;
         }
