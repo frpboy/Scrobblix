@@ -25,6 +25,10 @@ Exponential backoff with full jitter, bounded maximum, provider `Retry-After`, n
 
 Scrobbles preserve original timestamps and can batch by due order. Love/unlove ordering for same track/account must preserve latest intent. Now-playing is never replayed after staleness threshold.
 
+## Now-playing expiry
+
+Now-playing updates are ephemeral and expire five minutes after enqueue time. Before leasing the next action, the SQLite queue transaction cancels stale non-in-flight now-playing actions in Pending, RetryScheduled, AuthBlocked, RetryExhausted, or SubmissionOutcomeUnknown state with reason `provider.nowplaying.expired`. In-flight actions are left to their current worker, and actual Scrobble actions are never expired by this rule. This prevents a delayed retry from replacing a newer playback state after the original track has ended.
+
 ## User actions
 
 Retry now schedules safely; cancel creates terminal local state; clearing queue requires confirmation. Users cannot mutate historical timestamps/payload in v1.
