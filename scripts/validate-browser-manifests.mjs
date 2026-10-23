@@ -66,3 +66,6 @@ requireCondition(popupSource.includes("connectionTestRunning"), "Popup test butt
 requireCondition(popupSource.includes("response.code === \"CONNECTION_SUCCESS\""), "Popup must not report success without the explicit success category.");
 requireCondition(popupHtml.includes('id="native-recovery"'), "Popup must display actionable recovery instructions.");
 requireCondition(popupHtml.includes('id="native-diagnostic"'), "Popup must display a diagnostic identifier.");
+
+const setupScript = await readFile(resolve(root, "scripts/setup-browser-companion.ps1"), "utf8");
+requireCondition(setupScript.includes("Build/package and registration are separate steps"), "Setup helper must force package build and browser registration into separate invocations.");
