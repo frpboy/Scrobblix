@@ -203,7 +203,8 @@ function testNativeHost(): Promise<NativeHostStatus> {
     });
 
     port.onDisconnect.addListener(() => {
-      const browserError = scrobblixWorkerApi.runtime.lastError?.message;
+      const firefoxPortError = (port as (chrome.runtime.Port & { error?: { message?: string } }) | undefined)?.error?.message;
+      const browserError = scrobblixWorkerApi.runtime.lastError?.message ?? firefoxPortError;
       if (settled) return;
       if (!browserError) {
         finish(diagnostic(
@@ -212,14 +213,21 @@ function testNativeHost(): Promise<NativeHostStatus> {
           "Verify the installed native-host executable and its dependencies, then run the host setup/repair script again.",
           true,
         ));
-      } else if (/specified native messaging host not found|native messaging host.*not found/i.test(browserError)) {
+      } else if (/specified native messaging host not found|native messaging host.*not found|no such native application/i.test(browserError)) {
         finish(diagnostic(
           "HOST_NOT_REGISTERED",
           "The browser cannot resolve the registered Scrobblix native messaging host.",
           "Run setup/repair for this browser, verify its Scrobblix registration and manifest path, and fully restart the browser.",
           true,
         ));
-      } else if (/access.*denied|not allowed|permission|unauthorized/i.test(browserError)) {
+      } else if (/failed to start native messaging host|native messaging host.*failed to start/i.test(browserError)) {
+        finish(diagnostic(
+          "HOST_STARTUP_FAILED",
+          "The browser found the registration but could not start the Scrobblix native host.",
+          "Verify the registered manifest path and executable exist, then reinstall or repair the native host before retrying.",
+          true,
+        ));
+      } else if (/forbidden|access.*denied|not allowed|permission|unauthorized/i.test(browserError)) {
         finish(diagnostic(
           "EXTENSION_NOT_AUTHORIZED",
           "The browser refused native messaging access for this extension or browser policy.",
