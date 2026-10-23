@@ -16,7 +16,7 @@
 - PR #33 merged queue provider/account scoping and DNS-pinned public-address artwork connection handling. Issues [#30](https://github.com/frpboy/Scrobblix/issues/30) and [#32](https://github.com/frpboy/Scrobblix/issues/32) are closed. Exact-head CI passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307).
 - PR #35 expanded CSV formula-prefix neutralization and regression coverage. Issue [#34](https://github.com/frpboy/Scrobblix/issues/34) is closed. Exact-head CI passed in [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043).
 - PR #37 aligned `ProviderActionLifecycle` with the valid `SubmissionOutcomeUnknown` and `RetryExhausted` states and added lease-cleanup tests. Issue [#36](https://github.com/frpboy/Scrobblix/issues/36) is closed. Exact-head CI passed in [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712).
-- Current `main` SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed the integrated Windows workflow [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+- Current `main` SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` passed the integrated Windows workflow [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228). Earlier main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed run 39901957156.
 - Earlier issues #10, #13 and #15 remain closed through PRs #11/#25, #16 and #18.
 
 ## Current documentation branch scope
@@ -50,4 +50,4 @@
 
 ## Resume procedure
 
-Fetch live `main`, open issues/PRs, and latest workflow conclusions before continuing. Current reference point at this checkpoint is main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` and CI run 39901957156. Do not reuse these as proof for any later SHA.
+Fetch live `main`, open issues/PRs, and latest workflow conclusions before continuing. Current reference point at this checkpoint is main SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` and CI run 39903649228. Do not reuse these as proof for any later SHA.
