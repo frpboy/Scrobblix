@@ -33,7 +33,7 @@
 - PR #33: exact-head Windows CI passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307).
 - PR #35: exact-head Windows CI passed in [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043).
 - PR #37: exact-head Windows CI passed in [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712).
-- Current main `e0b99774bb62bcc2ab160a8e98b24051f382641b`: full Windows CI passed in [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+- Current main `d27d06d809d59b1ca17e81a29019fc44be700b90`: full Windows CI passed in [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228).
 - CI includes .NET build, desktop and release-workflow contracts, domain/Infrastructure assertions, browser TypeScript/build/security/manifest checks, PowerShell parser validation, Windows/NativeHost publishing, and artifact assembly/upload.
 - Local GitHub clone failed because the environment could not resolve `github.com`; local .NET and PowerShell runs are not claimed. Do not represent this as a local build/test.
 - GitHub branch-protection details were not available through the connected integration and were not changed.
