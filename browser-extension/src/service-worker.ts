@@ -174,7 +174,7 @@ function testNativeHost(): Promise<NativeHostStatus> {
         return;
       }
 
-      if (isErrorResponse(response)) {
+      if (isErrorResponse(response) && response.messageId === messageId) {
         const code = response.code;
         if (code === "extension.untrusted_sender") {
           finish(diagnostic(
