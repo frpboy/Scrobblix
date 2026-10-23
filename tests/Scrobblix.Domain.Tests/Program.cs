@@ -990,6 +990,57 @@ var afterResumeStatus = await sourceGapTracker.ObserveAsync(afterResumeObservati
 Assert(afterResumeStatus.ConfirmedPlayedMilliseconds == 70_000,
     "Confirmed-time accumulation resumes from the first positive observation after a source gap.");
 
+// The polling runner survives a one-off source exception, transitions the current play to
+// Unknown at its last positive sample, and resumes without adding outage time.
+using var transientRecoveryTracker = new PlaybackTrackingService(new RecordingLocalPlayStore());
+var transientRecoveryPoller = new PlaybackObservationPollingService(
+    new ObservationThenTransientFailureSource(gapFirstObservation, gapSecondObservation, resumedAfterGap),
+    new PlaybackObservationIngestionService(new RecordingObservationStore()));
+using var transientRecoveryCancellation = new CancellationTokenSource();
+var observedRecoverySamples = 0;
+var transientFailureCount = 0;
+var transientFailureStreak = 0;
+var recoveredAfterFailures = 0;
+(PlayObservation Observation, PlaybackTrackingStatus Status)? transientGap = null;
+PlaybackTrackingStatus? resumedRecoveryStatus = null;
+await transientRecoveryPoller.RunAsync(
+    async (currentObservation, token) =>
+    {
+        var monotonicMilliseconds = observedRecoverySamples switch
+        {
+            0 => 0L,
+            1 => 10_000L,
+            _ => 190_000L,
+        };
+        resumedRecoveryStatus = await transientRecoveryTracker.ObserveAsync(
+            currentObservation, monotonicMilliseconds, token);
+        observedRecoverySamples++;
+        if (observedRecoverySamples == 3)
+        {
+            transientRecoveryCancellation.Cancel();
+        }
+    },
+    async token =>
+    {
+        transientGap = await transientRecoveryTracker.ObserveSourceUnavailableAsync("gsmtc", token);
+    },
+    (_, failureStreak) =>
+    {
+        transientFailureCount++;
+        transientFailureStreak = failureStreak;
+    },
+    failureStreak => recoveredAfterFailures = failureStreak,
+    transientRecoveryCancellation.Token,
+    TimeSpan.Zero,
+    TimeSpan.Zero);
+Assert(transientFailureCount == 1 && transientFailureStreak == 1 && recoveredAfterFailures == 1
+    && observedRecoverySamples == 3
+    && transientGap is { } detectedGap
+    && detectedGap.Status.ConfirmedPlayedMilliseconds == 10_000
+    && resumedRecoveryStatus is { ConfirmedPlayedMilliseconds: 10_000, DidStartPlay: false },
+    "A transient polling exception is retried, confirmed playback stops at the last positive sample, and same-track recovery does not count the source gap.");
+
+
 // Repeating a short track after its GSMTC session disappears must create a new canonical play.
 var shortReplayStore = new RecordingLocalPlayStore();
 using var shortReplayTracker = new PlaybackTrackingService(shortReplayStore);
@@ -1316,6 +1367,28 @@ sealed class AcceptingScrobbleProvider : IScrobbleProvider
     {
         LastAction = "unlove";
         return Task.FromResult(new ProviderSubmissionResult(true, ReasonCodes.Provider.Accepted, false));
+    }
+}
+
+sealed class ObservationThenTransientFailureSource(
+    PlayObservation first,
+    PlayObservation second,
+    PlayObservation recovered) : IPlaybackObservationSource
+{
+    private int _calls;
+
+    public int Calls => _calls;
+
+    public Task<PlayObservation?> GetCurrentAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        return Interlocked.Increment(ref _calls) switch
+        {
+            1 => Task.FromResult<PlayObservation?>(first),
+            2 => Task.FromResult<PlayObservation?>(second),
+            3 => throw new InvalidOperationException("Injected transient playback-source failure."),
+            _ => Task.FromResult<PlayObservation?>(recovered),
+        };
     }
 }
 
