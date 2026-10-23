@@ -851,6 +851,47 @@ Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(trayScheduledId, trayQu
     && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayLoveId, trayQueueTime, CancellationToken.None)
     && !await trayRetryStore.RetryFailedScrobbleNowAsync(trayUnknownId, trayQueueTime, CancellationToken.None),
     "The tray's atomic retry method cannot override backoff, resubmit accepted actions, retry Love actions, or retry unknown outcomes.");
+// Simulate the stale-candidate race: the read model returns an exhausted scrobble,
+ // but a concurrent queue action changes its state before the tray mutation.
+ await using (var raceMutationConnection = new SqliteConnection(trayQueueConnectionString))
+ {
+     await raceMutationConnection.OpenAsync(CancellationToken.None);
+     await using var reseedRaceCommand = raceMutationConnection.CreateCommand();
+     reseedRaceCommand.CommandText = """
+         UPDATE provider_actions
+         SET state = $retryExhausted
+         WHERE action_id = $actionId AND provider = 'lastfm'
+           AND action_type = $scrobble AND state = $pending;
+         """;
+     reseedRaceCommand.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+     reseedRaceCommand.Parameters.AddWithValue("$actionId", expectedTrayRetryableId);
+     reseedRaceCommand.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+     reseedRaceCommand.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+     Assert(await reseedRaceCommand.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+         "A previously retried scrobble can be reseeded as exhausted for stale-candidate coverage.");
+
+     var staleCandidates = await trayQueueReader.GetRetryableFailedScrobbleActionIdsAsync(CancellationToken.None);
+     Assert(staleCandidates.Contains(expectedTrayRetryableId),
+         "The exhausted scrobble is selected as eligible before the concurrent state change.");
+
+     await using var concurrentStateChange = raceMutationConnection.CreateCommand();
+     concurrentStateChange.CommandText = """
+         UPDATE provider_actions
+         SET state = $outcomeUnknown
+         WHERE action_id = $actionId AND provider = 'lastfm'
+           AND action_type = $scrobble AND state = $retryExhausted;
+         """;
+     concurrentStateChange.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+     concurrentStateChange.Parameters.AddWithValue("$actionId", expectedTrayRetryableId);
+     concurrentStateChange.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+     concurrentStateChange.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+     Assert(await concurrentStateChange.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+         "A concurrent worker can change the selected scrobble to an unknown outcome before tray mutation.");
+ }
+
+ Assert(!await trayRetryStore.RetryFailedScrobbleNowAsync(expectedTrayRetryableId, trayQueueTime, CancellationToken.None),
+     "The tray refuses a stale retry-exhausted candidate that becomes outcome-unknown before mutation.");
+
 Assert(await trayQueueReader.GetRetryableFailedScrobbleCountAsync(CancellationToken.None) == 0,
     "A successfully reopened tray retry no longer appears in the exhausted-failure count.");
 File.Delete(trayQueueDatabasePath);
