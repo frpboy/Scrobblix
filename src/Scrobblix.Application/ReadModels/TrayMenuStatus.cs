@@ -89,7 +89,7 @@ public sealed record TrayMenuStatus(
                 ProviderActionState.RetryScheduled => $"{action} request scheduled to retry",
                 ProviderActionState.RetryExhausted => $"{action} request needs manual retry",
                 ProviderActionState.AuthBlocked => $"{action} request blocked by Last.fm authentication",
-                ProviderActionState.PermanentFailure => $"Last.fm rejected the {action} request",
+                ProviderActionState.PermanentFailure => $"Last.fm permanently failed the {action} request",
                 ProviderActionState.ProviderIgnored => $"Last.fm ignored the {action} request",
                 ProviderActionState.Cancelled => $"{action} request cancelled or superseded",
                 ProviderActionState.SubmissionOutcomeUnknown => $"{action} result is unknown; review Loved and Queue",
