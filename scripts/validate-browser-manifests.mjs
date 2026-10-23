@@ -50,3 +50,18 @@ requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "Th
 requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
 
 console.log("Chromium and Firefox manifests, emitted scripts, and Firefox host identity hooks are valid.");
+
+const serviceWorker = await readFile(resolve(root, "browser-extension/src/service-worker.ts"), "utf8");
+const popupSource = await readFile(resolve(root, "browser-extension/src/popup.ts"), "utf8");
+const popupHtml = await readFile(resolve(root, "browser-extension/popup.html"), "utf8");
+requireCondition(serviceWorker.includes('const hostName = "com.frpboy.scrobblix"'), "Extension must request the documented native host name.");
+requireCondition(serviceWorker.includes('"HOST_NOT_REGISTERED"'), "Connection diagnostics must classify host-resolution failures.");
+requireCondition(serviceWorker.includes('"EXTENSION_NOT_AUTHORIZED"'), "Connection diagnostics must distinguish authorization failures.");
+requireCondition(serviceWorker.includes('"CONNECTION_TIMEOUT"'), "Connection diagnostics must classify handshake timeout.");
+requireCondition(serviceWorker.includes('candidate.messageId === messageId'), "Connection success must validate the reply message ID.");
+requireCondition(serviceWorker.includes('candidate.protocolVersion === 1'), "Connection success must validate the protocol version.");
+requireCondition(serviceWorker.includes('candidate.type === expectedType'), "Connection success must validate the exact pong response type.");
+requireCondition(popupSource.includes("connectionTestRunning"), "Popup test button must prevent overlapping connection tests.");
+requireCondition(popupSource.includes("response.code === \"CONNECTION_SUCCESS\""), "Popup must not report success without the explicit success category.");
+requireCondition(popupHtml.includes('id="native-recovery"'), "Popup must display actionable recovery instructions.");
+requireCondition(popupHtml.includes('id="native-diagnostic"'), "Popup must display a diagnostic identifier.");
