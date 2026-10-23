@@ -40,6 +40,8 @@ requireCondition(nativeHostValidator.includes("MatchesFirefoxExtensionId"), "Nat
 requireCondition(nativeHostProgram.includes("firefoxCallerId"), "Native host must parse Firefox native-messaging arguments.");
 requireCondition(nativeHostProgram.includes("var trustedEnvelope"), "Native host must compute sender trust before message dispatch.");
 requireCondition(nativeHostProgram.indexOf("if (!trustedEnvelope)") < nativeHostProgram.indexOf('else if (type == "ping.v1")'), "Native host must reject an untrusted sender before responding to ping.");
+requireCondition(nativeHostProgram.includes('new { protocolVersion = 1, type = "pong.v1", messageId }'), "Native host pong must include protocolVersion for the browser handshake.");
+
 const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
 const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
 requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host setup must support different Chrome and Edge extension IDs.");
@@ -63,6 +65,10 @@ requireCondition(serviceWorker.includes('"CONNECTION_TIMEOUT"'), "Connection dia
 requireCondition(serviceWorker.includes('candidate.messageId === messageId'), "Connection success must validate the reply message ID.");
 requireCondition(serviceWorker.includes('candidate.protocolVersion === 1'), "Connection success must validate the protocol version.");
 requireCondition(serviceWorker.includes('candidate.type === expectedType'), "Connection success must validate the exact pong response type.");
+requireCondition(serviceWorker.includes("port.error?.message"), "Firefox native-host failures must read the native port error when available.");
+requireCondition(serviceWorker.includes("forbidden|access.*denied"), "Chromium forbidden-host failures must classify as extension authorization errors.");
+requireCondition(serviceWorker.includes("no such native application"), "Firefox missing-host failures must classify as host registration errors.");
+requireCondition(serviceWorker.includes("failed to start native messaging host"), "Chromium host launch failures must provide startup recovery guidance.");
 requireCondition(popupSource.includes("connectionTestRunning"), "Popup test button must prevent overlapping connection tests.");
 requireCondition(popupSource.includes("response.code === \"CONNECTION_SUCCESS\""), "Popup must not report success without the explicit success category.");
 requireCondition(popupHtml.includes('id="native-recovery"'), "Popup must display actionable recovery instructions.");
