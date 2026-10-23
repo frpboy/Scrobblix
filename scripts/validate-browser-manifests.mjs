@@ -56,6 +56,7 @@ const popupSource = await readFile(resolve(root, "browser-extension/src/popup.ts
 const popupHtml = await readFile(resolve(root, "browser-extension/popup.html"), "utf8");
 requireCondition(serviceWorker.includes('const hostName = "com.frpboy.scrobblix"'), "Extension must request the documented native host name.");
 requireCondition(serviceWorker.includes('"HOST_NOT_REGISTERED"'), "Connection diagnostics must classify host-resolution failures.");
+requireCondition(serviceWorker.includes('isErrorResponse(response) && response.messageId === messageId'), "Native host diagnostic errors must correlate to the current request ID.");
 requireCondition(serviceWorker.includes('"EXTENSION_NOT_AUTHORIZED"'), "Connection diagnostics must distinguish authorization failures.");
 requireCondition(serviceWorker.includes('"CONNECTION_TIMEOUT"'), "Connection diagnostics must classify handshake timeout.");
 requireCondition(serviceWorker.includes('candidate.messageId === messageId'), "Connection success must validate the reply message ID.");
