@@ -4,7 +4,7 @@ Updated: 2026-10-23 (UTC)
 Repository: https://github.com/frpboy/Scrobblix
 Default branch: `main`
 Current main SHA at this checkpoint: `d27d06d809d59b1ca17e81a29019fc44be700b90`
-Current main CI: [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) — **IN PROGRESS on exact SHA `d27d06d809d59b1ca17e81a29019fc44be700b90`; re-check before calling main green**.
+Current main CI: [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) — **PASSED on exact SHA `d27d06d809d59b1ca17e81a29019fc44be700b90`**.
 
 ## Current implementation state
 
@@ -79,13 +79,13 @@ PR #28 merged with exact-head Windows CI passing in [run 39785201272](https://gi
 
 - Exact-head CI for PR #28 passed at [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272).
 - Exact-head CI for PRs #33, #35, #37 and #40 passed at runs 39895414307, 39896613043, 39901751712 and 39903263712 respectively.
-- Previous main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed integrated Windows CI in run 39901957156. The current main SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` has a post-merge run [39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) that must complete before the latest integration is reported green.
+- Previous main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed integrated Windows CI in run 39901957156. The current main SHA `d27d06d809d59b1ca17e81a29019fc44be700b90` passed its integrated post-merge workflow in [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228).
 - CI proves only what that workflow executes on that commit and runner. It does not prove live Last.fm acceptance, actual browser installation/event delivery, GUI tray recovery, accessibility, signing, installation/upgrade/rollback, or clean-machine behavior.
 - Never mark a manual case PASS without executing it and recording the candidate SHA, environment, result, and sanitized evidence.
 - Never place Last.fm API secrets/session keys or raw listening metadata in source control, logs, screenshots, or issue comments.
 
 ## Next actions
 
-1. Recheck current `main` and its latest exact-head Windows CI before using it as a candidate; `d27d06d809d59b1ca17e81a29019fc44be700b90` is undergoing post-merge validation in run 39903649228. Issue #27 tracks the current audit/checkpoint refresh and should close only after the documentation PR merges.
+1. Recheck current `main` and its latest exact-head Windows CI before using it as a candidate; `d27d06d809d59b1ca17e81a29019fc44be700b90` passed post-merge validation in run 39903649228. Issue #27 tracks the current audit/checkpoint refresh and should close only after the documentation PR merges.
 2. Execute the issue #17 real-world matrix on a dedicated test account and real Windows/browser installations; keep unexecuted cases NOT RUN/BLOCKED.
 3. Make a documented private-beta go/no-go decision tied to the exact candidate SHA, CI run, completed matrix, and distribution/signing state.
