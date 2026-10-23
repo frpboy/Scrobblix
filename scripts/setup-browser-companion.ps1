@@ -56,6 +56,8 @@ try {
         # never rebuilds/deletes them, so browser IDs and installed manifest paths remain stable.
         # BuildOnly replaces generated package artifacts. Registration is kept in a separate
         # invocation so it never destroys or silently rebuilds a loaded extension's package.
+        # BuildOnly may replace generated package artifacts. Registration is a separate
+        # invocation and never rebuilds or deletes the currently loaded extension package.
         if (Test-Path -LiteralPath $packageRoot) {
             Remove-Item -LiteralPath $packageRoot -Recurse -Force
         }
