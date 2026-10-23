@@ -104,7 +104,7 @@ Assert(trayConnected.LoveCommandLabel == "Love Track", "No local Love intent def
 Assert(trayConnected.CanRetryFailedScrobbles, "Retry is enabled only when retryable failed scrobbles exist and the account is connected.");
 Assert(trayConnected.TrackDetails == "Test Artist — Test Track", "Copy details use a plain artist/title representation.");
 
-var trayPaused = trayConnected with { TrackingEnabled = false, PlaybackState = null };
+var trayPaused = trayConnected with { TrackingEnabled = false, PlaybackState = null, CurrentLoveIntent = ProviderActionType.Love };
 Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking command changes when tracking is paused.");
 Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
 Assert(trayPaused.LoveCommandLabel == "Love Track",
