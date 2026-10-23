@@ -1,4 +1,5 @@
 using Scrobblix.Domain.Queue;
+using Scrobblix.Domain.Playback;
 
 namespace Scrobblix.Application.ReadModels;
 
@@ -11,7 +12,7 @@ public sealed record TrayMenuStatus(
     bool TrackingEnabled,
     bool LastFmConnected,
     string? LastFmUserName,
-    bool IsPlaying,
+    PlayState? PlaybackState,
     string? PlayId,
     string? Artist,
     string? Title,
@@ -25,8 +26,10 @@ public sealed record TrayMenuStatus(
     public bool HasTrackMetadata =>
         !string.IsNullOrWhiteSpace(Artist) && !string.IsNullOrWhiteSpace(Title);
 
+    public bool HasActiveTrack => PlaybackState is PlayState.Playing or PlayState.Paused;
+
     public bool HasCurrentPlay =>
-        !IsClosed && !string.IsNullOrWhiteSpace(PlayId) && HasTrackMetadata;
+        !IsClosed && HasActiveTrack && !string.IsNullOrWhiteSpace(PlayId) && HasTrackMetadata;
 
     public bool CanLoveTrack =>
         HasCurrentPlay && LastFmConnected && !LoveActionInProgress;
@@ -42,11 +45,16 @@ public sealed record TrayMenuStatus(
         ? $"Last.fm: Connected as {Truncate(LastFmUserName, 42)}"
         : "Last.fm: Not connected";
 
-    public string PlaybackLabel => IsPlaying
-        ? HasTrackMetadata
+    public string PlaybackLabel => PlaybackState switch
+    {
+        PlayState.Playing => HasTrackMetadata
             ? $"Now Playing: {Truncate(Artist, 34)} — {Truncate(Title, 42)}"
-            : "Now Playing: Metadata unavailable"
-        : "Nothing playing";
+            : "Now Playing: Metadata unavailable",
+        PlayState.Paused => HasTrackMetadata
+            ? $"Paused: {Truncate(Artist, 34)} — {Truncate(Title, 42)}"
+            : "Playback paused",
+        _ => "Nothing playing",
+    };
 
     public string QueueLabel => PendingQueueCount is int count
         ? $"Scrobble queue: {Math.Max(0, count):N0} pending"
