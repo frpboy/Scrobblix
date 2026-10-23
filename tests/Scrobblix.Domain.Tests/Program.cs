@@ -1099,7 +1099,7 @@ sealed class RecordingProviderActionStore(ProviderActionLease lease) : IProvider
 
         var next = _lease;
         _lease = null;
-        return Task.FromResult(next);
+        return Task.FromResult<ProviderActionLease?>(next);
     }
 
     public Task<bool> RetryNowAsync(string actionId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
