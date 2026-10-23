@@ -3,8 +3,8 @@
 Updated: 2026-10-23 (UTC)
 Repository: https://github.com/frpboy/Scrobblix
 Default branch: `main`
-Current main SHA at this checkpoint: `90e6405beb5041aee092ca05394cfebc32e690b5`
-Current main CI: [run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495) — **PASSED on exact SHA `90e6405beb5041aee092ca05394cfebc32e690b5`**.
+Current main SHA at this checkpoint: `e0b99774bb62bcc2ab160a8e98b24051f382641b`
+Current main CI: [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156) — **PASSED on exact SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b`**.
 
 ## Current implementation state
 
@@ -23,8 +23,10 @@ Confirmed merged implementation includes:
 - PR #28 fail-closed SQLite restore replacement with WAL/SHM rollback and Windows regression coverage.
 - PR #31 preservation of enriched artwork across repeated playback polls.
 - PR #33 provider/account-scoped queue leasing and DNS-pinned public-address artwork connections; issues [#30](https://github.com/frpboy/Scrobblix/issues/30) and [#32](https://github.com/frpboy/Scrobblix/issues/32) are closed.
+- PR #35 CSV formula-prefix neutralization for LF and full-width formula characters; issue [#34](https://github.com/frpboy/Scrobblix/issues/34) is closed.
+- PR #37 provider-action lifecycle support for `SubmissionOutcomeUnknown` and `RetryExhausted`; issue [#36](https://github.com/frpboy/Scrobblix/issues/36) is closed.
 
-PR #28 was merged as commit `0436ed83762971ef75dae5be1ffd15bab7e1eae5`; its exact-head Windows CI passed in [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272). Since then, PR #31 and PR #33 have also merged. PR #33's exact-head Windows workflow passed in [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307) on SHA `56609db5f5076695c5da9f3c9288b940faecab2c`; current `main` SHA `90e6405beb5041aee092ca05394cfebc32e690b5` passed post-merge Windows CI in [run 39895656495](https://github.com/frpboy/Scrobblix/actions/runs/39895656495).
+PR #28 merged with exact-head Windows CI passing in [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272). Subsequent relevant fixes include PR #31 (artwork retention), PR #33 (provider/account isolation and safe artwork connections; exact-head CI [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307) on SHA `56609db5f5076695c5da9f3c9288b940faecab2c`), PR #35 (CSV formula-prefix neutralization; exact-head CI [run 39896613043](https://github.com/frpboy/Scrobblix/actions/runs/39896613043) on SHA `94038c83a304b3ba84f31123ab01f586bea809e6`), and PR #37 (provider-action lifecycle outcomes; exact-head CI [run 39901751712](https://github.com/frpboy/Scrobblix/actions/runs/39901751712) on SHA `4428685963a695c35be543128ec7edb31b2535af`). Current `main` SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed integrated Windows CI in [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
 
 ## Current release status
 
@@ -75,13 +77,14 @@ PR #28 was merged as commit `0436ed83762971ef75dae5be1ffd15bab7e1eae5`; its exac
 ## Validation evidence rules
 
 - Exact-head CI for PR #28 passed at [run 39785201272](https://github.com/frpboy/Scrobblix/actions/runs/39785201272).
-- Post-merge CI for main SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5` was **IN PROGRESS** at the time of this edit; re-check [run 39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297).
+- Exact-head CI for PRs #33, #35 and #37 passed at runs 39895414307, 39896613043 and 39901751712 respectively.
+- Current main SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed the integrated Windows CI workflow at [run 39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
 - CI proves only what that workflow executes on that commit and runner. It does not prove live Last.fm acceptance, actual browser installation/event delivery, GUI tray recovery, accessibility, signing, installation/upgrade/rollback, or clean-machine behavior.
 - Never mark a manual case PASS without executing it and recording the candidate SHA, environment, result, and sanitized evidence.
 - Never place Last.fm API secrets/session keys or raw listening metadata in source control, logs, screenshots, or issue comments.
 
 ## Next actions
 
-1. Recheck current `main` and its latest exact-head Windows CI before using it as a candidate; the current recorded SHA `90e6405beb5041aee092ca05394cfebc32e690b5` passed run 39895656495.
+1. Recheck current `main` and its latest exact-head Windows CI before using it as a candidate; the recorded SHA `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed run 39901957156. Issue #27 tracks the current audit/checkpoint refresh and should close only after the documentation PR merges.
 2. Execute the issue #17 real-world matrix on a dedicated test account and real Windows/browser installations; keep unexecuted cases NOT RUN/BLOCKED.
 3. Make a documented private-beta go/no-go decision tied to the exact candidate SHA, CI run, completed matrix, and distribution/signing state.
