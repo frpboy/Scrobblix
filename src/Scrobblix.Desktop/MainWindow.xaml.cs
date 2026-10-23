@@ -26,7 +26,7 @@ public sealed partial class MainWindow : Window
     private string? _lastFmAccountId;
     private QueueSummary? _queueSummary;
     private int? _trayRetryableFailedScrobbleCount;
-    private bool _trayLovedActionInProgress;
+    private bool _lovedActionInProgress;
     private bool _trayQueueRetryInProgress;
     private bool _isClosed;
     private bool _updatingNotificationPreference;
@@ -724,7 +724,7 @@ public sealed partial class MainWindow : Window
             hasActivePlayback ? observation?.Title : null,
             loveIntent,
             loveActionState,
-            _trayLovedActionInProgress,
+            _lovedActionInProgress,
             _queueSummary?.PendingCount,
             _trayRetryableFailedScrobbleCount,
             _trayQueueRetryInProgress,
@@ -751,36 +751,15 @@ public sealed partial class MainWindow : Window
     public async Task ToggleLovedTrackFromTrayAsync()
     {
         var status = GetTrayMenuStatus();
-        if (!status.CanLoveTrack || _trayLovedActionInProgress)
+        if (_isClosed || !status.CanLoveTrack || _lovedActionInProgress)
         {
             return;
         }
 
-        _trayLovedActionInProgress = true;
-        UpdateLovedButtons();
         var actionType = status.CurrentLoveIntent == ProviderActionType.Love
             ? ProviderActionType.Unlove
             : ProviderActionType.Love;
-        try
-        {
-            await RequestLovedTrackActionAsync(actionType);
-        }
-        catch (OperationCanceledException) when (_isClosed)
-        {
-            // App shutdown cancels outstanding provider work; no UI feedback is needed.
-        }
-        catch (Exception exception)
-        {
-            if (_isClosed) return;
-            SetLovedActionFeedback($"Love/Unlove could not be queued ({exception.GetType().Name}).");
-            DiagnosticLogRequested?.Invoke(
-                $"Tray Love/Unlove action failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
-        }
-        finally
-        {
-            _trayLovedActionInProgress = false;
-            if (!_isClosed) UpdateLovedButtons();
-        }
+        await RequestLovedTrackActionAsync(actionType);
     }
 
     public async Task RetryFailedScrobblesFromTrayAsync()
@@ -1496,7 +1475,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateLovedButtons()
     {
-        var canAct = !_isClosed && !_trayLovedActionInProgress && _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        var canAct = !_isClosed && !_lovedActionInProgress && _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
         if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
         if (CurrentTrackLoveIcon is not null)
         {
@@ -1533,21 +1512,33 @@ public sealed partial class MainWindow : Window
 
     private async Task RequestLovedTrackActionAsync(ProviderActionType actionType)
     {
-        if (string.IsNullOrWhiteSpace(_displayedPlayId))
+        if (_isClosed || _lovedActionInProgress)
+        {
+            return;
+        }
+
+        var playId = _displayedPlayId;
+        var requestAction = LovedTrackActionRequested;
+        if (string.IsNullOrWhiteSpace(playId))
         {
             SetLovedActionFeedback("Wait for Scrobblix to save the current listening session before requesting Love/Unlove.");
             return;
         }
-        if (LovedTrackActionRequested is null)
+        if (requestAction is null)
         {
             SetLovedActionFeedback("Loved-track actions are not initialized. Restart the app and try again.");
             return;
         }
 
-        if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = false;
+        // One shared gate protects both the main-window button and the tray menu. It is set
+        // synchronously before the first await so neither surface can create a racing request.
+        _lovedActionInProgress = true;
+        UpdateLovedButtons();
         try
         {
-            var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
+            var queued = await requestAction.Invoke(playId, actionType);
+            if (_isClosed) return;
+
             if (!queued)
             {
                 SetLovedActionFeedback("No duplicate request was created. Check Loved and Queue for the current state.");
@@ -1560,7 +1551,7 @@ public sealed partial class MainWindow : Window
         }
         catch (OperationCanceledException) when (_isClosed)
         {
-            // Shutdown cancels the underlying action; persisted intent remains authoritative.
+            // Shutdown cancels the underlying action; the persisted queue remains authoritative.
         }
         catch (Exception exception)
         {
@@ -1573,6 +1564,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
+            _lovedActionInProgress = false;
             if (!_isClosed) UpdateLovedButtons();
         }
     }
