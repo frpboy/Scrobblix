@@ -90,7 +90,7 @@ The register at `REPOSITORY_AUDIT_REGISTER.json` contains the stable audit IDs, 
 
 ### Current mainline and exact-head evidence
 
-The baseline workflow [39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) passed on audit-start SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5`. The current integrated mainline at `e0b99774bb62bcc2ab160a8e98b24051f382641b` passed its full Windows CI workflow [39901957156](https://github.com/frpboy/Scrobblix/actions/runs/39901957156).
+The baseline workflow [39812019297](https://github.com/frpboy/Scrobblix/actions/runs/39812019297) passed on audit-start SHA `0436ed83762971ef75dae5be1ffd15bab7e1eae5`. The current integrated mainline at `d27d06d809d59b1ca17e81a29019fc44be700b90` passed its full Windows CI workflow [39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228).
 
 Exact-head CI evidence for the recent additional remediations:
 - PR #33: [run 39895414307](https://github.com/frpboy/Scrobblix/actions/runs/39895414307) passed on `56609db5f5076695c5da9f3c9288b940faecab2c`.
