@@ -45,6 +45,7 @@ const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-na
 requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host setup must support different Chrome and Edge extension IDs.");
 requireCondition(nativeHostInstaller.includes("allowed_origins = $allowedOrigins"), "Native-host manifest must allow-list every supplied Chromium extension ID.");
 requireCondition(nativeHostInstaller.includes("($mergedChromiumIds -join ';')"), "Browser-specific registration must preserve previously allowed Chromium extension IDs.");
+requireCondition(nativeHostInstaller.includes("$existingChromiumIds + $extensionIds"), "Registration must merge the existing per-user Chromium allow-list with supplied IDs.");
 requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
 requireCondition(nativeHostInstaller.includes("AllowedFirefoxExtensionIds"), "The installer must write the Firefox add-on allow-list.");
 requireCondition(nativeHostUninstaller.includes("Mozilla\\NativeMessagingHosts"), "The uninstaller must remove Firefox native messaging registration.");
