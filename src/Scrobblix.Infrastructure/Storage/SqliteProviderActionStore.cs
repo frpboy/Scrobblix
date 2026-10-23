@@ -31,11 +31,15 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
 
     public async Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,
+        string provider,
+        string accountId,
         DateTimeOffset nowUtc,
         TimeSpan leaseDuration,
         CancellationToken cancellationToken)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(workerId);
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
         ArgumentOutOfRangeException.ThrowIfLessThanOrEqual(leaseDuration, TimeSpan.Zero);
 
         var now = nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture);
@@ -50,10 +54,15 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
             SELECT a.action_id, a.play_id, a.provider, a.account_id, p.artist, p.title, p.album, p.started_utc, p.duration_ms, a.attempt_count, a.action_type
             FROM provider_actions a
             JOIN plays p ON p.play_id = a.play_id
-            WHERE a.state IN ($pending, $retry) AND a.due_utc <= $now
+            WHERE a.provider = $provider
+              AND a.account_id = $accountId
+              AND a.state IN ($pending, $retry)
+              AND a.due_utc <= $now
             ORDER BY a.due_utc, a.created_utc
             LIMIT 1;
             """;
+        select.Parameters.AddWithValue("$provider", provider);
+        select.Parameters.AddWithValue("$accountId", accountId);
         select.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
         select.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
         select.Parameters.AddWithValue("$now", now);
