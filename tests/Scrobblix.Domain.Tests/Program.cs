@@ -925,6 +925,70 @@ using var lateMetadataTracker = new PlaybackTrackingService(lateMetadataStore);
     Assert(firstLateStatus.PlayId == secondLateStatus.PlayId && !secondLateStatus.DidStartPlay,
         "Late artist/duration metadata enriches the existing play instead of generating another local history row.");
 }
+var sourceGapStore = new RecordingLocalPlayStore();
+using var sourceGapTracker = new PlaybackTrackingService(sourceGapStore);
+var gapFirstObservation = observation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-gap", "session-gap", 1, "gap-first"),
+    PositionMilliseconds = 12_000,
+};
+var gapSecondObservation = gapFirstObservation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-gap", "session-gap", 2, "gap-second"),
+    ObservedAtUtc = gapFirstObservation.ObservedAtUtc.AddSeconds(10),
+    PositionMilliseconds = 22_000,
+};
+var gapFirstStatus = await sourceGapTracker.ObserveAsync(gapFirstObservation, 0, CancellationToken.None);
+var gapSecondStatus = await sourceGapTracker.ObserveAsync(gapSecondObservation, 10_000, CancellationToken.None);
+var unavailableTransition = await sourceGapTracker.ObserveSourceUnavailableAsync("gsmtc", CancellationToken.None);
+Assert(gapFirstStatus.DidStartPlay
+    && gapSecondStatus.ConfirmedPlayedMilliseconds == 10_000
+    && unavailableTransition is { Observation.PlaybackState: PlayState.Unknown }
+    && unavailableTransition.Value.Status.ConfirmedPlayedMilliseconds == 10_000,
+    "A missing GSMTC session stops confirmed-time accrual at the last positive sample.");
+var resumedAfterGap = gapSecondObservation with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-gap", "session-gap", 3, "gap-resumed"),
+    ObservedAtUtc = gapSecondObservation.ObservedAtUtc.AddMinutes(3),
+    PositionMilliseconds = 202_000,
+};
+var resumedAfterGapStatus = await sourceGapTracker.ObserveAsync(resumedAfterGap, 190_000, CancellationToken.None);
+Assert(!resumedAfterGapStatus.DidStartPlay
+    && resumedAfterGapStatus.PlayId == gapSecondStatus.PlayId
+    && resumedAfterGapStatus.ConfirmedPlayedMilliseconds == 10_000,
+    "Resuming the same track after a long source gap preserves the play but does not count the gap as listening.");
+var afterResumeObservation = resumedAfterGap with
+{
+    SourceEventKey = new SourceEventKey("gsmtc-gap", "session-gap", 4, "gap-after-resume"),
+    ObservedAtUtc = resumedAfterGap.ObservedAtUtc.AddSeconds(60),
+    PositionMilliseconds = 262_000,
+};
+var afterResumeStatus = await sourceGapTracker.ObserveAsync(afterResumeObservation, 250_000, CancellationToken.None);
+Assert(afterResumeStatus.ConfirmedPlayedMilliseconds == 70_000,
+    "Confirmed-time accumulation resumes from the first positive observation after a source gap.");
+
+var browserGapTrackerStore = new RecordingLocalPlayStore();
+using var browserGapTracker = new PlaybackTrackingService(browserGapTrackerStore);
+var browserGapFirst = observation with
+{
+    SourceEventKey = new SourceEventKey("browser-gap", "browser-session", 1, "browser-gap-first"),
+    SourceName = "browser",
+    ApplicationId = "https://open.spotify.com",
+    PositionMilliseconds = 10_000,
+};
+await browserGapTracker.ObserveAsync(browserGapFirst, 0, CancellationToken.None);
+Assert(await browserGapTracker.ObserveSourceUnavailableAsync("gsmtc", CancellationToken.None) is null,
+    "A missing Windows media session does not invalidate the browser-owned canonical observation.");
+var browserGapSecond = browserGapFirst with
+{
+    SourceEventKey = new SourceEventKey("browser-gap", "browser-session", 2, "browser-gap-second"),
+    ObservedAtUtc = browserGapFirst.ObservedAtUtc.AddSeconds(10),
+    PositionMilliseconds = 20_000,
+};
+var browserGapStatus = await browserGapTracker.ObserveAsync(browserGapSecond, 10_000, CancellationToken.None);
+Assert(browserGapStatus.ConfirmedPlayedMilliseconds == 10_000,
+    "Browser observations continue to accrue when GSMTC has no active session.");
+
 await new SqliteLocalPlayStore(connectionString).UpsertEligibleAsync(localPlayStore.StoredPlay!, CancellationToken.None);
 Assert((await historyReader.GetRecentAsync(10, CancellationToken.None)).Any(play => play.PlayId == localPlayStore.StoredPlay!.PlayId), "Eligible local sessions are persisted to the same local history read model.");
 await new SqliteLocalPlayStore(connectionString).UpdateMetadataAsync(
