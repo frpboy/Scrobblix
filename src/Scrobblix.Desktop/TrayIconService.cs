@@ -183,6 +183,11 @@ internal sealed class TrayIconService : IDisposable
             if (queueMenu != IntPtr.Zero)
             {
                 AppendStatusItem(queueMenu, status.QueueLabel);
+                foreach (var queueDetail in status.QueueDetailLabels)
+                {
+                    AppendStatusItem(queueMenu, queueDetail);
+                }
+
                 if (status.RetryableFailedScrobbleCount is > 0)
                 {
                     AppendItem(
