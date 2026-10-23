@@ -22,6 +22,12 @@ public sealed partial class MainWindow : Window
     private string? _displayedPlayId;
     private ProviderActionType? _currentTrackLoveIntent;
     private bool _isLastFmConnected;
+    private string? _lastFmUserName;
+    private QueueSummary? _queueSummary;
+    private int? _trayRetryableFailedScrobbleCount;
+    private bool _trayLovedActionInProgress;
+    private bool _trayQueueRetryInProgress;
+    private bool _isClosed;
     private bool _updatingNotificationPreference;
     private bool _updatingNotificationPrivacyPreference;
     private bool _updatingNavigationPreference;
@@ -46,6 +52,8 @@ public sealed partial class MainWindow : Window
     public event Action<string>? DiagnosticLogRequested;
 
     public event Func<string, Task<bool>>? QueueRetryNowRequested;
+
+    public event Func<Task<int>>? TrayRetryFailedScrobblesRequested;
 
     public event Func<string, Task<bool>>? QueueCancelRequested;
     public event Func<string, Task<bool>>? QueueConfirmOutcomeAcceptedRequested;
@@ -80,8 +88,28 @@ public sealed partial class MainWindow : Window
         }
         Closed += (_, _) =>
         {
+            _isClosed = true;
             if (_accessibilitySettings is not null)
                 _accessibilitySettings.HighContrastChanged -= AccessibilitySettings_HighContrastChanged;
+
+            // Release App-owned event closures on shutdown. In-flight handlers already hold
+            // their delegates and observe the application's cancelled token.
+            TrackingModeChanged = null;
+            ConnectLastFmRequested = null;
+            CompleteLastFmRequested = null;
+            DisconnectLastFmRequested = null;
+            LastFmApiCredentialsSaveRequested = null;
+            DiagnosticLogRequested = null;
+            QueueRetryNowRequested = null;
+            TrayRetryFailedScrobblesRequested = null;
+            QueueCancelRequested = null;
+            QueueConfirmOutcomeAcceptedRequested = null;
+            LovedTrackActionRequested = null;
+            BackupRequested = null;
+            RestoreRequested = null;
+            DesktopNotificationsPreferenceChanged = null;
+            NotificationTrackDetailsPreferenceChanged = null;
+            NavigationCompactPreferenceChanged = null;
         };
         var placeholderPath = Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg");
         if (File.Exists(placeholderPath))
@@ -658,6 +686,161 @@ public sealed partial class MainWindow : Window
         LogDirectoryText.Text = directory;
     }
 
+    /// <summary>
+    /// Returns a cheap immutable snapshot of values already held by the window. The tray
+    /// renderer must not query SQLite or the Last.fm API while Windows is opening a menu.
+    /// </summary>
+    public TrayMenuStatus GetTrayMenuStatus()
+    {
+        var observation = _displayedObservation;
+        var hasCurrentTrack = !_isClosed
+            && (observation?.PlaybackState is PlayState.Playing or PlayState.Paused)
+            && !string.IsNullOrWhiteSpace(_displayedPlayId)
+            && !string.IsNullOrWhiteSpace(observation?.Artist)
+            && !string.IsNullOrWhiteSpace(observation?.Title);
+        return new TrayMenuStatus(
+            _trackingMode.IsEnabled,
+            _isLastFmConnected,
+            _lastFmUserName,
+            hasCurrentTrack ? observation?.PlaybackState : null,
+            hasCurrentTrack ? _displayedPlayId : null,
+            hasCurrentTrack ? observation?.Artist : null,
+            hasCurrentTrack ? observation?.Title : null,
+            _currentTrackLoveIntent,
+            _trayLovedActionInProgress,
+            _queueSummary?.PendingCount,
+            _trayRetryableFailedScrobbleCount,
+            _trayQueueRetryInProgress,
+            _isClosed);
+    }
+
+    public void ReportTrayFailure(string operation, Exception exception)
+    {
+        DiagnosticLogRequested?.Invoke(
+            $"Tray {operation} failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+    }
+
+    public void NavigateFromTray(string destination)
+    {
+        if (_isClosed || destination is not ("queue" or "settings" or "diagnostics" or "home"))
+        {
+            return;
+        }
+
+        SelectDestination(destination);
+    }
+
+    public async Task ToggleLovedTrackFromTrayAsync()
+    {
+        var status = GetTrayMenuStatus();
+        if (!status.CanLoveTrack || _trayLovedActionInProgress)
+        {
+            return;
+        }
+
+        _trayLovedActionInProgress = true;
+        UpdateLovedButtons();
+        var actionType = status.CurrentLoveIntent == ProviderActionType.Love
+            ? ProviderActionType.Unlove
+            : ProviderActionType.Love;
+        try
+        {
+            await RequestLovedTrackActionAsync(actionType);
+        }
+        catch (Exception exception)
+        {
+            SetLovedActionFeedback($"Love/Unlove could not be queued ({exception.GetType().Name}).");
+            DiagnosticLogRequested?.Invoke(
+                $"Tray Love/Unlove action failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+        }
+        finally
+        {
+            _trayLovedActionInProgress = false;
+            UpdateLovedButtons();
+        }
+    }
+
+    public async Task RetryFailedScrobblesFromTrayAsync()
+    {
+        var status = GetTrayMenuStatus();
+        if (_isClosed || _trayQueueRetryInProgress || !status.CanRetryFailedScrobbles
+            || TrayRetryFailedScrobblesRequested is null)
+        {
+            return;
+        }
+
+        _trayQueueRetryInProgress = true;
+        var scheduled = 0;
+        try
+        {
+            scheduled = await TrayRetryFailedScrobblesRequested.Invoke();
+        }
+        catch (Exception exception)
+        {
+            DiagnosticLogRequested?.Invoke(
+                $"Tray failed-scrobble retry failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+            SetStartupStatus(
+                "Failed scrobbles could not be queued for manual retry. Review Queue for the current state.",
+                InfoBarSeverity.Warning,
+                "Queue retry needs attention");
+        }
+        finally
+        {
+            _trayQueueRetryInProgress = false;
+        }
+
+        if (!_isClosed && scheduled > 0)
+        {
+            SetStartupStatus(
+                $"Manual retry was queued for {scheduled:N0} failed scrobble action(s). Delivery still follows the existing queue worker.",
+                InfoBarSeverity.Informational,
+                "Queue retry scheduled");
+        }
+    }
+
+    public void CopyCurrentTrackDetailsFromTray()
+    {
+        if (_isClosed) return;
+        var status = GetTrayMenuStatus();
+        if (!status.CanCopyTrackDetails) return;
+
+        try
+        {
+            var package = new global::Windows.ApplicationModel.DataTransfer.DataPackage();
+            package.SetText(status.TrackDetails);
+            global::Windows.ApplicationModel.DataTransfer.Clipboard.SetContent(package);
+            SetStartupStatus("Current track details copied to the clipboard.", InfoBarSeverity.Informational, "Track details copied");
+        }
+        catch (Exception exception)
+        {
+            DiagnosticLogRequested?.Invoke(
+                $"Tray clipboard operation failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+            SetStartupStatus("Track details could not be copied. Check clipboard access and try again.", InfoBarSeverity.Warning, "Clipboard unavailable");
+        }
+    }
+
+    public void OpenLogFolderFromTray()
+    {
+        if (_isClosed) return;
+        if (string.IsNullOrWhiteSpace(_logDirectory) || !Directory.Exists(_logDirectory))
+        {
+            DiagnosticLogRequested?.Invoke("Tray Open Log Folder requested while the resolved log directory was unavailable.");
+            SetStartupStatus("The Scrobblix log folder is unavailable. Check Diagnostics for details.", InfoBarSeverity.Warning, "Log folder unavailable");
+            return;
+        }
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(_logDirectory) { UseShellExecute = true });
+        }
+        catch (Exception exception)
+        {
+            DiagnosticLogRequested?.Invoke(
+                $"Tray Explorer launch failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+            SetStartupStatus("Windows could not open the Scrobblix log folder.", InfoBarSeverity.Warning, "Explorer launch failed");
+        }
+    }
+
     private SupportSourceStatus CreateSupportSourceStatus()
     {
         var observation = _displayedObservation;
@@ -1185,8 +1368,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    public void SetTrayRetryableFailedScrobbleCount(int? count)
+    {
+        _trayRetryableFailedScrobbleCount = count is null ? null : Math.Max(0, count.Value);
+    }
+
     public void SetQueueSummary(QueueSummary summary)
     {
+        _queueSummary = summary;
         QueueStateText.Text = DashboardStatusText.QueueHeadline(summary);
         QueueDetailText.Text = DashboardStatusText.QueueDetail(summary);
         QueuePageStateText.Text = DashboardStatusText.QueueHeadline(summary);
@@ -1275,7 +1464,7 @@ public sealed partial class MainWindow : Window
 
     private void UpdateLovedButtons()
     {
-        var canAct = _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        var canAct = !_isClosed && !_trayLovedActionInProgress && _isLastFmConnected && !string.IsNullOrWhiteSpace(_displayedPlayId);
         if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = canAct;
         if (CurrentTrackLoveIcon is not null)
         {
@@ -1323,7 +1512,7 @@ public sealed partial class MainWindow : Window
             return;
         }
 
-        CurrentTrackLoveButton.IsEnabled = false;
+        if (CurrentTrackLoveButton is not null) CurrentTrackLoveButton.IsEnabled = false;
         try
         {
             var queued = await LovedTrackActionRequested.Invoke(_displayedPlayId, actionType);
@@ -1355,6 +1544,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmUnavailable()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1365,6 +1555,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmReadyToConnect()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
@@ -1374,6 +1565,9 @@ public sealed partial class MainWindow : Window
 
     public void SetLastFmAuthorizationWaiting()
     {
+        _isLastFmConnected = false;
+        _lastFmUserName = null;
+        UpdateLovedButtons();
         SetLastFmStatus("Waiting for approval in your browser. Return here and select Finish approval.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = true;
@@ -1383,6 +1577,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmConnected(string userName)
     {
         _isLastFmConnected = true;
+        _lastFmUserName = userName;
         UpdateLovedButtons();
         SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1393,6 +1588,7 @@ public sealed partial class MainWindow : Window
     public void SetLastFmConnectionError()
     {
         _isLastFmConnected = false;
+        _lastFmUserName = null;
         UpdateLovedButtons();
         SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
@@ -1476,9 +1672,14 @@ public sealed partial class MainWindow : Window
         }
     }
 
-    private void TrackingToggleButton_Click(object sender, RoutedEventArgs args)
+    private void TrackingToggleButton_Click(object sender, RoutedEventArgs args) =>
+        SetTrackingEnabled(!_trackingMode.IsEnabled);
+
+    public void SetTrackingEnabledFromTray(bool enabled) => SetTrackingEnabled(enabled);
+
+    private void SetTrackingEnabled(bool enabled)
     {
-        if (!_trackingMode.SetEnabled(!_trackingMode.IsEnabled))
+        if (_isClosed || !_trackingMode.SetEnabled(enabled))
         {
             return;
         }
