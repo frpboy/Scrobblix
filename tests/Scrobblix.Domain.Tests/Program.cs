@@ -114,8 +114,8 @@ Assert(!(trayConnected with { RetryableFailedScrobbleCount = 0 }).CanRetryFailed
     "No retryable failed scrobbles means the tray retry command is disabled.");
 Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).LoveCommandLabel == "Unlove Track",
     "The next Love action follows the latest locally saved intent.");
-Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).CurrentTrackStatusLabel.Contains("requested", StringComparison.Ordinal),
-    "Local Love intent is described as requested rather than falsely confirmed by Last.fm.");
+Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).CurrentTrackStatusLabel.Contains("saved locally", StringComparison.OrdinalIgnoreCase),
+    "Local Love intent is described as saved locally rather than falsely confirmed by Last.fm.");
 Assert((trayConnected with
 {
     CurrentLoveIntent = ProviderActionType.Love,
