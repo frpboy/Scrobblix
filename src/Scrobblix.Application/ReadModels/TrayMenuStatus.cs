@@ -17,6 +17,7 @@ public sealed record TrayMenuStatus(
     string? Artist,
     string? Title,
     ProviderActionType? CurrentLoveIntent,
+    ProviderActionState? CurrentLoveActionState,
     bool LoveActionInProgress,
     int? PendingQueueCount,
     int? RetryableFailedScrobbleCount,
@@ -77,11 +78,23 @@ public sealed record TrayMenuStatus(
             if (!HasCurrentTrack) return "Current track: metadata unavailable";
             if (!LastFmConnected) return "Connect Last.fm to manage this track";
             if (LoveActionInProgress) return "Love action in progress";
-            return CurrentLoveIntent switch
+
+            var action = CurrentLoveIntent == ProviderActionType.Unlove ? "Unlove" : "Love";
+            return CurrentLoveActionState switch
             {
-                ProviderActionType.Love => "Latest intent: Love requested; provider result appears in Loved",
-                ProviderActionType.Unlove => "Latest intent: Unlove requested; provider result appears in Loved",
-                _ => "Love state has not been confirmed by this session",
+                ProviderActionState.Accepted when CurrentLoveIntent == ProviderActionType.Love => "Loved on Last.fm",
+                ProviderActionState.Accepted when CurrentLoveIntent == ProviderActionType.Unlove => "Unloved on Last.fm",
+                ProviderActionState.Pending => $"{action} request queued; waiting for Last.fm",
+                ProviderActionState.InFlight => $"{action} request is being sent to Last.fm",
+                ProviderActionState.RetryScheduled => $"{action} request scheduled to retry",
+                ProviderActionState.RetryExhausted => $"{action} request needs manual retry",
+                ProviderActionState.AuthBlocked => $"{action} request blocked by Last.fm authentication",
+                ProviderActionState.PermanentFailure => $"Last.fm rejected the {action} request",
+                ProviderActionState.ProviderIgnored => $"Last.fm ignored the {action} request",
+                ProviderActionState.Cancelled => $"{action} request cancelled or superseded",
+                ProviderActionState.SubmissionOutcomeUnknown => $"{action} result is unknown; review Loved and Queue",
+                _ when CurrentLoveIntent is not null => $"{action} intent saved locally; provider result is not yet available",
+                _ => "Love state has not been confirmed for this track",
             };
         }
     }
