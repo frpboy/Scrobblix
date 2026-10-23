@@ -28,6 +28,7 @@ public sealed partial class MainWindow : Window
     private bool _currentTrackLoveActionInProgress;
     private bool _isShuttingDown;
     private string? _lastFmUserName;
+    private string? _lastFmAccountId;
     private QueueSummary? _queueSummary;
     private int? _retryableFailedScrobbleCount;
     private bool _preferredNavigationCompact;
@@ -1518,13 +1519,19 @@ public sealed partial class MainWindow : Window
         return _currentTrackLoveIntent ?? action?.ActionType ?? ProviderActionType.Love;
     }
 
-    private QueueActionSummary? GetCurrentTrackLoveAction() =>
-        string.IsNullOrWhiteSpace(_displayedPlayId)
-            ? null
-            : _queueActions.FirstOrDefault(action =>
-                string.Equals(action.PlayId, _displayedPlayId, StringComparison.Ordinal)
-                && string.Equals(action.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
-                && action.ActionType is ProviderActionType.Love or ProviderActionType.Unlove);
+    private QueueActionSummary? GetCurrentTrackLoveAction()
+    {
+        if (string.IsNullOrWhiteSpace(_displayedPlayId) || string.IsNullOrWhiteSpace(_lastFmAccountId))
+        {
+            return null;
+        }
+
+        return _queueActions.FirstOrDefault(action =>
+            string.Equals(action.Provider, "lastfm", StringComparison.OrdinalIgnoreCase)
+            && string.Equals(action.AccountId, _lastFmAccountId, StringComparison.Ordinal)
+            && string.Equals(action.PlayId, _displayedPlayId, StringComparison.Ordinal)
+            && action.ActionType is ProviderActionType.Love or ProviderActionType.Unlove);
+    }
 
     public void CopyTrackDetailsFromTray()
     {
@@ -1624,6 +1631,8 @@ public sealed partial class MainWindow : Window
     {
         _isLastFmConnected = false;
         _lastFmUserName = null;
+        _lastFmAccountId = null;
+        _currentTrackLoveIntent = null;
         UpdateLovedButtons();
         SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1635,6 +1644,8 @@ public sealed partial class MainWindow : Window
     {
         _isLastFmConnected = false;
         _lastFmUserName = null;
+        _lastFmAccountId = null;
+        _currentTrackLoveIntent = null;
         UpdateLovedButtons();
         SetLastFmStatus("Not connected. Select Connect Last.fm to approve access in your browser.");
         ConnectLastFmButton.IsEnabled = true;
@@ -1650,10 +1661,19 @@ public sealed partial class MainWindow : Window
         DisconnectLastFmButton.IsEnabled = false;
     }
 
-    public void SetLastFmConnected(string userName)
+    public void SetLastFmConnected(string userName, string? accountId = null)
     {
+        var connectedAccountId = string.IsNullOrWhiteSpace(accountId)
+            ? $"lastfm:{userName.ToLowerInvariant()}"
+            : accountId;
+        if (!string.Equals(_lastFmAccountId, connectedAccountId, StringComparison.Ordinal))
+        {
+            _currentTrackLoveIntent = null;
+        }
+
         _isLastFmConnected = true;
         _lastFmUserName = userName;
+        _lastFmAccountId = connectedAccountId;
         UpdateLovedButtons();
         SetLastFmStatus($"Connected as {userName}. Eligible plays will be queued locally and delivered when Last.fm is available.");
         ConnectLastFmButton.IsEnabled = false;
@@ -1665,6 +1685,8 @@ public sealed partial class MainWindow : Window
     {
         _isLastFmConnected = false;
         _lastFmUserName = null;
+        _lastFmAccountId = null;
+        _currentTrackLoveIntent = null;
         UpdateLovedButtons();
         SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;

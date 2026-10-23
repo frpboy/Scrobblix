@@ -12,4 +12,7 @@ public sealed record QueueActionSummary(
     DateTimeOffset DueUtc,
     string? LastReasonCode,
     string? Artist,
-    string? Title);
+    string? Title)
+{
+    public string? AccountId { get; init; }
+}
