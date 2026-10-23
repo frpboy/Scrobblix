@@ -759,8 +759,13 @@ public sealed partial class MainWindow : Window
         {
             await RequestLovedTrackActionAsync(actionType);
         }
+        catch (OperationCanceledException) when (_isClosed)
+        {
+            // App shutdown cancels outstanding provider work; no UI feedback is needed.
+        }
         catch (Exception exception)
         {
+            if (_isClosed) return;
             SetLovedActionFeedback($"Love/Unlove could not be queued ({exception.GetType().Name}).");
             DiagnosticLogRequested?.Invoke(
                 $"Tray Love/Unlove action failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
@@ -768,7 +773,7 @@ public sealed partial class MainWindow : Window
         finally
         {
             _trayLovedActionInProgress = false;
-            UpdateLovedButtons();
+            if (!_isClosed) UpdateLovedButtons();
         }
     }
 
@@ -787,14 +792,22 @@ public sealed partial class MainWindow : Window
         {
             scheduled = await TrayRetryFailedScrobblesRequested.Invoke();
         }
+        catch (OperationCanceledException) when (_isClosed)
+        {
+            // Application shutdown cancels the action; the durable queue remains unchanged
+            // for any item whose state-checked retry transition did not complete.
+        }
         catch (Exception exception)
         {
             DiagnosticLogRequested?.Invoke(
                 $"Tray failed-scrobble retry failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
-            SetStartupStatus(
-                "Failed scrobbles could not be queued for manual retry. Review Queue for the current state.",
-                InfoBarSeverity.Warning,
-                "Queue retry needs attention");
+            if (!_isClosed)
+            {
+                SetStartupStatus(
+                    "Failed scrobbles could not be queued for manual retry. Review Queue for the current state.",
+                    InfoBarSeverity.Warning,
+                    "Queue retry needs attention");
+            }
         }
         finally
         {
@@ -1541,7 +1554,7 @@ public sealed partial class MainWindow : Window
         }
         finally
         {
-            UpdateLovedButtons();
+            if (!_isClosed) UpdateLovedButtons();
         }
     }
 
