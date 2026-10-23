@@ -711,7 +711,7 @@ var csvFormulaEdgeCases = HistoryCsvExporter.Export(new[]
     new RecentPlay("csv-fullwidth", observation.ObservedAtUtc, "－1+1", "＠SUM(1,1)", "Album",
         180_000, 90_000, null, null),
 });
-Assert(csvFormulaEdgeCases.Contains("\"'\\n=1+1\"", StringComparison.Ordinal)
+Assert(csvFormulaEdgeCases.Contains("\"'\n=1+1\"", StringComparison.Ordinal)
     && csvFormulaEdgeCases.Contains("\"'＝1+1\"", StringComparison.Ordinal)
     && csvFormulaEdgeCases.Contains("\"'＋1+1\"", StringComparison.Ordinal)
     && csvFormulaEdgeCases.Contains("\"'－1+1\"", StringComparison.Ordinal)
