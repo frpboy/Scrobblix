@@ -160,6 +160,24 @@ queueAction.AcquireLease("worker-1", firstLeaseUtc.AddMinutes(2), firstLeaseUtc.
 queueAction.Complete(ProviderActionState.Accepted, ReasonCodes.Provider.Accepted);
 Assert(queueAction.Current == ProviderActionState.Accepted && queueAction.AttemptCount == 2 && queueAction.LeaseOwner is null, "Queue retries are classified, leased, and completed without retaining a stale lease.");
 
+var unknownLifecycle = new ProviderActionLifecycle();
+unknownLifecycle.AcquireLease("worker-unknown", firstLeaseUtc, firstLeaseUtc.AddMinutes(1));
+unknownLifecycle.Complete(ProviderActionState.SubmissionOutcomeUnknown, ReasonCodes.Provider.SubmissionOutcomeUnknown);
+Assert(unknownLifecycle.Current == ProviderActionState.SubmissionOutcomeUnknown
+    && unknownLifecycle.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown
+    && unknownLifecycle.LeaseOwner is null
+    && unknownLifecycle.LeaseExpiresUtc is null,
+    "SubmissionOutcomeUnknown is a supported lifecycle completion and clears its lease.");
+
+var exhaustedLifecycle = new ProviderActionLifecycle();
+exhaustedLifecycle.AcquireLease("worker-exhausted", firstLeaseUtc, firstLeaseUtc.AddMinutes(1));
+exhaustedLifecycle.Complete(ProviderActionState.RetryExhausted, ReasonCodes.Provider.RetryExhausted);
+Assert(exhaustedLifecycle.Current == ProviderActionState.RetryExhausted
+    && exhaustedLifecycle.ReasonCode == ReasonCodes.Provider.RetryExhausted
+    && exhaustedLifecycle.LeaseOwner is null
+    && exhaustedLifecycle.LeaseExpiresUtc is null,
+    "RetryExhausted is a supported lifecycle completion and clears its lease.");
+
 var sourceEventKey = new SourceEventKey("gsmtc", "session-1", 42, "event-42");
 var observation = new PlayObservation(
     sourceEventKey,
