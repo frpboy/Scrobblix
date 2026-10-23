@@ -6,6 +6,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Fixed
 
+- Fixed Now Playing artwork disappearing during GSMTC polling: enriched artwork and metadata now persist for the active play, provider-fetched covers take precedence over weaker session thumbnails, and unchanged artwork images are no longer repeatedly reloaded.
+
 - Updated backup restore validation to recognize schema version 5 and migration `0005_loved_tracks`, so current databases pass backup validation instead of being rejected during staged restore.
 
 - Added lifecycle contract assertions and a real-Windows acceptance case for App-owned single-instance resources. Corrected the database migration assertion to cover all five embedded migrations.
