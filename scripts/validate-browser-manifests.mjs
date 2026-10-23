@@ -43,7 +43,7 @@ requireCondition(nativeHostProgram.indexOf("if (!trustedEnvelope)") < nativeHost
 const nativeHostInstaller = await readFile(resolve(root, "scripts/install-native-host.ps1"), "utf8");
 const nativeHostUninstaller = await readFile(resolve(root, "scripts/uninstall-native-host.ps1"), "utf8");
 requireCondition(nativeHostInstaller.includes("[string[]]$ExtensionId"), "Native-host setup must support different Chrome and Edge extension IDs.");
-requireCondition(nativeHostInstaller.includes("allowed_origins = $allowedOrigins"), "Native-host manifest must allow-list every supplied Chromium extension ID.");
+requireCondition(nativeHostInstaller.includes("$manifest.allowed_origins = @($mergedChromiumIds"), "Native-host manifest must preserve every requested and previously registered Chromium extension ID.");
 requireCondition(nativeHostInstaller.includes("($mergedChromiumIds -join ';')"), "Browser-specific registration must preserve previously allowed Chromium extension IDs.");
 requireCondition(nativeHostInstaller.includes("$existingChromiumIds + $extensionIds"), "Registration must merge the existing per-user Chromium allow-list with supplied IDs.");
 requireCondition(nativeHostInstaller.includes("$RegisterFirefox"), "The native-host installer must support optional Firefox registration.");
