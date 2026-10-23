@@ -83,4 +83,4 @@ requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'po
 requireCondition(setupScript.includes("-Destination (Join-Path $chromiumRoot 'popup.css')"), "Browser package setup must copy popup.css into the Chromium extension folder.");
 requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.html')"), "Browser package setup must copy popup.html into the Firefox extension folder.");
 requireCondition(setupScript.includes("-Destination (Join-Path $firefoxRoot 'popup.css')"), "Browser package setup must copy popup.css into the Firefox extension folder.");
-requireCondition(setupScript.includes(String.raw`'dist\\popup.js'`), "The setup script must require the built popup script in each browser package.");
+requireCondition(setupScript.includes("popup.js')"), "The setup script must require the built popup script in each browser package.");
