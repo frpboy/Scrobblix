@@ -1552,6 +1552,19 @@ public sealed partial class MainWindow : Window
                 SetLovedActionFeedback($"{(actionType == ProviderActionType.Love ? "Love" : "Unlove")} request saved locally; provider acceptance is shown on the Loved page.");
             }
         }
+        catch (OperationCanceledException) when (_isClosed)
+        {
+            // Shutdown cancels the underlying action; persisted intent remains authoritative.
+        }
+        catch (Exception exception)
+        {
+            if (!_isClosed)
+            {
+                SetLovedActionFeedback("The Love/Unlove request failed. Review Diagnostics and Loved for its current state.");
+                DiagnosticLogRequested?.Invoke(
+                    $"Love/Unlove action failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
+            }
+        }
         finally
         {
             if (!_isClosed) UpdateLovedButtons();
