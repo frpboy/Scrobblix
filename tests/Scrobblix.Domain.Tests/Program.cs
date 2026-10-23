@@ -97,7 +97,8 @@ Assert(trayConnected.QueueDetailLabels.Contains("In flight: 1")
     && trayConnected.QueueDetailLabels.Contains("Permanent failures: 1")
     && trayConnected.QueueDetailLabels.Contains("Submission outcome unknown: 1"),
     "The queue submenu distinguishes pending, in-flight, scheduled, accepted, blocked, failed, and uncertain states.");
-Assert((trayConnected with { QueueSnapshot = null }).QueueDetailLabels.SequenceEqual(new[] { "Queue details: status unavailable" }),
+var unavailableQueueDetails = (trayConnected with { QueueSnapshot = null }).QueueDetailLabels;
+Assert(unavailableQueueDetails.Count == 1 && unavailableQueueDetails[0] == "Queue details: status unavailable",
     "The tray does not fabricate detailed queue statuses when its database snapshot is unavailable.");
 Assert(trayConnected.CanLoveTrack && trayConnected.CanCopyTrackDetails, "Connected current tracks enable Love and copy actions.");
 Assert(trayConnected.LoveCommandLabel == "Love Track", "No local Love intent defaults to the Love operation.");
