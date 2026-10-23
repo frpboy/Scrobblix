@@ -4,7 +4,7 @@
 > **Manual status:** All real-machine, provider, installed-browser, UX and installer scenarios remain `NOT RUN`; repository CI does not set these rows to PASS.  
 > **Prior code candidate CI:** SHA `23bc40a9e7a959145d3494fb7e6382d079020710` passed Windows workflow [run 39732158406](https://github.com/frpboy/Scrobblix/actions/runs/39732158406) on 2026-10-22. The pipe-backoff/launcher fix is being tested in PR #7; use only the exact updated candidate after its matching CI and real Windows retest. PR #7 is still a draft and the candidate is not merged into `main`.  
 > **Baseline rule:** Fill the run header using the exact app build installed for the manual test; do not carry the CI success into manual results.  
-> **Last updated:** 2026-10-22
+> **Last updated:** 2026-10-23
 
 ## Run header
 
@@ -117,6 +117,22 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | UX-11 | Resize the window around 960–1000 logical pixels; change the preference, widen again, restart the app, then activate via tray and notification. | Narrow window temporarily uses compact mode without overwriting the saved preference. Wide window restores preference. Window title and selected destination identify the active page after activation. | NOT RUN | |
 | UX-12 | Use keyboard-only navigation and Narrator. Test 100%, 150% and 200% scale plus Windows light/dark/high-contrast settings. Inspect the app icon, compact privacy tooltip and source-logo fallback. | Rail toggles and destinations have clear names and focus; no clipping; mark variants change where supported; status is not communicated by color/logo alone; unknown or unapproved sources use a neutral icon and text. | NOT RUN | |
 | UX-13 | Compare Home, History, Statistics, Queue, Sources, Diagnostics and Settings at the normal window size, a narrow window, and maximized. Check page margins, card gaps, the Home status banner, and the current-track action row. | Outer content inset is compact and consistent, cards retain breathing room, routine playback does not leave a redundant banner taking vertical space, tracking/Love/Unlove controls fit without clipping, no horizontal scrolling is introduced, and attention banners still appear for actionable errors or tracking pause/resume. | NOT RUN | |
+
+## F.1 Windows tray quick controls
+
+Run on the exact installed candidate SHA above. Automated assertions and a successful Release build do not substitute for these real Windows checks.
+
+| ID | Scenario and steps | Expected result | Result | Evidence / defect |
+|---|---|---|---|---|
+| TRAY-01 | Open the context menu with no active media, Last.fm disconnected, and an empty queue; repeat with the DB temporarily unavailable. | Status is truthful, unknown queue counts are shown as unavailable rather than zero, and unavailable actions are disabled without crashing. | NOT RUN | |
+| TRAY-02 | Play, pause, change, and stop a track; include missing and very long artist/title values. Reopen the menu after each change. | Playback/account status follows the latest window snapshot; long values are truncated; a stopped/no-track state does not retain stale current-track actions. | NOT RUN | |
+| TRAY-03 | Pause tracking in the tray, keep media playing, then resume. Seed an already eligible persisted scrobble before pausing. | The label follows the confirmed tracking state; no listening time accrues while paused; previously queued work and persisted history remain intact. | NOT RUN | |
+| TRAY-04 | With Last.fm disconnected, attempt Love/Unlove; then connect a dedicated test account and Love/Unlove a supported current track. | Disconnected action is disabled. Connected actions use the existing queue pathway, reject rapid duplicates, and distinguish locally requested intent from provider acceptance/rejection. | NOT RUN | |
+| TRAY-05 | Seed retry-exhausted scrobble actions, scheduled retries, successful submissions, and outcome-unknown actions. Use Retry Failed Scrobbles. | Only retry-exhausted Last.fm scrobble actions are eligible; the existing RetryNowAsync state check remains authoritative; scheduled backoff, successful submissions, Love actions, and uncertain outcomes are untouched. | NOT RUN | |
+| TRAY-06 | Choose Open Queue, Open Settings and Open Diagnostics while the window is minimized/hidden. | The existing application window is restored and navigates to the requested page; no duplicate process/window is launched. | NOT RUN | |
+| TRAY-07 | Choose Open Log Folder with logs present, then test a missing/denied folder; copy details for a known track and force clipboard failure where feasible. | Explorer opens the resolved log directory or a recoverable message is shown. Clipboard copies only Artist — Track; failures do not crash or log track/credential data. | NOT RUN | |
+| TRAY-08 | Exit from the tray while idle and while background tracking/queue work is active; relaunch, then activate through a second launch attempt. | Existing close/cancellation/disposal path runs once, persisted history and queue survive, relaunch works, and activation restores the existing instance. | NOT RUN | |
+| TRAY-09 | Add/retry/deliver/fail queue actions and change Last.fm account state, then reopen the tray menu. | Menu uses refreshed read-model state and does not report a provider action accepted merely because it was queued. No aggressive polling or duplicate event subscriptions are introduced. | NOT RUN | |
 
 ## G. Support bundle safety and usability
 
