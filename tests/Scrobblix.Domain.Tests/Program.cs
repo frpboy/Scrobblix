@@ -71,6 +71,59 @@ Assert(privateDnsResolverCalled && privateDnsResolutionRejected,
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
+var trayConnected = new TrayMenuStatus(
+    TrackingEnabled: true,
+    LastFmConnected: true,
+    LastFmUserName: "listener",
+    IsPlaying: true,
+    PlayId: "play-1",
+    Artist: "Test Artist",
+    Title: "Test Track",
+    CurrentLoveIntent: null,
+    LoveActionInProgress: false,
+    PendingQueueCount: 3,
+    RetryableFailedScrobbleCount: 1,
+    QueueOperationInProgress: false);
+Assert(trayConnected.TrackingCommandLabel == "Pause Tracking", "Tray tracking command follows the authoritative enabled state.");
+Assert(trayConnected.LastFmLabel == "Last.fm: Connected as listener", "Tray shows the authenticated Last.fm username.");
+Assert(trayConnected.PlaybackLabel == "Now Playing: Test Artist — Test Track", "Tray current-track status comes from real playback metadata.");
+Assert(trayConnected.QueueLabel == "Scrobble queue: 3 pending", "Tray queue status renders the real pending count.");
+Assert(trayConnected.CanLoveTrack && trayConnected.CanCopyTrackDetails, "Connected current tracks enable Love and copy actions.");
+Assert(trayConnected.LoveCommandLabel == "Love Track", "No local Love intent defaults to the Love operation.");
+Assert(trayConnected.CanRetryFailedScrobbles, "Retry is enabled only when retryable failed scrobbles exist and the account is connected.");
+Assert(trayConnected.TrackDetails == "Test Artist — Test Track", "Copy details use a plain artist/title representation.");
+
+var trayPaused = trayConnected with { TrackingEnabled = false, IsPlaying = false };
+Assert(trayPaused.TrackingCommandLabel == "Resume Tracking", "Tray tracking command changes when tracking is paused.");
+Assert(trayPaused.PlaybackLabel == "Nothing playing", "Tray has an honest empty playback state.");
+Assert((trayPaused with { PendingQueueCount = null }).QueueLabel == "Scrobble queue: status unavailable",
+    "Tray does not fabricate a queue count when the read model is unavailable.");
+
+var trayDisconnected = trayConnected with { LastFmConnected = false, LastFmUserName = null };
+Assert(trayDisconnected.LastFmLabel == "Last.fm: Not connected", "Disconnected Last.fm is not presented as connected.");
+Assert(!trayDisconnected.CanLoveTrack && !trayDisconnected.CanRetryFailedScrobbles,
+    "Disconnected accounts cannot invoke provider Love/retry actions from the tray.");
+Assert(!(trayConnected with { LoveActionInProgress = true }).CanLoveTrack,
+    "A pending Love operation prevents rapid duplicate requests.");
+Assert(!(trayConnected with { QueueOperationInProgress = true }).CanRetryFailedScrobbles,
+    "Queue retry stays unavailable while another incompatible queue operation is running.");
+Assert(!(trayConnected with { RetryableFailedScrobbleCount = 0 }).CanRetryFailedScrobbles,
+    "No retryable failed scrobbles means the tray retry command is disabled.");
+Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).LoveCommandLabel == "Unlove Track",
+    "The next Love action follows the latest locally saved intent.");
+Assert((trayConnected with { CurrentLoveIntent = ProviderActionType.Love }).CurrentTrackStatusLabel.Contains("requested", StringComparison.Ordinal),
+    "Local Love intent is described as requested rather than falsely confirmed by Last.fm.");
+var longTrayLabel = (trayConnected with
+{
+    Artist = new string('A', 200),
+    Title = new string('T', 200),
+}).PlaybackLabel;
+Assert(longTrayLabel.Length < 100 && longTrayLabel.EndsWith("…", StringComparison.Ordinal),
+    "Tray track labels are truncated so long metadata cannot dominate the native menu.");
+Assert(!(trayConnected with { IsClosed = true }).CanCopyTrackDetails,
+    "Disposed-window snapshots disable clipboard actions.");
+
+
 using var nativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"abcdefghijklmnopabcdefghijklmnop"}""");
 using var mismatchedNativeHostEnvelope = JsonDocument.Parse("""{"browserInstanceId":"different-extension"}""");
 using var incompleteNativeHostEnvelope = JsonDocument.Parse("{}");
