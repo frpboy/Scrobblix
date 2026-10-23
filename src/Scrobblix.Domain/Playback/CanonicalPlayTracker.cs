@@ -20,7 +20,7 @@ public sealed class CanonicalPlayTracker
         {
             _state.TransitionTo(PlayState.Playing);
         }
-        else if (_state.Current is PlayState.Paused or PlayState.Unknown
+        else if ((_state.Current is PlayState.Paused or PlayState.Unknown)
             && observation.PlaybackState == PlayState.Playing)
         {
             _state.TransitionTo(PlayState.Playing);
