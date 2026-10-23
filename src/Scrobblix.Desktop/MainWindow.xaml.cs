@@ -695,19 +695,18 @@ public sealed partial class MainWindow : Window
     public TrayMenuStatus GetTrayMenuStatus()
     {
         var observation = _displayedObservation;
-        var hasCurrentTrack = !_isClosed
-            && (observation?.PlaybackState is PlayState.Playing or PlayState.Paused)
-            && !string.IsNullOrWhiteSpace(_displayedPlayId)
-            && !string.IsNullOrWhiteSpace(observation?.Artist)
+        var hasActivePlayback = !_isClosed
+            && (observation?.PlaybackState is PlayState.Playing or PlayState.Paused);
+        var hasTrackMetadata = !string.IsNullOrWhiteSpace(observation?.Artist)
             && !string.IsNullOrWhiteSpace(observation?.Title);
-        var savedLoveState = string.IsNullOrWhiteSpace(observation?.Artist)
-            || string.IsNullOrWhiteSpace(observation?.Title)
-            || string.IsNullOrWhiteSpace(_lastFmAccountId)
+        var hasCurrentPlay = hasActivePlayback && hasTrackMetadata
+            && !string.IsNullOrWhiteSpace(_displayedPlayId);
+        var savedLoveState = !hasActivePlayback || !hasTrackMetadata || string.IsNullOrWhiteSpace(_lastFmAccountId)
             ? null
             : _lovedTrackRecords.FirstOrDefault(track =>
                 string.Equals(track.AccountId, _lastFmAccountId, StringComparison.Ordinal)
-                && string.Equals(track.Artist?.Trim(), observation.Artist.Trim(), StringComparison.OrdinalIgnoreCase)
-                && string.Equals(track.Title?.Trim(), observation.Title.Trim(), StringComparison.OrdinalIgnoreCase));
+                && string.Equals(track.Artist?.Trim(), observation!.Artist!.Trim(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(track.Title?.Trim(), observation.Title!.Trim(), StringComparison.OrdinalIgnoreCase));
         var loveIntent = _currentTrackLoveIntent ?? savedLoveState?.RequestedAction;
         var loveActionState = savedLoveState?.RequestedAction == loveIntent
             ? savedLoveState?.State
@@ -717,10 +716,10 @@ public sealed partial class MainWindow : Window
             _trackingMode.IsEnabled,
             _isLastFmConnected,
             _lastFmUserName,
-            hasCurrentTrack ? observation?.PlaybackState : null,
-            hasCurrentTrack ? _displayedPlayId : null,
-            hasCurrentTrack ? observation?.Artist : null,
-            hasCurrentTrack ? observation?.Title : null,
+            hasActivePlayback ? observation?.PlaybackState : null,
+            hasCurrentPlay ? _displayedPlayId : null,
+            hasActivePlayback ? observation?.Artist : null,
+            hasActivePlayback ? observation?.Title : null,
             loveIntent,
             loveActionState,
             _trayLovedActionInProgress,
