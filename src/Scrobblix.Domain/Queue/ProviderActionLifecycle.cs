@@ -75,5 +75,7 @@ public sealed class ProviderActionLifecycle
         or ProviderActionState.ProviderIgnored
         or ProviderActionState.RetryScheduled
         or ProviderActionState.AuthBlocked
-        or ProviderActionState.PermanentFailure;
+        or ProviderActionState.PermanentFailure
+        or ProviderActionState.SubmissionOutcomeUnknown
+        or ProviderActionState.RetryExhausted;
 }
