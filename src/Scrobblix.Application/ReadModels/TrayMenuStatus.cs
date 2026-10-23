@@ -112,9 +112,11 @@ public sealed record TrayMenuStatus(
         }
     }
 
-    public string LoveCommandLabel => CurrentLoveIntent == ProviderActionType.Love
-        ? "Unlove Track"
-        : "Love Track";
+    public string LoveCommandLabel => !HasCurrentTrack
+        ? "Love Track"
+        : CurrentLoveIntent == ProviderActionType.Love
+            ? "Unlove Track"
+            : "Love Track";
 
     public string TrackDetails => HasCurrentTrack
         ? $"{Artist!.Trim()} — {Title!.Trim()}"
