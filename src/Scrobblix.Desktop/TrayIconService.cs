@@ -188,6 +188,7 @@ internal sealed class TrayIconService : IDisposable
             if (queueMenu != IntPtr.Zero)
             {
                 AppendStatus(queueMenu, _window.TrayQueueStatusText);
+                AppendStatus(queueMenu, _window.TrayQueueDeliveryStatusText);
                 AppendStatus(queueMenu, _window.TrayRetryableFailedScrobblesText);
                 AppendSeparator(queueMenu);
                 var retryEnabled = _window.TrayCanRetryFailedScrobbles

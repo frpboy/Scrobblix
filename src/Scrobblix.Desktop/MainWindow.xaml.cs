@@ -87,7 +87,10 @@ public sealed partial class MainWindow : Window
         : $"Scrobble queue: {_queueSummary.PendingCount:N0} pending";
     public string TrayQueueStatusText => _queueSummary is null
         ? "Queue status unavailable"
-        : $"Pending {_queueSummary.PendingCount:N0} · In flight {_queueSummary.InFlightCount:N0} · Retry scheduled {_queueSummary.RetryScheduledCount:N0} · Failed {_queueSummary.PermanentFailureCount:N0} · Outcome unknown {_queueSummary.SubmissionOutcomeUnknownCount:N0}";
+        : $"Pending {_queueSummary.PendingCount:N0} · In flight {_queueSummary.InFlightCount:N0} · Completed {_queueSummary.AcceptedCount:N0}";
+    public string TrayQueueDeliveryStatusText => _queueSummary is null
+        ? "Delivery status unavailable"
+        : $"Retry scheduled {_queueSummary.RetryScheduledCount:N0} · Auth blocked {_queueSummary.AuthBlockedCount:N0} · Failed {_queueSummary.PermanentFailureCount:N0} · Outcome unknown {_queueSummary.SubmissionOutcomeUnknownCount:N0}";
     public string TrayRetryableFailedScrobblesText => _retryableFailedScrobbleCount is { } count
         ? $"Retryable failed scrobbles: {count:N0}"
         : "Retryable failed scrobbles: Unavailable";

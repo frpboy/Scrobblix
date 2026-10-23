@@ -149,6 +149,7 @@ for (const stateBinding of [
   "_window.TrayPendingQueueStatusText", "_window.TrayTrackingEnabled",
   "_window.TrayCanLoveCurrentTrack", "_window.TrayCanCopyCurrentTrackDetails",
   "_window.TrayCanRetryFailedScrobbles", "_window.TrayCanOpenLogFolder",
+  "_window.TrayQueueDeliveryStatusText",
 ]) {
   assert.ok(trayMain.includes(stateBinding), `Tray action/status is not bound to application state: ${stateBinding}`);
 }
@@ -160,6 +161,7 @@ assert.ok(trayMain.includes("Interlocked.Exchange(ref _retryingFailedScrobbles, 
 assert.ok(trayMain.includes("DestroyMenu(menu)") && trayMain.includes("PostMessage("), "Native context menu resources and focus handling must be cleaned up.");
 assert.ok(code.includes("public async Task RequestCurrentTrackLoveFromTrayAsync()") && code.includes("public void CopyTrackDetailsFromTray()"), "Current-track tray commands must call real application handlers.");
 assert.ok(code.includes("GetNextCurrentTrackLoveAction()") && code.includes("ProviderActionState.SubmissionOutcomeUnknown") && code.includes("confirmed by Last.fm"), "Love/Unlove must distinguish intent, uncertain outcomes, and confirmed provider acceptance.");
+assert.ok(code.includes("_queueSummary.AcceptedCount") && code.includes("_queueSummary.AuthBlockedCount"), "Tray queue status must distinguish completed and authentication-blocked actions.");
 assert.ok(code.includes("Clipboard.SetContent(package)") && code.includes('ReportTrayActionFailure("Copy Track Details"'), "Copy Track Details must use the clipboard and handle failures.");
 assert.ok(code.includes("public void OpenLogFolderFromTray()") && code.includes("UseShellExecute = true") && code.includes('ReportTrayActionFailure("Open Log Folder"'), "Log Folder must use the configured path and guard launch failures.");
 assert.ok(app.includes("_window?.MarkShutdownStarted();") && app.includes("TrayRetryFailedScrobblesRequested += async"), "Tray actions must be shutdown-aware and wired from the application composition root.");
