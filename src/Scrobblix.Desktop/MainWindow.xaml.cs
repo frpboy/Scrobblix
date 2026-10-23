@@ -36,6 +36,7 @@ public sealed partial class MainWindow : Window
     private global::Windows.UI.ViewManagement.AccessibilitySettings? _accessibilitySettings;
     private IReadOnlyList<RecentPlay> _historyRecords = Array.Empty<RecentPlay>();
     private IReadOnlyList<QueueActionSummary> _queueActions = Array.Empty<QueueActionSummary>();
+    private IReadOnlyList<LovedTrackSummary> _lovedTrackRecords = Array.Empty<LovedTrackSummary>();
     private PlayObservation? _displayedObservation;
     private PlaybackTrackingStatus? _displayedTrackingStatus;
 
@@ -698,6 +699,16 @@ public sealed partial class MainWindow : Window
             && !string.IsNullOrWhiteSpace(_displayedPlayId)
             && !string.IsNullOrWhiteSpace(observation?.Artist)
             && !string.IsNullOrWhiteSpace(observation?.Title);
+        var savedLoveState = string.IsNullOrWhiteSpace(observation?.Artist) || string.IsNullOrWhiteSpace(observation?.Title)
+            ? null
+            : _lovedTrackRecords.FirstOrDefault(track =>
+                string.Equals(track.Artist?.Trim(), observation.Artist.Trim(), StringComparison.OrdinalIgnoreCase)
+                && string.Equals(track.Title?.Trim(), observation.Title.Trim(), StringComparison.OrdinalIgnoreCase));
+        var loveIntent = _currentTrackLoveIntent ?? savedLoveState?.RequestedAction;
+        var loveActionState = savedLoveState?.RequestedAction == loveIntent
+            ? savedLoveState?.State
+            : null;
+
         return new TrayMenuStatus(
             _trackingMode.IsEnabled,
             _isLastFmConnected,
@@ -706,7 +717,8 @@ public sealed partial class MainWindow : Window
             hasCurrentTrack ? _displayedPlayId : null,
             hasCurrentTrack ? observation?.Artist : null,
             hasCurrentTrack ? observation?.Title : null,
-            _currentTrackLoveIntent,
+            loveIntent,
+            loveActionState,
             _trayLovedActionInProgress,
             _queueSummary?.PendingCount,
             _trayRetryableFailedScrobbleCount,
@@ -1405,6 +1417,7 @@ public sealed partial class MainWindow : Window
 
     public void SetLovedTracks(IReadOnlyList<LovedTrackSummary> tracks)
     {
+        _lovedTrackRecords = tracks;
         LovedTracksList.Children.Clear();
         LovedPageStatusText.Text = tracks.Count == 0
             ? "No Love/Unlove actions have been recorded by Scrobblix yet."
