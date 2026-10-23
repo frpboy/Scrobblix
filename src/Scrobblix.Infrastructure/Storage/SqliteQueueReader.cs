@@ -44,6 +44,48 @@ public sealed class SqliteQueueReader(string connectionString)
     }
 
 
+    /// <summary>
+    /// Returns only Last.fm scrobble actions that exhausted automatic retries and can be
+    /// explicitly retried by the user. Scheduled retries and ambiguous outcomes are excluded.
+    /// </summary>
+    public async Task<IReadOnlyList<QueueActionSummary>> GetRetryableFailedScrobblesAsync(CancellationToken cancellationToken)
+    {
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT a.action_id, a.play_id, a.provider, a.action_type, a.state, a.attempt_count,
+                   a.due_utc, a.last_reason_code, p.artist, p.title
+            FROM provider_actions a
+            LEFT JOIN plays p ON p.play_id = a.play_id
+            WHERE a.provider = $provider
+              AND a.action_type = $scrobble
+              AND a.state = $retryExhausted
+            ORDER BY a.updated_utc DESC, a.created_utc DESC, a.action_id DESC;
+            """;
+        command.Parameters.AddWithValue("$provider", "lastfm");
+        command.Parameters.AddWithValue("$scrobble", (int)ProviderActionType.Scrobble);
+        command.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+        var result = new List<QueueActionSummary>();
+        while (await reader.ReadAsync(cancellationToken))
+        {
+            result.Add(new QueueActionSummary(
+                reader.GetString(0),
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.GetString(2),
+                (ProviderActionType)reader.GetInt32(3),
+                (ProviderActionState)reader.GetInt32(4),
+                reader.GetInt32(5),
+                DateTimeOffset.Parse(reader.GetString(6), CultureInfo.InvariantCulture, DateTimeStyles.RoundtripKind),
+                reader.IsDBNull(7) ? null : reader.GetString(7),
+                reader.IsDBNull(8) ? null : reader.GetString(8),
+                reader.IsDBNull(9) ? null : reader.GetString(9)));
+        }
+
+        return result;
+    }
+
     public async Task<IReadOnlyList<LovedTrackSummary>> GetRecentLovedTracksAsync(int limit, CancellationToken cancellationToken)
     {
         ArgumentOutOfRangeException.ThrowIfLessThan(limit, 1);
@@ -102,7 +144,7 @@ public sealed class SqliteQueueReader(string connectionString)
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT a.action_id, a.play_id, a.provider, a.action_type, a.state, a.attempt_count,
-                   a.due_utc, a.last_reason_code, p.artist, p.title
+                   a.due_utc, a.last_reason_code, p.artist, p.title, a.account_id
             FROM provider_actions a
             LEFT JOIN plays p ON p.play_id = a.play_id
             ORDER BY a.updated_utc DESC, a.created_utc DESC, a.action_id DESC
@@ -123,10 +165,12 @@ public sealed class SqliteQueueReader(string connectionString)
                 DateTimeOffset.Parse(reader.GetString(6), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8),
-                reader.IsDBNull(9) ? null : reader.GetString(9)));
+                reader.IsDBNull(9) ? null : reader.GetString(9))
+            {
+                AccountId = reader.IsDBNull(10) ? null : reader.GetString(10),
+            });
         }
 
         return result;
     }
-
 }

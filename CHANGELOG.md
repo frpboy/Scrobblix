@@ -14,6 +14,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Added
 
+- Added a state-aware native Windows tray context menu with playback/tracking/account/queue status, current-track Love/Unlove and clipboard actions, queue navigation, safe failed-scrobble retry, Settings, Diagnostics, and log-folder access. Retry selection is limited to retry-exhausted Last.fm scrobbles; scheduled retries and unknown outcomes are excluded.
 - Added a tag-driven GitHub Preview Release workflow that reuses full CI, publishes the Windows test bundle and browser companion, attaches SHA-256 checksums, and keeps builds marked as prereleases until release-readiness gates are closed.
 - Documented preview release creation, download verification, tag naming, and current unsigned-distribution limitations.
 - Initial product, engineering, UI/UX, security, testing, operations, and AI-agent documentation baseline.

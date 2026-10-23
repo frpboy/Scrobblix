@@ -129,4 +129,60 @@ for (const cleanup of ["_singleInstanceActivationEvent?.Dispose();", "_singleIns
   assert.ok(app.includes(cleanup), `Missing deterministic cleanup: ${cleanup}`);
 }
 
+
+// State-aware system tray context-menu contracts.
+const trayMain = read("src/Scrobblix.Desktop/TrayIconService.cs");
+const queueReader = read("src/Scrobblix.Infrastructure/Storage/SqliteQueueReader.cs");
+const retryableScrobbleQuery = queueReader.slice(
+  queueReader.indexOf("GetRetryableFailedScrobblesAsync"),
+  queueReader.indexOf("GetRecentLovedTracksAsync"),
+);
+const manualMatrix = read("Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md");
+const trayImplementationDoc = read("docs/TRAY_CONTEXT_MENU_IMPLEMENTATION.md");
+const actionStore = read("src/Scrobblix.Infrastructure/Storage/SqliteProviderActionStore.cs");
+const queueActionSummary = read("src/Scrobblix.Application/ReadModels/QueueActionSummary.cs");
+
+for (const label of [
+  "Scrobblix — Running", "Open Scrobblix", "Pause Tracking", "Resume Tracking",
+  "Current Track", "Love Track", "Unlove Track", "Copy Track Details",
+  "Scrobble Queue", "Retry Failed Scrobbles", "Open Queue",
+  "Open Settings", "Open Diagnostics", "Open Log Folder", "Exit Scrobblix",
+]) {
+  assert.ok((trayMain + "\n" + code).includes(label), `Tray context menu entry missing: ${label}`);
+}
+for (const stateBinding of [
+  "_window.TrayLastFmStatusText", "_window.TrayPlaybackStatusText",
+  "_window.TrayPendingQueueStatusText", "_window.TrayTrackingEnabled",
+  "_window.TrayCanLoveCurrentTrack", "_window.TrayCanCopyCurrentTrackDetails",
+  "_window.TrayCanRetryFailedScrobbles", "_window.TrayCanOpenLogFolder",
+  "_window.TrayQueueDeliveryStatusText",
+]) {
+  assert.ok(trayMain.includes(stateBinding), `Tray action/status is not bound to application state: ${stateBinding}`);
+}
+assert.ok(trayMain.includes("MfString | MfGrayed | MfDisabled"), "Tray status lines must be non-actionable.");
+assert.ok(trayMain.includes("case OpenCommand:") && trayMain.includes("RestoreWindow();"), "Open must restore the existing window.");
+assert.ok(trayMain.includes('NavigateAndRestore("queue")') && trayMain.includes('NavigateAndRestore("settings")') && trayMain.includes('NavigateAndRestore("diagnostics")'), "Tray navigation must activate the existing window and navigate to each existing page.");
+assert.ok(trayMain.includes("case ExitCommand:") && trayMain.includes("_window.Close();"), "Exit must use the existing close/shutdown path.");
+assert.ok(trayMain.includes("Interlocked.Exchange(ref _retryingFailedScrobbles, 1)"), "Tray queue retry needs a duplicate-operation guard.");
+assert.ok(trayMain.includes("DestroyMenu(menu)") && trayMain.includes("PostMessage("), "Native context menu resources and focus handling must be cleaned up.");
+assert.ok(code.includes("public async Task RequestCurrentTrackLoveFromTrayAsync()") && code.includes("public void CopyTrackDetailsFromTray()"), "Current-track tray commands must call real application handlers.");
+assert.ok(code.includes("GetNextCurrentTrackLoveAction()") && code.includes("ProviderActionState.SubmissionOutcomeUnknown") && code.includes("confirmed by Last.fm"), "Love/Unlove must distinguish intent, uncertain outcomes, and confirmed provider acceptance.");
+assert.ok(code.includes("_queueSummary.AcceptedCount") && code.includes("_queueSummary.AuthBlockedCount"), "Tray queue status must distinguish completed and authentication-blocked actions.");
+assert.ok(code.includes("Clipboard.SetContent(package)") && code.includes('ReportTrayActionFailure("Copy Track Details"'), "Copy Track Details must use the clipboard and handle failures.");
+assert.ok(code.includes("public void OpenLogFolderFromTray()") && code.includes("UseShellExecute = true") && code.includes('ReportTrayActionFailure("Open Log Folder"'), "Log Folder must use the configured path and guard launch failures.");
+assert.ok(app.includes("_window?.MarkShutdownStarted();") && app.includes("TrayRetryFailedScrobblesRequested += async"), "Tray actions must be shutdown-aware and wired from the application composition root.");
+assert.ok(app.includes("_window.SetTrackingToggleReady();") && code.includes("private bool _trackingToggleReady;") && code.includes("!_trackingToggleReady"), "Tracking controls must stay disabled until startup has installed and started the tracking listeners.");
+assert.ok(trayMain.includes("_window.TrayCanToggleTracking") && trayMain.includes("case ToggleTrackingCommand:"), "The tray tracking toggle must be disabled during startup and invoke the existing state transition.");
+assert.ok(app.includes("RetryExhaustedNowAsync(") && actionStore.includes("AND state = $retryExhausted") && actionStore.includes("AND action_type = $scrobble") && actionStore.includes("AND provider = $provider"), "Tray retries must atomically recheck state, action type, and provider at mutation time.");
+assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry refuses a stale retry-exhausted candidate"), "The retry race regression test must remain covered.");
+assert.ok(queueActionSummary.includes("public string? AccountId { get; init; }") && queueReader.includes("a.account_id"), "The recent queue read model must carry provider account identity.");
+assert.ok(code.includes("_lastFmAccountId") && code.includes("string.Equals(action.AccountId, _lastFmAccountId, StringComparison.Ordinal)") && app.includes("SetLastFmConnected(account.UserName, account.AccountId)"), "Current-track Love/Unlove state must be scoped to the actual connected Last.fm account.");
+assert.ok(queueReader.includes('command.Parameters.AddWithValue("$provider", "lastfm")') && queueReader.includes("a.action_type = $scrobble") && queueReader.includes("a.state = $retryExhausted"), "Tray retry read model must select only retry-exhausted Last.fm scrobbles.");
+assert.ok(!retryableScrobbleQuery.includes("state IN ($retryScheduled") && !retryableScrobbleQuery.includes("state = $outcomeUnknown"), "Tray retry read model must not include scheduled or ambiguous-outcome actions.");
+assert.ok(read("tests/Scrobblix.Domain.Tests/Program.cs").includes("Tray retry candidates include only exhausted Last.fm scrobbles"), "The durable queue eligibility regression assertion must remain in the test executable.");
+for (const testId of ["TRAY-01", "TRAY-02", "TRAY-03", "TRAY-04", "TRAY-05", "TRAY-06", "TRAY-07", "TRAY-08", "TRAY-09"]) {
+  assert.ok(manualMatrix.includes(`| ${testId} |`), `Windows tray manual test missing: ${testId}`);
+}
+assert.ok(trayImplementationDoc.includes("Manual Windows acceptance: **NOT RUN**"), "Documentation must not imply real Windows acceptance has run.");
+
 console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");

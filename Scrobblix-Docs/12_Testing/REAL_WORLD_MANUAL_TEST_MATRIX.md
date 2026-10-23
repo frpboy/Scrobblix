@@ -147,3 +147,20 @@ Run separately for Chrome and Edge with distinct actual extension IDs, then Fire
 | Signed install/upgrade/rollback/uninstall | NOT RUN | |
 
 **No-go rule:** a failed P0 case or unexplained mismatch between qualifying local plays and Last.fm history blocks private beta until the defect is fixed or an explicit, documented mitigation is approved.
+
+
+## H. Windows system tray quick controls
+
+**Manual status:** NOT RUN for every row below until executed on a real Windows desktop. Record the exact installed candidate SHA, Windows build, local timestamp/timezone, and sanitized evidence in the run header. Automated CI is not a substitute for these tests.
+
+| ID | Scenario and steps | Expected result | Result | Evidence / defect |
+|---|---|---|---|---|
+| TRAY-01 | Open the context menu before playback and with the database ready/unavailable. | Status items show Nothing playing and truthful queue availability; unavailable counts are not replaced by zero. | NOT RUN | |
+| TRAY-02 | Connect/disconnect Last.fm and open the menu after each transition. | Account status and Love/Unlove availability reflect the actual connected account; no placeholder username is shown. | NOT RUN | |
+| TRAY-03 | Play, pause, change, and stop a track; include late metadata and long artist/title strings. | Playing/paused/empty states update on the next menu open, strings are truncated for display, and Copy Track Details preserves useful plain text. | NOT RUN | |
+| TRAY-04 | Pause/resume tracking using the menu while a track and eligible queue entry are active. | The label follows authoritative tracking state; existing history and queue entries remain intact. | NOT RUN | |
+| TRAY-05 | Love and Unlove a track using an authorized test account; induce provider/network failure. | The existing queue/provider workflow is used; queued, retrying, accepted, failed, and uncertain states are not conflated; rapid repeated actions do not create duplicate requests. | NOT RUN | |
+| TRAY-06 | Seed a retry-exhausted Last.fm scrobble, a scheduled retry, an unknown outcome, an accepted scrobble, and a failed Love action. | Retry Failed Scrobbles is enabled only for eligible retry-exhausted scrobbles; scheduled, accepted, unknown-outcome, Love/Unlove, and other-provider actions are not retried by this command. | NOT RUN | |
+| TRAY-07 | Open Queue, Settings, Diagnostics, and Log Folder from the menu. | Existing window is restored and navigated; Explorer opens only the configured current log directory; missing folder/launch errors do not crash the app. | NOT RUN | |
+| TRAY-08 | Open a second launch while the window is minimized/hidden, exit from the menu, and relaunch. | The existing single instance activates; Exit uses the normal shutdown path; listeners/tray resources are cleaned up and a fresh launch works. | NOT RUN | |
+| TRAY-09 | Close the menu during shutdown, open it during startup/database unavailability, and trigger clipboard/Explorer failures where feasible. | No disposed-resource access or UI-thread blocking; unsupported actions are disabled and errors are handled safely. | NOT RUN | |

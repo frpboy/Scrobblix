@@ -681,6 +681,117 @@ Assert(queueActions.Count >= 2
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
 
+var trayQueueTestDatabasePath = Path.Combine(Path.GetTempPath(), $"scrobblix-tray-queue-{Guid.NewGuid():N}.db");
+var trayQueueTestConnectionString = $"Data Source={trayQueueTestDatabasePath}";
+try
+{
+    await new SqliteDatabase(trayQueueTestConnectionString).InitializeAsync(CancellationToken.None);
+    var trayQueueEligibleStore = new SqliteEligiblePlayStore(trayQueueTestConnectionString);
+    var trayQueueCases = new[]
+    {
+        (PlayId: "tray-failed-scrobble", Provider: "lastfm"),
+        (PlayId: "tray-accepted-scrobble", Provider: "lastfm"),
+        (PlayId: "tray-unknown-outcome", Provider: "lastfm"),
+        (PlayId: "tray-failed-love", Provider: "lastfm"),
+        (PlayId: "tray-scheduled-scrobble", Provider: "lastfm"),
+        (PlayId: "tray-other-provider", Provider: "other-provider"),
+    };
+    foreach (var testCase in trayQueueCases)
+    {
+        var trayRecord = historyRecord with { PlayId = testCase.PlayId };
+        Assert(await trayQueueEligibleStore.TryPersistAndQueueAsync(
+            trayRecord, testCase.Provider, "tray-test-account", DateTimeOffset.UtcNow, CancellationToken.None),
+            $"The isolated tray queue fixture {testCase.PlayId} is persisted.");
+    }
+
+    await using (var trayQueueConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await trayQueueConnection.OpenAsync(CancellationToken.None);
+        await using var trayQueueUpdate = trayQueueConnection.CreateCommand();
+        trayQueueUpdate.CommandText = """
+            UPDATE provider_actions
+            SET action_type = CASE WHEN play_id = $lovePlay THEN $love ELSE action_type END,
+                state = CASE
+                    WHEN play_id = $failedPlay THEN $retryExhausted
+                    WHEN play_id = $acceptedPlay THEN $accepted
+                    WHEN play_id = $unknownPlay THEN $outcomeUnknown
+                    WHEN play_id = $lovePlay THEN $retryExhausted
+                    WHEN play_id = $scheduledPlay THEN $retryScheduled
+                    WHEN play_id = $otherProviderPlay THEN $retryExhausted
+                    ELSE state
+                END
+            WHERE play_id IN ($failedPlay, $acceptedPlay, $unknownPlay, $lovePlay, $scheduledPlay, $otherProviderPlay);
+            """;
+        trayQueueUpdate.Parameters.AddWithValue("$failedPlay", "tray-failed-scrobble");
+        trayQueueUpdate.Parameters.AddWithValue("$acceptedPlay", "tray-accepted-scrobble");
+        trayQueueUpdate.Parameters.AddWithValue("$unknownPlay", "tray-unknown-outcome");
+        trayQueueUpdate.Parameters.AddWithValue("$lovePlay", "tray-failed-love");
+        trayQueueUpdate.Parameters.AddWithValue("$scheduledPlay", "tray-scheduled-scrobble");
+        trayQueueUpdate.Parameters.AddWithValue("$otherProviderPlay", "tray-other-provider");
+        trayQueueUpdate.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        trayQueueUpdate.Parameters.AddWithValue("$accepted", (int)ProviderActionState.Accepted);
+        trayQueueUpdate.Parameters.AddWithValue("$outcomeUnknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        trayQueueUpdate.Parameters.AddWithValue("$retryScheduled", (int)ProviderActionState.RetryScheduled);
+        trayQueueUpdate.Parameters.AddWithValue("$love", (int)ProviderActionType.Love);
+        Assert(await trayQueueUpdate.ExecuteNonQueryAsync(CancellationToken.None) == 6,
+            "Tray queue fixtures cover retry-exhausted scrobbles, accepted outcomes, unknown outcomes, Love actions, scheduled retries, and another provider.");
+    }
+
+    var trayRetryCandidates = await new SqliteQueueReader(trayQueueTestConnectionString)
+        .GetRetryableFailedScrobblesAsync(CancellationToken.None);
+    Assert(trayRetryCandidates.Count == 1
+        && trayRetryCandidates[0].PlayId == "tray-failed-scrobble"
+        && trayRetryCandidates[0].ActionType == ProviderActionType.Scrobble
+        && trayRetryCandidates[0].State == ProviderActionState.RetryExhausted
+        && trayRetryCandidates[0].Provider == "lastfm",
+        "Tray retry candidates include only exhausted Last.fm scrobbles, excluding accepted, uncertain, scheduled, Love/Unlove, and other-provider actions.");
+
+    var candidateAction = trayRetryCandidates[0];
+    var conditionalRetryStore = new SqliteProviderActionStore(trayQueueTestConnectionString);
+    await using (var retryRaceConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await retryRaceConnection.OpenAsync(CancellationToken.None);
+        await using var becomeUncertain = retryRaceConnection.CreateCommand();
+        becomeUncertain.CommandText = "UPDATE provider_actions SET state = $unknown WHERE action_id = $actionId;";
+        becomeUncertain.Parameters.AddWithValue("$unknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
+        becomeUncertain.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(await becomeUncertain.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            "The queued candidate can change to an ambiguous outcome between list and action.");
+    }
+
+    Assert(!await conditionalRetryStore.RetryExhaustedNowAsync(candidateAction.ActionId, DateTimeOffset.UtcNow, CancellationToken.None),
+        "Tray retry refuses a stale retry-exhausted candidate once the provider outcome becomes unknown.");
+    await using (var retryStateConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await retryStateConnection.OpenAsync(CancellationToken.None);
+        await using var restoreRetryExhausted = retryStateConnection.CreateCommand();
+        restoreRetryExhausted.CommandText = "UPDATE provider_actions SET state = $retryExhausted WHERE action_id = $actionId;";
+        restoreRetryExhausted.Parameters.AddWithValue("$retryExhausted", (int)ProviderActionState.RetryExhausted);
+        restoreRetryExhausted.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(await restoreRetryExhausted.ExecuteNonQueryAsync(CancellationToken.None) == 1,
+            "The deterministic fixture can restore its retry-exhausted candidate after testing the race.");
+    }
+
+    Assert(await conditionalRetryStore.RetryExhaustedNowAsync(candidateAction.ActionId, DateTimeOffset.UtcNow, CancellationToken.None),
+        "A still-retry-exhausted Last.fm scrobble can be explicitly retried.");
+    await using (var finalRetryStateConnection = new SqliteConnection(trayQueueTestConnectionString))
+    {
+        await finalRetryStateConnection.OpenAsync(CancellationToken.None);
+        await using var finalState = finalRetryStateConnection.CreateCommand();
+        finalState.CommandText = "SELECT state FROM provider_actions WHERE action_id = $actionId;";
+        finalState.Parameters.AddWithValue("$actionId", candidateAction.ActionId);
+        Assert(Convert.ToInt32(await finalState.ExecuteScalarAsync(CancellationToken.None), CultureInfo.InvariantCulture) == (int)ProviderActionState.Pending,
+            "Successful tray retry only transitions the still-eligible action to pending.");
+    }
+}
+finally
+{
+    foreach (var file in new[] { trayQueueTestDatabasePath, trayQueueTestDatabasePath + "-wal", trayQueueTestDatabasePath + "-shm" })
+    {
+        if (File.Exists(file)) File.Delete(file);
+    }
+}
+
 var unknownQueuePlay = retryRecord with { PlayId = "play-outcome-unknown" };
 Assert(await eligiblePlayStore.TryPersistAndQueueAsync(unknownQueuePlay, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None),
     "An additional eligible action is persisted for the unknown-outcome queue test.");
