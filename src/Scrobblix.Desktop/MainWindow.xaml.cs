@@ -675,6 +675,7 @@ public sealed partial class MainWindow : Window
     {
         var observation = _displayedObservation;
         var hasCurrentTrack = !_isClosed
+            && (observation?.PlaybackState is PlayState.Playing or PlayState.Paused)
             && !string.IsNullOrWhiteSpace(_displayedPlayId)
             && !string.IsNullOrWhiteSpace(observation?.Artist)
             && !string.IsNullOrWhiteSpace(observation?.Title);
@@ -682,10 +683,10 @@ public sealed partial class MainWindow : Window
             _trackingMode.IsEnabled,
             _isLastFmConnected,
             _lastFmUserName,
-            observation?.PlaybackState == PlayState.Playing,
+            hasCurrentTrack ? observation?.PlaybackState : null,
             hasCurrentTrack ? _displayedPlayId : null,
-            observation?.Artist,
-            observation?.Title,
+            hasCurrentTrack ? observation?.Artist : null,
+            hasCurrentTrack ? observation?.Title : null,
             _currentTrackLoveIntent,
             _trayLovedActionInProgress,
             _queueSummary?.PendingCount,
