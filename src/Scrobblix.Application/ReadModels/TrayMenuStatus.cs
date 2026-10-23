@@ -88,7 +88,8 @@ public sealed record TrayMenuStatus(
     {
         get
         {
-            if (!HasCurrentTrack) return "Current track: metadata unavailable";
+            if (!HasActiveTrack) return "No current track";
+            if (!HasTrackMetadata) return "Current track metadata unavailable";
             if (!LastFmConnected) return "Connect Last.fm to manage this track";
             if (LoveActionInProgress) return "Love action in progress";
 
