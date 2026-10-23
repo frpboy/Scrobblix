@@ -91,6 +91,25 @@ public sealed partial class MainWindow : Window
             _isClosed = true;
             if (_accessibilitySettings is not null)
                 _accessibilitySettings.HighContrastChanged -= AccessibilitySettings_HighContrastChanged;
+
+            // Release App-owned event closures on shutdown. In-flight handlers already hold
+            // their delegates and observe the application's cancelled token.
+            TrackingModeChanged = null;
+            ConnectLastFmRequested = null;
+            CompleteLastFmRequested = null;
+            DisconnectLastFmRequested = null;
+            LastFmApiCredentialsSaveRequested = null;
+            DiagnosticLogRequested = null;
+            QueueRetryNowRequested = null;
+            TrayRetryFailedScrobblesRequested = null;
+            QueueCancelRequested = null;
+            QueueConfirmOutcomeAcceptedRequested = null;
+            LovedTrackActionRequested = null;
+            BackupRequested = null;
+            RestoreRequested = null;
+            DesktopNotificationsPreferenceChanged = null;
+            NotificationTrackDetailsPreferenceChanged = null;
+            NavigationCompactPreferenceChanged = null;
         };
         var placeholderPath = Path.Combine(AppContext.BaseDirectory, "Assets", "music-placeholder.svg");
         if (File.Exists(placeholderPath))
@@ -693,6 +712,12 @@ public sealed partial class MainWindow : Window
             _trayRetryableFailedScrobbleCount,
             _trayQueueRetryInProgress,
             _isClosed);
+    }
+
+    public void ReportTrayFailure(string operation, Exception exception)
+    {
+        DiagnosticLogRequested?.Invoke(
+            $"Tray {operation} failed; exception={exception.GetType().Name}; hresult={exception.HResult}.");
     }
 
     public void NavigateFromTray(string destination)
