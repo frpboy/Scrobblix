@@ -297,10 +297,19 @@ public sealed partial class MainWindow : Window
 
     public void SetCurrentPlayback(PlayObservation observation, PlaybackTrackingStatus trackingStatus)
     {
-        if (!string.Equals(_displayedPlayId, trackingStatus.PlayId, StringComparison.Ordinal))
+        var samePlay = !string.IsNullOrWhiteSpace(trackingStatus.PlayId)
+            && string.Equals(_displayedPlayId, trackingStatus.PlayId, StringComparison.Ordinal);
+        if (!samePlay)
         {
             _currentTrackLoveIntent = null;
         }
+        else if (_displayedObservation is { } previousObservation)
+        {
+            // GSMTC polls every two seconds. Keep enriched cover art and provider metadata when
+            // a later poll contains only the raw session properties (often no thumbnail).
+            observation = MergeTrackMetadataForSamePlay(observation, previousObservation);
+        }
+
         _displayedPlayId = trackingStatus.PlayId;
         _displayedObservation = observation;
         _displayedTrackingStatus = trackingStatus;
@@ -351,8 +360,56 @@ public sealed partial class MainWindow : Window
             ArtworkPath = metadata.ArtworkPath ?? observation.ArtworkPath,
             ArtworkSource = metadata.ArtworkSource ?? observation.ArtworkSource,
         };
-        CurrentTrackDetail.Text = BuildTrackDetail(enrichedObservation);
-        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, enrichedObservation.ArtworkPath);
+        // Enrichment can finish between polls. Retain its strongest artwork and metadata in the
+        // displayed observation so the next raw poll does not immediately erase the result.
+        var displayedObservation = MergeTrackMetadataForSamePlay(enrichedObservation, _displayedObservation ?? observation);
+        _displayedObservation = displayedObservation;
+        CurrentTrackDetail.Text = BuildTrackDetail(displayedObservation);
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, displayedObservation.ArtworkPath);
+    }
+
+    private static PlayObservation MergeTrackMetadataForSamePlay(PlayObservation current, PlayObservation previous)
+    {
+        var (artworkPath, artworkSource) = ChooseArtworkForSamePlay(current, previous);
+        return current with
+        {
+            Artist = current.Artist ?? previous.Artist,
+            Title = current.Title ?? previous.Title,
+            Album = current.Album ?? previous.Album,
+            AlbumArtist = current.AlbumArtist ?? previous.AlbumArtist,
+            DurationMilliseconds = current.DurationMilliseconds ?? previous.DurationMilliseconds,
+            TrackNumber = current.TrackNumber ?? previous.TrackNumber,
+            ReleaseYear = current.ReleaseYear ?? previous.ReleaseYear,
+            RecordingMusicBrainzId = current.RecordingMusicBrainzId ?? previous.RecordingMusicBrainzId,
+            ReleaseMusicBrainzId = current.ReleaseMusicBrainzId ?? previous.ReleaseMusicBrainzId,
+            ArtworkPath = artworkPath,
+            ArtworkSource = artworkSource,
+            ArtworkUrl = current.ArtworkUrl ?? previous.ArtworkUrl,
+            NormalizedArtist = current.NormalizedArtist ?? previous.NormalizedArtist,
+            NormalizedTitle = current.NormalizedTitle ?? previous.NormalizedTitle,
+        };
+    }
+
+    private static (string? Path, string? Source) ChooseArtworkForSamePlay(PlayObservation current, PlayObservation previous)
+    {
+        var currentHasFile = !string.IsNullOrWhiteSpace(current.ArtworkPath) && File.Exists(current.ArtworkPath);
+        var previousHasFile = !string.IsNullOrWhiteSpace(previous.ArtworkPath) && File.Exists(previous.ArtworkPath);
+        var currentIsGsmTcThumbnail = string.Equals(current.ArtworkSource, "windows-gsmtc", StringComparison.OrdinalIgnoreCase);
+        var previousIsGsmTcThumbnail = string.Equals(previous.ArtworkSource, "windows-gsmtc", StringComparison.OrdinalIgnoreCase);
+
+        // Prefer a provider-fetched cover over the often lower-quality or missing GSMTC thumbnail.
+        // Keep a source thumbnail as a fallback when there is no better, existing file.
+        if (currentHasFile && (!currentIsGsmTcThumbnail || !previousHasFile || previousIsGsmTcThumbnail))
+        {
+            return (current.ArtworkPath, current.ArtworkSource);
+        }
+
+        if (previousHasFile)
+        {
+            return (previous.ArtworkPath, previous.ArtworkSource);
+        }
+
+        return (current.ArtworkPath, current.ArtworkSource);
     }
 
     private static string BuildTrackDetail(PlayObservation observation)
@@ -379,14 +436,12 @@ public sealed partial class MainWindow : Window
 
     private void SetArtwork(Image image, Image fallback, string? artworkPath)
     {
-        // Clear stale artwork and leave the fallback visible until the bitmap has decoded.
         image.Tag = fallback;
-        image.Source = null;
-        image.Visibility = Visibility.Collapsed;
-        fallback.Visibility = Visibility.Visible;
-
         if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
         {
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
             if (!string.IsNullOrWhiteSpace(artworkPath))
             {
                 DiagnosticLogRequested?.Invoke($"Artwork cache path was missing: {Path.GetFileName(artworkPath)}");
@@ -396,6 +451,19 @@ public sealed partial class MainWindow : Window
 
         try
         {
+            var fullPath = Path.GetFullPath(artworkPath);
+            // Polling should not restart the decoder for the exact same local cover every two seconds.
+            if (image.Source is BitmapImage currentBitmap
+                && currentBitmap.UriSource is { IsFile: true } currentUri
+                && string.Equals(currentUri.LocalPath, fullPath, StringComparison.OrdinalIgnoreCase)
+                && image.Visibility == Visibility.Visible)
+            {
+                return;
+            }
+
+            image.Source = null;
+            image.Visibility = Visibility.Collapsed;
+            fallback.Visibility = Visibility.Visible;
             image.ImageFailed -= ArtworkImageFailed;
             image.ImageOpened -= ArtworkImageOpened;
             image.ImageFailed += ArtworkImageFailed;
@@ -403,10 +471,11 @@ public sealed partial class MainWindow : Window
             var bitmap = new BitmapImage
             {
                 DecodePixelWidth = Math.Max(128, (int)Math.Ceiling(image.ActualWidth > 0 ? image.ActualWidth * 2 : image.Width * 2)),
-                UriSource = new Uri(Path.GetFullPath(artworkPath), UriKind.Absolute),
+                UriSource = new Uri(fullPath, UriKind.Absolute),
             };
+            // Keep the image element visible while loading; the fallback remains in front until ImageOpened.
+            image.Visibility = Visibility.Visible;
             image.Source = bitmap;
-            // ArtworkImageOpened hides the fallback after a successful decode.
         }
         catch (Exception exception) when (exception is UriFormatException or ArgumentException or IOException or UnauthorizedAccessException)
         {
