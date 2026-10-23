@@ -4,7 +4,7 @@
 > Repository: https://github.com/frpboy/Scrobblix  
 > Audit-start SHA: `0436ed83762971ef75dae5be1ffd15bab7e1eae5`  
 > Current main SHA: `d27d06d809d59b1ca17e81a29019fc44be700b90`  
-> Current main CI: [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) — **IN PROGRESS on the exact SHA above; do not claim pass until completion**  
+> Current main CI: [run 39903649228](https://github.com/frpboy/Scrobblix/actions/runs/39903649228) — **PASSED on the exact SHA above**  
 > Working branch: `docs/reconcile-current-main-final`  
 > Audit state: source remediation through PR #40 is merged; audit/release documents are being refreshed on this branch.  
 > Release recommendation: **Not ready for private beta** until issue #17's real-world qualification evidence is recorded.
