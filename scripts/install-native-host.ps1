@@ -177,6 +177,10 @@ Write-Host 'Restart any registered browser completely before testing the compani
 
     New-Item -Path $trustPath -Force | Out-Null
     Set-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds' -Value ($mergedChromiumIds -join ';') -Type String
+    $registeredIds = @(((Get-ItemProperty -LiteralPath $trustPath -Name 'AllowedChromeExtensionIds').AllowedChromeExtensionIds) -split '[;,\r\n]' | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    if (@($registeredIds | Select-Object -Unique).Count -ne $mergedChromiumIds.Count) {
+        throw 'Chromium extension allow-list could not be verified after registration.'
+    }
     Write-Host "Chromium extension IDs allow-listed: $($mergedChromiumIds -join ', ')"
 }
 
