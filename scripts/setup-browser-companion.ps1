@@ -30,18 +30,6 @@ if ($RegisterOnly -and $Browser -eq 'BuildOnly') {
 if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
     throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
 }
-if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
-    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
-}
-if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
-    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
-}
-if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
-    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
-}
-if (-not $RegisterOnly -and $Browser -ne 'BuildOnly') {
-    throw 'Build/package and registration are separate steps. Run BuildOnly first, then rerun with -RegisterOnly and the target browser.'
-}
 if ($Browser -in @('Chrome', 'Edge', 'ChromeAndEdge') -and @($ExtensionId).Count -eq 0) {
     throw 'Build the package first, load the unpacked extension from artifacts\Scrobblix\BrowserCompanion\chromium, copy its real ID from the browser, then rerun with -RegisterOnly -Browser Chrome/Edge/ChromeAndEdge -ExtensionId <ID>.'
 }
@@ -58,11 +46,7 @@ try {
             throw 'Run this script from a Scrobblix source clone; browser-extension/package.json was not found.'
         }
 
-        # Only replace generated package outputs during an explicit build. Registration-only
-        # never rebuilds/deletes them, so browser IDs and installed manifest paths remain stable.
-        # BuildOnly replaces generated package artifacts. Registration is kept in a separate
-        # invocation so it never destroys or silently rebuilds a loaded extension's package.
-        # BuildOnly may replace generated package artifacts. Registration is a separate
+        # BuildOnly replaces generated package artifacts. Registration-only is a separate
         # invocation and never rebuilds or deletes the currently loaded extension package.
         if (Test-Path -LiteralPath $packageRoot) {
             Remove-Item -LiteralPath $packageRoot -Recurse -Force
