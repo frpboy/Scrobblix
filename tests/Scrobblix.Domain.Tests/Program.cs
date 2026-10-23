@@ -943,7 +943,8 @@ var gapSecondStatus = await sourceGapTracker.ObserveAsync(gapSecondObservation, 
 var unavailableTransition = await sourceGapTracker.ObserveSourceUnavailableAsync("gsmtc", CancellationToken.None);
 Assert(gapFirstStatus.DidStartPlay
     && gapSecondStatus.ConfirmedPlayedMilliseconds == 10_000
-    && unavailableTransition is { Observation.PlaybackState: PlayState.Unknown }
+    && unavailableTransition.HasValue
+    && unavailableTransition.Value.Observation.PlaybackState == PlayState.Unknown
     && unavailableTransition.Value.Status.ConfirmedPlayedMilliseconds == 10_000,
     "A missing GSMTC session stops confirmed-time accrual at the last positive sample.");
 var resumedAfterGap = gapSecondObservation with
