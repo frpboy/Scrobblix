@@ -26,9 +26,10 @@ public sealed class SqlitePlaybackObservationStore(string connectionString) : IP
             """;
         command.Parameters.AddWithValue("$id", Guid.NewGuid().ToString("N"));
         command.Parameters.AddWithValue("$sourceInstanceId", observation.SourceEventKey.SourceInstanceId);
-        command.Parameters.AddWithValue("$sessionId", (object?)observation.SourceEventKey.SessionId ?? DBNull.Value);
+        // SQLite UNIQUE constraints treat NULL as distinct, so canonicalize absent key components at the persistence boundary.
+        command.Parameters.AddWithValue("$sessionId", observation.SourceEventKey.SessionId ?? string.Empty);
         command.Parameters.AddWithValue("$sequenceNumber", observation.SourceEventKey.SequenceNumber);
-        command.Parameters.AddWithValue("$eventId", (object?)observation.SourceEventKey.EventId ?? DBNull.Value);
+        command.Parameters.AddWithValue("$eventId", observation.SourceEventKey.EventId ?? string.Empty);
         command.Parameters.AddWithValue("$capturedUtc", observation.CapturedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$observedUtc", observation.ObservedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
         command.Parameters.AddWithValue("$sourceName", observation.SourceName);

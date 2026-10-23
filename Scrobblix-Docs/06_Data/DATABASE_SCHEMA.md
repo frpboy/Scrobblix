@@ -32,7 +32,7 @@ Credential reference names may be stored; secret values may not.
 
 ### `playback_observations`
 
-`observation_id`, `source_instance_id`, source session/tab key, sequence, captured UTC, monotonic tick snapshot, raw/normalized artist/title/album, duration, position, playback state, artwork reference, chosen-by-user hint, metadata completeness, payload version, canonical play link. Retention may purge these before canonical history.
+`observation_id`, `source_instance_id`, source session/tab key, sequence, captured UTC, monotonic tick snapshot, raw/normalized artist/title/album, duration, position, playback state, artwork reference, chosen-by-user hint, metadata completeness, payload version, canonical play link. The source-event identity is `(source_instance_id, session_id, sequence_number, event_id)`. Because SQLite UNIQUE constraints treat `NULL` values as distinct, the storage boundary persists absent optional `session_id` and `event_id` identity components as empty strings so repeated source events remain idempotent. Source instance IDs must be unique for each collector lifetime when sequence numbers restart. Retention may purge these before canonical history.
 
 ### `plays`
 
