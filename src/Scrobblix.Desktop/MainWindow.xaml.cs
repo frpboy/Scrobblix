@@ -362,9 +362,10 @@ public sealed partial class MainWindow : Window
         };
         // Enrichment can finish between polls. Retain its strongest artwork and metadata in the
         // displayed observation so the next raw poll does not immediately erase the result.
-        _displayedObservation = MergeTrackMetadataForSamePlay(enrichedObservation, _displayedObservation ?? observation);
-        CurrentTrackDetail.Text = BuildTrackDetail(_displayedObservation);
-        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, _displayedObservation.ArtworkPath);
+        var displayedObservation = MergeTrackMetadataForSamePlay(enrichedObservation, _displayedObservation ?? observation);
+        _displayedObservation = displayedObservation;
+        CurrentTrackDetail.Text = BuildTrackDetail(displayedObservation);
+        SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, displayedObservation.ArtworkPath);
     }
 
     private static PlayObservation MergeTrackMetadataForSamePlay(PlayObservation current, PlayObservation previous)
