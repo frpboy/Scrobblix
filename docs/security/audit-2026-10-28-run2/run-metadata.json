@@ -1,0 +1,42 @@
+{
+  "run_id": "universal-audit-2026-10-28-run2",
+  "repository": "frpboy/Scrobblix",
+  "source_ref": "main",
+  "source_sha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
+  "default_branch": "main",
+  "run_status": "incomplete",
+  "profile": "standard",
+  "scope": "Selected repository; source review of trust-boundary paths and GitHub metadata.",
+  "tree_truncated": false,
+  "tracked_tree_entries": 405,
+  "non_main_branches_compared": 50,
+  "open_pull_requests": 0,
+  "current_main_ci": {
+    "run_id": 40640792254,
+    "url": "https://github.com/frpboy/Scrobblix/actions/runs/40640792254",
+    "conclusion": "success",
+    "head_sha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96"
+  },
+  "blockers": [
+    "Local clone failed because github.com DNS resolution failed.",
+    "Official validators could not be transferred to local Node runner; network download failed.",
+    "Required OS-enforced sandbox unavailable.",
+    "No independent research/verifier agents or coverage critics available.",
+    "No dependency audits, license scan, SBOM, current/history secret scan, synthetic canaries, Windows IPC or archive corruption tests run.",
+    "Branch protection/ruleset read returned HTTP 403."
+  ],
+  "safety": {
+    "secrets_printed": false,
+    "production_credentials_changed": false,
+    "live_systems_touched": false,
+    "branches_deleted": false,
+    "branches_merged": false,
+    "force_pushes": false
+  },
+  "validator_status": {
+    "validate_findings": "not_run",
+    "validate_coverage_ledger": "not_run"
+  },
+  "independent_verification": "blocked_unavailable",
+  "notes": "No severity assigned to needs-validation leads. findings.json intentionally empty because no candidate passed independent candidate validation and final verification."
+}

@@ -1,0 +1,434 @@
+[
+  {
+    "coverage_id": ".github%2Fworkflows%2Fci.yml::workflow-source-to-runner::github-actions-ci::third-party-action-integrity",
+    "canonical_refs": {
+      "surface": ".github/workflows/ci.yml",
+      "boundary": "workflow-source-to-runner",
+      "subsystem": "github-actions-ci",
+      "attack_class": "third-party-action-integrity"
+    },
+    "surface": ".github/workflows/ci.yml",
+    "boundary": "workflow-source-to-runner",
+    "subsystem": "github-actions-ci",
+    "attack_class": "third-party-action-integrity",
+    "starting_paths": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml",
+      "scripts/test-release-workflow.mjs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "CLOUD-AND-DEPLOYMENT.md#CI and release authority"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "new",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      ".github/workflows/ci.yml",
+      ".github/workflows/release.yml",
+      "scripts/test-release-workflow.mjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          ".github/workflows/ci.yml",
+          ".github/workflows/release.yml",
+          "scripts/test-release-workflow.mjs"
+        ],
+        "invariant": "Third-party actions should resolve to reviewed immutable commits and least privilege remain intact.",
+        "method": "source",
+        "result": "Source uses major-version tags; CI read-only permission and separate release write job are present.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "CR-001: Mutable major-version action tags should be pinned to reviewed full SHAs; tracked by #79."
+    ]
+  },
+  {
+    "coverage_id": "browser-extension%2Fmanifest.json::manifest-to-sender-allowlist::browser-origin-contract::declared-origin-consistency",
+    "canonical_refs": {
+      "surface": "browser-extension/manifest.json",
+      "boundary": "manifest-to-sender-allowlist",
+      "subsystem": "browser-origin-contract",
+      "attack_class": "declared-origin-consistency"
+    },
+    "surface": "browser-extension/manifest.json",
+    "boundary": "manifest-to-sender-allowlist",
+    "subsystem": "browser-origin-contract",
+    "attack_class": "declared-origin-consistency",
+    "starting_paths": [
+      "browser-extension/manifest.json",
+      "browser-extension/src/message-validation.ts",
+      "browser-extension/src/service-worker.ts",
+      "scripts/test-browser-security.mjs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "CLIENT-SIDE.md#Message and origin validation"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_covered_changed_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      "browser-extension/manifest.json",
+      "browser-extension/src/message-validation.ts",
+      "browser-extension/src/service-worker.ts",
+      "scripts/test-browser-security.mjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          "browser-extension/manifest.json",
+          "browser-extension/src/message-validation.ts",
+          "browser-extension/src/service-worker.ts",
+          "scripts/test-browser-security.mjs"
+        ],
+        "invariant": "Manifest matches, host permissions and sender allow-lists must agree with supported origins.",
+        "method": "source",
+        "result": "Source comparison confirms mismatch tracked by #73; no trusted origin was added.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Issue #73 tracks generic YouTube manifest matches versus narrower built-in allow-list; product decision pending."
+    ]
+  },
+  {
+    "coverage_id": "browser-extension%2Fpackage-lock.json::dependency-manifests-to-release::dependency-supply-chain::vulnerability-and-secret-history",
+    "canonical_refs": {
+      "surface": "browser-extension/package-lock.json",
+      "boundary": "dependency-manifests-to-release",
+      "subsystem": "dependency-supply-chain",
+      "attack_class": "vulnerability-and-secret-history"
+    },
+    "surface": "browser-extension/package-lock.json",
+    "boundary": "dependency-manifests-to-release",
+    "subsystem": "dependency-supply-chain",
+    "attack_class": "vulnerability-and-secret-history",
+    "starting_paths": [
+      ".github/dependabot.yml",
+      ".github/workflows/release.yml",
+      "Scrobblix-Docs/11_SecurityPrivacy/UPDATE_SUPPLY_CHAIN.md",
+      "browser-extension/package-lock.json",
+      "browser-extension/package.json"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "SUPPLY-CHAIN-AND-RELEASE.md#Dependency and artifact integrity"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_needs_validation",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      ".github/dependabot.yml",
+      ".github/workflows/release.yml",
+      "Scrobblix-Docs/11_SecurityPrivacy/UPDATE_SUPPLY_CHAIN.md",
+      "browser-extension/package-lock.json",
+      "browser-extension/package.json"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          ".github/dependabot.yml",
+          ".github/workflows/release.yml",
+          "Scrobblix-Docs/11_SecurityPrivacy/UPDATE_SUPPLY_CHAIN.md",
+          "browser-extension/package-lock.json",
+          "browser-extension/package.json"
+        ],
+        "invariant": "Exact release candidate should have reviewed dependencies/licenses, SBOM and provenance.",
+        "method": "source",
+        "result": "Source shows npm lockfile and Dependabot; no scan or SBOM evidence.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "SBX-003: .NET/npm audits, license review, SBOM and redacted current/history secret scans not run."
+    ]
+  },
+  {
+    "coverage_id": "browser-extension%2Fsrc%2Fmessage-validation.ts::page-to-extension-worker::browser-origin-and-payload::origin-validation",
+    "canonical_refs": {
+      "surface": "browser-extension/src/message-validation.ts",
+      "boundary": "page-to-extension-worker",
+      "subsystem": "browser-origin-and-payload",
+      "attack_class": "origin-validation"
+    },
+    "surface": "browser-extension/src/message-validation.ts",
+    "boundary": "page-to-extension-worker",
+    "subsystem": "browser-origin-and-payload",
+    "attack_class": "origin-validation",
+    "starting_paths": [
+      "browser-extension/src/message-validation.ts",
+      "browser-extension/src/service-worker.ts",
+      "scripts/test-browser-security.mjs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "CLIENT-SIDE.md#Message and origin validation"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_covered_changed_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      "browser-extension/src/message-validation.ts",
+      "browser-extension/src/service-worker.ts",
+      "scripts/test-browser-security.mjs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          "browser-extension/src/message-validation.ts",
+          "browser-extension/src/service-worker.ts",
+          "scripts/test-browser-security.mjs"
+        ],
+        "invariant": "Untrusted page-origin messages must be validated and bounded before forwarding.",
+        "method": "source",
+        "result": "Source review found exact built-in origin checks, custom-site registration, metadata bounds and HTTPS artwork validation; runtime assertions were not run.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Independent hunting/coverage-critic review unavailable; tests not executed."
+    ]
+  },
+  {
+    "coverage_id": "src%2FScrobblix.Desktop%2FApp.xaml.cs::native-host-to-desktop-pipe::desktop-ipc::peer-authorization",
+    "canonical_refs": {
+      "surface": "src/Scrobblix.Desktop/App.xaml.cs",
+      "boundary": "native-host-to-desktop-pipe",
+      "subsystem": "desktop-ipc",
+      "attack_class": "peer-authorization"
+    },
+    "surface": "src/Scrobblix.Desktop/App.xaml.cs",
+    "boundary": "native-host-to-desktop-pipe",
+    "subsystem": "desktop-ipc",
+    "attack_class": "peer-authorization",
+    "starting_paths": [
+      "src/Scrobblix.Desktop/App.xaml.cs",
+      "src/Scrobblix.Desktop/NamedPipePeerVerifier.cs",
+      "src/Scrobblix.NativeHost/Program.cs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "DESKTOP-MOBILE-AND-LOCAL-IPC.md#Local IPC"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_needs_validation",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      "src/Scrobblix.Desktop/App.xaml.cs",
+      "src/Scrobblix.Desktop/NamedPipePeerVerifier.cs",
+      "src/Scrobblix.NativeHost/Program.cs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          "src/Scrobblix.Desktop/App.xaml.cs",
+          "src/Scrobblix.Desktop/NamedPipePeerVerifier.cs",
+          "src/Scrobblix.NativeHost/Program.cs"
+        ],
+        "invariant": "Unauthorized same-user client must be rejected before observations persist or enqueue work.",
+        "method": "source",
+        "result": "Source includes CurrentUserOnly and peer checks; Windows behavior not verified.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "SBX-001: Effective Windows ACL/process identity and rejection-before-side-effect behavior untested."
+    ]
+  },
+  {
+    "coverage_id": "src%2FScrobblix.NativeHost%2FProgram.cs::extension-to-native-host::native-message-framing::caller-identity-and-bounds",
+    "canonical_refs": {
+      "surface": "src/Scrobblix.NativeHost/Program.cs",
+      "boundary": "extension-to-native-host",
+      "subsystem": "native-message-framing",
+      "attack_class": "caller-identity-and-bounds"
+    },
+    "surface": "src/Scrobblix.NativeHost/Program.cs",
+    "boundary": "extension-to-native-host",
+    "subsystem": "native-message-framing",
+    "attack_class": "caller-identity-and-bounds",
+    "starting_paths": [
+      "src/Scrobblix.NativeHost/NativeHostCallerValidator.cs",
+      "src/Scrobblix.NativeHost/Program.cs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "PROTOCOLS-RPC-AND-MESSAGING.md#Message validation"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_covered_changed_source",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      "src/Scrobblix.NativeHost/NativeHostCallerValidator.cs",
+      "src/Scrobblix.NativeHost/Program.cs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          "src/Scrobblix.NativeHost/NativeHostCallerValidator.cs",
+          "src/Scrobblix.NativeHost/Program.cs"
+        ],
+        "invariant": "Only allow-listed extension identities and bounded frames may reach dispatch.",
+        "method": "source",
+        "result": "Source review found a 256 KiB frame bound and extension-ID checks; runtime tests not run.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "Native-host integration tests and independent coverage review were not run."
+    ]
+  },
+  {
+    "coverage_id": "src%2FScrobblix.Windows%2FWindowsCredentialStore.cs::credential-store-to-output-sinks::credential-lifecycle::secret-disclosure",
+    "canonical_refs": {
+      "surface": "src/Scrobblix.Windows/WindowsCredentialStore.cs",
+      "boundary": "credential-store-to-output-sinks",
+      "subsystem": "credential-lifecycle",
+      "attack_class": "secret-disclosure"
+    },
+    "surface": "src/Scrobblix.Windows/WindowsCredentialStore.cs",
+    "boundary": "credential-store-to-output-sinks",
+    "subsystem": "credential-lifecycle",
+    "attack_class": "secret-disclosure",
+    "starting_paths": [
+      "src/Scrobblix.Desktop/App.xaml.cs",
+      "src/Scrobblix.Infrastructure/Diagnostics/DiagnosticMessageSanitizer.cs",
+      "src/Scrobblix.Infrastructure/Diagnostics/SupportBundleExporter.cs",
+      "src/Scrobblix.Infrastructure/Storage/ScrobblixBackupService.cs",
+      "src/Scrobblix.Windows/WindowsCredentialStore.cs"
+    ],
+    "ordinary_attack_class_block": null,
+    "selected_companion_blocks": [
+      "DATA-ISOLATION-AND-LIFECYCLE.md#Sensitive data lifecycle"
+    ],
+    "excluded_blocks": [
+      {
+        "block": "runtime-validation",
+        "reason": "Requires OS-enforced sandbox or isolated Windows profile unavailable in this run."
+      },
+      {
+        "block": "live-deployment-validation",
+        "reason": "Live/shared systems are outside permitted scope."
+      }
+    ],
+    "prior_status": "prior_needs_validation",
+    "attempts": [],
+    "wave": 1,
+    "status": "blocked",
+    "agent_id": "parent-review",
+    "reviewed_paths": [
+      "src/Scrobblix.Desktop/App.xaml.cs",
+      "src/Scrobblix.Infrastructure/Diagnostics/DiagnosticMessageSanitizer.cs",
+      "src/Scrobblix.Infrastructure/Diagnostics/SupportBundleExporter.cs",
+      "src/Scrobblix.Infrastructure/Storage/ScrobblixBackupService.cs",
+      "src/Scrobblix.Windows/WindowsCredentialStore.cs"
+    ],
+    "local_checks": [
+      {
+        "agent_id": "parent-review",
+        "reviewed_paths": [
+          "src/Scrobblix.Desktop/App.xaml.cs",
+          "src/Scrobblix.Infrastructure/Diagnostics/DiagnosticMessageSanitizer.cs",
+          "src/Scrobblix.Infrastructure/Diagnostics/SupportBundleExporter.cs",
+          "src/Scrobblix.Infrastructure/Storage/ScrobblixBackupService.cs",
+          "src/Scrobblix.Windows/WindowsCredentialStore.cs"
+        ],
+        "invariant": "Credentials/session keys must not enter logs, database, backups, support bundles, extension storage or packages.",
+        "method": "source",
+        "result": "Source shows PasswordVault and exclusions; end-to-end flow not runtime tested.",
+        "artifact": null
+      }
+    ],
+    "result_fingerprints": [],
+    "unresolved": [
+      "SBX-002: Synthetic canary not tested across logs, SQLite, backups, support bundles and packaging."
+    ]
+  }
+]
