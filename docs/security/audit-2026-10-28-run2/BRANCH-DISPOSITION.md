@@ -56,3 +56,26 @@ Snapshot: main at 5227d5312f6a4fa358d517b0b0dd5c495a29bb96. 51 branches enumerat
 | security/scrobblix-microsoft-data-sqlite-10.0.14-fix | diverged | 1 | 6 | Diff-level review and exact-head validation required; do not merge by ancestry alone. |
 
 Summary: 7 branches are behind-only with no unique commits in the ancestry comparison; 43 are diverged. None were merged or deleted. Diverged changes may already be squash/cherry-pick integrated, stale, conflicting, or unique; complete per-branch diff review and exact-head validation are still required. Branch protection endpoint returned 403, so repository protection/ruleset settings were not independently confirmed. No protection settings were changed.
+
+## Follow-up compare inventory — 2026-10-28
+
+Source baseline: `main` at `5227d5312f6a4fa358d517b0b0dd5c495a29bb96`. GitHub compare metadata was queried for all 50 branches other than `main` and this audit-report branch. This goes beyond ancestry-only classification and establishes per-branch ahead/behind counts and changed-file statistics. It does **not** replace content-level patch review, unique-commit inspection, test/status checks, or reviewer-state checks.
+
+### Candidate groups requiring content-level review
+
+- **Workflow/dependency updates:** `dependabot/github_actions/actions/checkout-7`, `dependabot/github_actions/actions/setup-dotnet-6`, `dependabot/github_actions/actions/upload-artifact-7`, `dependabot/npm_and_yarn/browser-extension/typescript-7.0.2`.
+- **Security/data-handling:** `fix/browser-origin-registration-binding`, `fix/privacy-delimiter-safe-redaction`, `fix/privacy-delimiter-safe-redaction-currentmain`, `fix/restore-atomic-sidecars`, `fix/restore-atomic-sidecars-currentmain`, `security/scrobblix-chrome-types-0.3.6-fix`, `security/scrobblix-microsoft-data-sqlite-10.0.14-fix`, `security/audit-follow-up-2026-10-28`.
+- **Queue/playback/native-host:** `audit/queue-lifecycle-completion`, `fix/ingestion-null-event-id-dedup-ready`, `fix/null-event-id-observation-dedup`, `fix/gsmct-session-loss-time-accounting`, `fix/issue-46-gsmtc-poll-recovery`, `fix/issue-47-expire-stale-now-playing`, `fix/issue-47-expire-stale-now-playing-clean`, `fix/native-messaging-host-detection`, `fix/resilient-gsmtc-polling`, `fix/short-track-replay-after-source-gap`.
+- **Tray/UI:** `feat/tray-quick-controls`, `feat/tray-quick-controls-20261023`, `feat/tray-quick-controls-current-main`, `feat/tray-quick-controls-main`, `fix/hamburger-compact-navigation`, `fix/listening-love-artwork-branding`, `fix/preserve-enriched-current-artwork`.
+- **Documentation/release/audit branches:** `docs/automate-docs-validation`, `docs/full-documentation-refresh-2026-10-28`, `docs/reconcile-current-main-final`, `docs/reconcile-release-status-2026-10-23`, `docs/refresh-release-checkpoint-2026-10-22`, `ci/setup-preview-releases`, `audit/complete-repository-remediation-2026-10`, `audit/complete-repository-remediation-2026-10-v2`, `audit/csv-formula-guard-and-finalize-report-2026-10`, `audit/finalize-audit-and-csv-formula-guard-2026-10`, `audit/privacy-log-redaction`.
+
+### Initial compare observations
+
+- Several branches are far behind `main` and have no unique commits according to the compare API; preserve them until their owner/use and branch purpose are understood, rather than deleting them as cleanup.
+- Same-topic branches frequently overlap in the same files; for example the privacy-redaction pair changes the same four files, the atomic-backup pair changes the same four files, and the null-event-ID pair changes the same four files. Compare stats alone cannot establish semantic equivalence or safe cherry-pickability.
+- `docs/automate-docs-validation` has a very large unique history and broad documentation/code diffs, so it must not be treated as a small docs-only merge.
+- `fix/native-messaging-host-detection` spans workflow, browser extension, PowerShell install scripts and docs; requires scope and test review beyond a simple status check.
+
+### Disposition
+
+No branch has been merged, closed, force-updated, or deleted. No merge recommendation is made from this inventory alone. The next review pass must inspect each unique commit and actual patch, check relevant workflow runs/reviews and compare against current `main`, then record one evidence-backed disposition per branch. Content-level branch review remains incomplete.
