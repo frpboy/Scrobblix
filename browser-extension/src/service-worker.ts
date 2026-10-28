@@ -57,10 +57,7 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   }
 
   if (sourceUrl.protocol !== "https:" && sourceUrl.protocol !== "http:") return;
-  const settings = await scrobblixWorkerApi.storage.local.get({
-    paused: false,
-    customSites: [],
-  } satisfies CompanionSettings);
+  const settings = await readSettings();
   if (settings.paused || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
   const hasGrantedOrigin = isSupportedPlaybackOrigin(sourceUrl.origin)
@@ -108,6 +105,38 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   });
 }
 
+
+async function readSettings(): Promise<CompanionSettings> {
+  const stored = await scrobblixWorkerApi.storage.local.get({
+    paused: false,
+    customSites: [] as CustomSiteRegistration[],
+  });
+  const value = stored as unknown as Record<string, unknown>;
+  const rawSites = value.customSites;
+  return {
+    paused: value.paused === true,
+    customSites: Array.isArray(rawSites) ? rawSites.filter(isCustomSiteRegistration) : [],
+  };
+}
+
+function isCustomSiteRegistration(value: unknown): value is CustomSiteRegistration {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const site = value as Record<string, unknown>;
+  if (typeof site.id !== "string" || typeof site.origin !== "string"
+      || typeof site.pattern !== "string" || !/^site_[a-f0-9]{32}$/u.test(site.id)) {
+    return false;
+  }
+
+  try {
+    const origin = new URL(site.origin);
+    return (origin.protocol === "http:" || origin.protocol === "https:")
+      && origin.origin === site.origin
+      && site.pattern === `${site.origin}/*`;
+  } catch {
+    return false;
+  }
+}
+
 function isSupportedPlaybackOrigin(origin: string): boolean {
   return origin === "https://music.youtube.com" || origin === "https://open.spotify.com";
 }
@@ -120,7 +149,7 @@ function isPopupMessage(message: unknown): message is PopupMessage {
 
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus> {
   if (message.type === "companion.get-state") {
-    return scrobblixWorkerApi.storage.local.get({ paused: false, customSites: [] } satisfies CompanionSettings);
+    return readSettings();
   }
 
   return testNativeHost();
