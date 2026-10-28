@@ -1,39 +1,41 @@
-# Scrobble Eligibility
+# Scrobble Eligibility — Implementation Contract
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Domain implementation and policy snapshot  
+> **Last reviewed:** 2026-10-28
 
-## Normative formula
+## Implemented decision rule
 
-A candidate is scrobble-eligible when:
+The current implementation is `src/Scrobblix.Domain/Eligibility/ScrobbleEligibility.cs`. It evaluates a candidate in this order:
 
-1. artist and track are valid;
-2. duration is strictly greater than 30 seconds;
-3. confirmed played time is at least `min(duration / 2, 240 seconds)`;
-4. it is not excluded, duplicate, non-music/advertisement, or already queued for the provider/account.
+1. Artist must be non-empty.
+2. Track title must be non-empty.
+3. Duration must be known.
+4. Duration must be positive and **strictly greater than 30,000 ms**.
+5. User exclusion, duplicate/canonical-source merge, existing provider action, non-music, and advertisement checks must all be false.
+6. Confirmed played time must reach the eligible threshold.
 
-## Threshold precision
+The threshold in integer milliseconds is:
 
-Calculate using integer milliseconds with a clearly defined rounding policy. Persist the threshold used. Eligibility fires once at the first transition crossing threshold.
+    min(durationMilliseconds / 2, 240000)
 
-## Confirmed time
+So a track of more than 30 seconds requires half its duration, capped at four minutes. Integer division rounds a half-millisecond down for odd millisecond values. The decision returns the calculated threshold while still ineligible for insufficient confirmed time, allowing the UI/tracker to show progress.
 
-Count only monotonic intervals in reliable playing state. Playback rate policy: default counts real elapsed listening time, not media-position time, unless provider guidance and product decision specify otherwise. Very high/invalid rates may be ignored/flagged.
+## Unknown or invalid duration
 
-## Unknown duration
+Unknown duration is ineligible with `playback.duration_unknown`; zero/negative duration is `metadata.invalid_duration`; duration at or below 30,000 ms is `playback.track_too_short`. The policy deliberately does not infer eligibility from four minutes alone when the duration is unknown.
 
-Do not scrobble based only on four minutes when duration is unknown in v1; the official rule requires knowing whether the track is longer than 30 seconds and which threshold occurs earlier. Keep history and explain `duration_unknown`.
+## Confirmed played time
 
-## End behavior
+The eligibility function receives confirmed played milliseconds; it does not infer listened time directly from the current media position. The tracker uses monotonic elapsed intervals in playing state and source arbitration/observation handling to avoid counting paused time and unseen source gaps as listening. Seeking and replay detection need to remain regression-tested separately from the eligibility formula.
 
-Submission may occur immediately at eligibility or at track end. Scrobblix queues immediately at eligibility for durability, preserving original start timestamp.
+When the candidate first crosses the threshold, the local play store persists eligibility and the durable provider-action path can enqueue a scrobble. Repeated observations must not create another action for the same qualifying play. A deliberate same-track replay after an intervening play is a new play, not a duplicate.
 
-## Chosen by user
+## Provider payload and eligibility are different
 
-Only include `chosenByUser` when source/adapter can determine it. If ambiguous, omit, following provider guidance.
+The provider receives the original play-start timestamp and currently sends artist, track, optional album and optional duration. `chosenByUser`, MBIDs, album artist and track number are not currently included in the scrobble payload. Do not advertise fields as sent just because metadata is locally available.
 
-## Corrections
+## Manual qualification still required
 
-Provider now-playing corrections do not alter the scrobble payload unless explicitly approved by user policy.
+The formula and regression logic are covered by repository assertions; that does not prove correctness across real Spotify sessions. Validate pause/resume, seek, track change, same-track repeat, ads, missing sessions, sleep/wake, and multi-day reconciliation against a dedicated Last.fm test profile. Record exact candidate SHA and observed results in the real-world manual matrix; leave unexecuted scenarios `NOT RUN`.
