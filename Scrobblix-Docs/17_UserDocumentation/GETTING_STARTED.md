@@ -1,43 +1,43 @@
-# Getting Started
+# Getting Started — Scrobblix Preview
 
-> **Audience:** Scrobblix users  
-> **Status:** Pre-release documentation specification
+> **Audience:** Scrobblix preview users and testers  
+> **Status:** User setup guide; this is not a promise of a signed production installer  
+> **Last reviewed:** 2026-10-28
 
-## Before installation
+## Before you begin
 
-Scrobblix is designed for supported Windows 11 systems. A Last.fm account is required only when the user wants remote scrobbling; local listening history can operate without one. Browser detection works through Windows media sessions when a site exposes sufficient metadata. The optional Browser Companion improves source identification and metadata accuracy.
+Current public artifacts are unsigned development preview ZIPs, not a signed MSIX/App Installer or stable production release. Read the repository's [release process](../../docs/RELEASE_PROCESS.md) and verify the checksum when supplied. The app may require the matching Windows App Runtime. Do not bypass Windows security warnings to run an unsigned public bundle.
 
-## First-run flow
+Scrobblix targets Windows 11. The current release target is Windows 11 25H2 or later, but real-device qualification remains pending. Local history and tracking can operate without Last.fm credentials; remote scrobbling requires API credentials and an authorized Last.fm session.
 
-1. Install and open Scrobblix.
-2. Review the local-data and privacy summary.
-3. Choose **Connect Last.fm** or **Use local history only**.
-4. Allow Scrobblix to inspect Windows media sessions.
-5. Play a known music track in a supported player.
-6. Confirm that title, artist, source, duration, and playback status appear on Home.
-7. Install the Browser Companion only when browser metadata is incomplete or when exact tab/site detection is desired.
-8. Choose whether Scrobblix starts at Windows sign-in.
-9. Run the onboarding health check.
+## First run
 
-## Success indicators
+1. Install/run the exact preview bundle according to that release's included test instructions.
+2. Open Scrobblix and confirm its startup status indicates that local storage initialized.
+3. In Settings, enter your Last.fm API key and shared secret and save them securely. The app stores them through Windows Credential Locker; development environment variables are an alternative initialization source.
+4. Choose **Connect Last.fm**, approve Scrobblix in the browser, then return to the app and finish authorization. Never enter your Last.fm password into Scrobblix.
+5. Start a supported desktop player and play a track with valid artist/title/duration metadata.
+6. Confirm that the current track appears on Home and its confirmed-played-time progress advances only while playback is observed as playing.
+7. If you want browser-specific site metadata, install the optional Browser Companion using the instructions in the included bundle or repository. Its unpacked extension ID must be registered exactly for each browser; a desktop GSMTC source may work without it.
+8. Observe the eligibility threshold and Queue. A qualifying play should create a durable action, but only a provider-accepted result confirms a remote scrobble.
 
-A working setup shows:
+## What healthy behavior means
 
-- a connected Last.fm account or an explicit local-only state;
-- at least one healthy playback source;
-- a current track when music is playing;
-- eligibility progress that advances only during confirmed playback;
-- a queue item after the qualifying threshold;
-- an accepted scrobble or a specific retry/failure reason.
+- The app has local storage and shows a status appropriate to the active source.
+- Current media metadata is visible when Windows/player exposes it.
+- The eligibility threshold advances only from confirmed playing time.
+- A qualifying play creates one durable provider action.
+- The queue provides an explicit accepted, ignored, retry/auth, permanent-failure or ambiguous-outcome state.
+- Last.fm remote history is checked separately when verifying actual acceptance.
 
-## Essential concepts
+## Privacy and data handling
 
-- **Now playing:** a temporary provider update; it is not the scrobble itself.
-- **Eligibility:** the point at which the play qualifies for submission.
-- **Queue:** durable pending work that survives restart and temporary outages.
-- **Canonical play:** the single playback Scrobblix selects after reconciling overlapping sources.
-- **Reason code:** the stable explanation for a detected, ignored, delayed, or failed event.
+History, logs and cached artwork are stored locally. The Browser Companion sends observations to the local desktop app and does not directly call Last.fm or store Last.fm credentials. Notifications are off by default; exposing artist/title in notifications requires a separate setting. Review the support-bundle exclusions before sharing diagnostics.
 
-## Where to look when something is wrong
+## Where to go next
 
-Open **Diagnostics** first. It should show whether the problem is source discovery, metadata, timing, duplicate suppression, connectivity, authentication, database health, or provider response. Use **Queue** for pending/retry actions and **Sources & Browsers** for detection configuration.
+- [Daily use](DAILY_USE.md) for current app behavior.
+- [Troubleshooting](TROUBLESHOOTING.md) for source/queue/authorization problems.
+- [Last.fm connection](CONNECT_LASTFM.md) for the real authorization sequence.
+- [Installation](INSTALLATION.md) for the current preview/install limitations.
+- [Real-world manual test matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md) for qualification status.
