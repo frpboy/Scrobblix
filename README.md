@@ -126,6 +126,7 @@ The repository includes the [Anti-Slop core](skills/antislop/SKILL.md) and [UI s
 
 - [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md): repository-wide file-by-file catalogue, including the `docs/` entry point.
 - [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md): validation report, historical metrics, and explicit checks still to run.
+- [`scripts/validate-docs.mjs`](scripts/validate-docs.mjs): automated Markdown structure and relative-link validation, also run by CI.
 - [`00_Project/RECOMMENDATIONS.md`](Scrobblix-Docs/00_Project/RECOMMENDATIONS.md): consolidated product, architecture, privacy, release, and scope recommendations.
 - [`00_Project`](Scrobblix-Docs/00_Project/README.md): vision, scope, principles, terminology, product rules, risks, and decisions.
 - [`01_Product`](Scrobblix-Docs/01_Product/README.md): PRD, features, personas, journeys, metrics, and product strategy.
