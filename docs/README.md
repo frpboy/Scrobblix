@@ -35,3 +35,5 @@ For the full documentation catalogue, start with the repository's [Documentation
 - Prefer updating an existing canonical document over creating duplicate guidance.
 
 If a link is missing, check [DOCUMENTATION_INDEX.md](../DOCUMENTATION_INDEX.md) for the canonical path before adding a new document.
+
+The last completed full Windows CI run measured by this documentation pass is [run 40634619855](https://github.com/frpboy/Scrobblix/actions/runs/40634619855), on commit `eb7d568174792acb2238d937bac7b1e1e5d40af3`. See the [validation report](../DOCUMENTATION_VALIDATION.md) for exact metrics and scope. Later report/index edits must be validated on their own final commit before merge.
