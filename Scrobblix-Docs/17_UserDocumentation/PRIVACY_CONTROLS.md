@@ -1,32 +1,35 @@
-# Privacy Controls for Users
+# Privacy Controls — Current Preview Status
 
-## Control categories
+> **Audience:** Scrobblix users and testers  
+> **Status:** Distinguishes controls in source from policy targets  
+> **Last reviewed:** 2026-10-28
 
-Scrobblix exposes separate controls for:
+## Controls currently available or implemented in source
 
-- local listening history;
-- observation/diagnostic retention;
-- artwork cache;
-- browser source detection;
-- provider submission;
-- crash reporting;
-- product telemetry;
-- support-bundle export.
+- Configure and disconnect Last.fm authorization; provider credentials are handled through the Windows Credential Locker abstraction.
+- Pause/resume available playback tracking controls.
+- Enable/disable or remove the optional browser companion and control browser/site access using browser permissions.
+- Control whether optional Windows notifications are enabled and whether track details are exposed in notification content (where supported by the current UI preferences).
+- Explicitly export a diagnostics-only support bundle after confirmation; review it before sharing.
 
-Turning off telemetry must not disable local history or Last.fm scrobbling. Disconnecting Last.fm must not silently delete local history.
+The exact available actions depend on the release build. Check the current UI rather than assuming a menu described in a future design exists.
 
-## Source exclusions
+## Features not established as fully shipped
 
-Users can disable individual applications, browser origins/adapters, or all browser detection. Exclusions apply prospectively and should explain whether existing local records remain.
+The current source baseline does not establish a complete retention-period picker, deletion of selected history ranges, global local-data wipe, per-category log/artwork purge, dedicated telemetry consent toggle, remote crash-report upload or full JSON export. These are policy/product requirements and must not be advertised as current controls until the implementation and tests prove them.
 
-## Retention and deletion
+## Local history and provider data
 
-The user can choose supported retention periods, delete selected history ranges, clear caches, purge diagnostic detail, and request full local-data deletion. The app must preview the scope and explain irreversible effects before destructive operations.
+Disconnecting Last.fm removes the local session credential and blocks account-related provider delivery; local history is not automatically deleted. Scrobblix cannot remove a record already stored by Last.fm. Local data can remain under the user's Windows profile until the supported application/data cleanup behavior removes it.
 
-## Telemetry
+## Browser and listening data
 
-Telemetry is off by default. When enabled, the settings page lists categories, destination, retention, identifiers, and a sample payload. Listening titles, artists, albums, URLs, account names, and provider secrets are excluded unless a separate explicit, narrowly scoped opt-in is introduced.
+The Browser Companion sends observations to the local desktop process. It does not hold Last.fm credentials or submit them to the provider. Custom-site observation should occur only after the user adds the site and grants the browser permission. Disabling/uninstalling a browser extension does not necessarily stop independent GSMTC desktop-player detection.
 
 ## Support sharing
 
-Support bundles are local files until the user chooses how to share them. The export screen lists contents and redaction status. Scrobblix does not silently upload a support bundle.
+Support export remains a user-selected local ZIP. It is designed to exclude the database/history, credentials, cache artwork, arbitrary logs, full URLs, usernames and raw dumps; actual Save/export, redaction and accessibility checks remain qualification tasks. Do not claim an exported bundle is perfectly anonymous; review before sharing.
+
+## Future control requirements
+
+Any new privacy control must specify its scope, irreversible effects, local/provider implications, storage cleanup, impact on queued/ambiguous submissions, and regression tests. A privacy policy statement does not create a functioning control.
