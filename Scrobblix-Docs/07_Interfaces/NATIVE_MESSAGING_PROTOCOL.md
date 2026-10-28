@@ -1,50 +1,51 @@
-# Native Messaging Protocol
+# Native Messaging Protocol — Implementation Snapshot
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Development implementation; real browser qualification and formal security review pending  
+> **Last reviewed:** 2026-10-28
 
-## Transport
+## Browser transport framing
 
-Browser Native Messaging uses browser-managed standard input/output framing: each message is UTF-8 JSON preceded by a 32-bit native-endian length per browser specification. The host never writes logs to stdout; stdout is protocol-only. Diagnostics go to stderr/local logging.
+The browser-managed Native Messaging transport sends UTF-8 JSON messages over standard input/output with a four-byte little-endian length prefix on Windows. The current native host caps incoming messages at 256 KiB. Standard output is reserved for framed protocol responses; do not write diagnostics to it. The host has no Last.fm API key, shared secret or session credential.
 
-## Trust
+## Current envelope and accepted message types
 
-- Host manifest allow-lists exact extension IDs/origins.
-- On startup, host validates browser-provided origin arguments where available.
-- Host connects to the per-user Scrobblix main process through a named pipe protected by current-user ACL and a challenge handshake.
-- No network listener is opened.
+The current host checks these required top-level fields:
+- `protocolVersion` must equal `1`;
+- `messageId` must be a non-empty string no longer than 128 characters;
+- `type` must be a non-empty string no longer than 128 characters.
 
-## Envelope
+After caller identity validation, the implemented message behaviors are:
+- `ping.v1` → `pong.v1`;
+- `playback.observation.v1` → forward the validated protocol payload to the desktop named pipe;
+- unsupported types → `extension.unsupported_message`;
+- invalid/malformed frame or envelope → a bounded error response or connection termination.
 
-```json
-{
-  "protocolVersion": 1,
-  "messageId": "01J...",
-  "type": "playback.observation.v1",
-  "sentAtUtc": "2026-08-01T16:00:00Z",
-  "browserInstanceId": "...",
-  "sequence": 42,
-  "payload": {}
-}
-```
+Do not document `hello.v1`, `playback.snapshot.v1`, `source.removed.v1`, `permission.status.v1`, acknowledgements, or adapter-health events as implemented until the extension and host code actually implement them.
 
-## Message types
+## Caller identity checks
 
-- `hello.v1` / `hello.ack.v1`
-- `playback.observation.v1`
-- `playback.snapshot.v1`
-- `source.removed.v1`
-- `permission.status.v1`
-- `adapter.health.v1`
-- `ping.v1` / `pong.v1`
-- `error.v1`
+- **Chromium:** the host takes the extension origin supplied by the browser and checks that it matches a valid extension ID stored in the per-user trusted-ID allow-list.
+- **Firefox:** the host reads the add-on ID supplied by the browser process arguments, checks it against the Firefox allow-list, and requires the message's `browserInstanceId` to match.
+- **Both:** caller identity is checked before processing all message types, including `ping.v1`. Empty or mismatched allow-lists fail closed.
 
-## Limits
+The installed Native Messaging manifest restricts the allowed extension origin/ID. The installer records the configured extension IDs under the current user's `HKCU\Software\Scrobblix\NativeMessaging` configuration; Chrome and Edge may need separate IDs. Firefox uses the separate allow-extensions manifest rule and add-on ID.
 
-Define conservative maximum frame size (for example 256 KiB), string lengths, artwork handling (URL/reference only, not large binary), message rate per tab/source, and total connected hosts. Reject unknown required protocol versions with a clear version-mismatch response.
+## Desktop named-pipe boundary
 
-## Reconnect
+The host forwards observation frames to the desktop over the named pipe `scrobblix.browser.v1` by default, using a four-byte little-endian length prefix and the same payload. The pipe client uses current-user-only access; the desktop adds checks for expected native-host image path and a supported browser parent process.
 
-Extension sends `hello` then a full snapshot of active media, not a replay of every position tick. Sequence numbers allow stale/out-of-order detection. Desktop acknowledgements identify last accepted sequence but do not imply scrobble success.
+There is no generic localhost HTTP/WebSocket server. The desktop process/image checks are defense in depth, not cryptographic proof of publisher identity, signed-binary provenance, or tamper-free installation. Same-user registry/file changes and process-identity hardening remain security concerns.
+
+## Message limits and failures
+
+Reject invalid/non-positive frames and frames over 256 KiB. Validate JSON fields, protocol version, message type, declared extension identity and playback metadata bounds before forwarding. Responses must use stable, bounded reason codes and must never contain credentials or raw listening metadata unless the message contract explicitly requires the metadata itself.
+
+The current implementation forwards one supported playback observation type. It does not currently implement a general multi-message handshake, a challenge-response protocol, full-snapshot replay, or accepted-sequence acknowledgement. Do not design the extension around those absent behaviors.
+
+## Real-browser qualification
+
+CI covers source-level browser sender/payload tests, manifest checks, compilation and host packaging. It does not prove that Chrome/Edge/Firefox actually launch the published host with the expected arguments or that real events arrive on the user's Windows profile.
+
+Before beta, separately test actual Chrome and Edge extension IDs, Firefox development add-on identity, browser and app restarts, host unavailable/recovery, malformed/oversized frames, forged identities/ping, unsupported types, uninstall cleanup, and absence of duplicate/lost playback actions. Record results in the real-world manual matrix; until executed, these remain `NOT RUN`.
