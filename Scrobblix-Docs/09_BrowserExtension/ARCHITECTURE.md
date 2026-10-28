@@ -61,3 +61,5 @@ node scripts/validate-docs.mjs
 ```
 
 Windows CI validates compile/source contracts and packages a development companion bundle. It does not prove actual Chrome, Edge or Firefox event delivery. Installed-browser permissions, exact IDs, play/pause/seek, extension reload, host unavailable/recovery, uninstall and no-duplicate behavior remain manual acceptance cases and stay `NOT RUN` until executed.
+
+**Origin consistency note (tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73)):** The manifests include generic YouTube host matches, but the code-level built-in sender allow-list currently only includes `https://music.youtube.com` and `https://open.spotify.com`. Generic `youtube.com` / `www.youtube.com` observations are not implicitly trusted as built-in origins and may be rejected unless explicitly registered as a custom site. Do not advertise those generic origins as natively supported until the manifest and validation layers are reconciled and tested.
