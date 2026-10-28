@@ -32,4 +32,4 @@ Do not include real credentials or personal listening data. Use test accounts an
 - Prepare a coordinated patch and advisory.
 - Credit reporters who request credit, unless disclosure creates risk.
 
-See [`11_SecurityPrivacy/THREAT_MODEL.md`](11_SecurityPrivacy/THREAT_MODEL.md) for the formal threat model.
+See [`11_SecurityPrivacy/THREAT_MODEL.md`](Scrobblix-Docs/11_SecurityPrivacy/THREAT_MODEL.md) for the formal threat model.
