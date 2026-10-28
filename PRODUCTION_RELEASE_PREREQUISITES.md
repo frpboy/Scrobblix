@@ -1,7 +1,7 @@
 # Production Release Prerequisites
 
 > **Status:** Core flows exist; private-beta qualification and installable-release gates remain open  
-> **Updated:** 2026-10-22  
+> **Updated:** 2026-10-28  
 > **Integration target:** `main`
 
 This is a readiness document, not a claim that Scrobblix is ready to release. Check the exact candidate SHA and matching CI workflow before using a build. An older green workflow or a green run on an unmerged feature branch does not validate the current candidate.
