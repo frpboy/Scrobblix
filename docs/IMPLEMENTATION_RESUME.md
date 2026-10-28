@@ -12,7 +12,7 @@ The current phase is proving that this implementation is correct and installable
 
 ## Current-main verification discipline
 
-The latest `main` head verified during this pass was `1aab53b6e3871e4d53c6f27b3a496087a8cc29ae`, with the matching Windows CI workflow [run 39730929297](https://github.com/frpboy/Scrobblix/actions/runs/39730929297) completing successfully on that exact SHA. PR #7 (`feat/private-beta-readiness`) remains an unmerged draft; validate its own current head and matching run before relying on any continuation-branch change. Always fetch current `main` and its latest relevant Actions run rather than relying on historical statuses.
+Historical verification note (2026-10-22): the recorded `main` head was `1aab53b6e3871e4d53c6f27b3a496087a8cc29ae`, with Windows CI workflow [run 39730929297](https://github.com/frpboy/Scrobblix/actions/runs/39730929297) passing on that exact SHA at that time. This is not a statement about the current `main` head or current PR state. Before continuing work, fetch `origin/main`, inspect the current pull request state, and verify the latest relevant Actions run for the exact candidate SHA.
 
 ## Merge a feature branch and rebuild main
 
