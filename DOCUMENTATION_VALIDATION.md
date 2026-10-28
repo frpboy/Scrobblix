@@ -1,47 +1,54 @@
 # Documentation Validation Report
 
-> **Updated:** 2026-10-28  
-> **Scope:** Documentation freshness review and selected cross-document consistency edits  
-> **Full automated validation:** Not run in this update
+> **Measured:** 2026-10-28  
+> **Validated commit:** `eb7d568174792acb2238d937bac7b1e1e5d40af3`  
+> **Windows CI run:** [40634619855](https://github.com/frpboy/Scrobblix/actions/runs/40634619855) — **success**  
+> **Validator:** `node scripts/validate-docs.mjs`
 
-## Summary
+## Results
 
-This refresh updated documentation metadata and clarified historical evidence in the project overview, documentation catalogue, status page, private-beta readiness checklist, production release prerequisites, and real-world manual test matrix.
+The validator ran successfully on the exact commit above as part of the repository's Windows CI workflow.
 
-The repository-wide counts previously recorded below are retained only as historical data. They have **not** been regenerated during this refresh.
+| Check | Result |
+|---|---:|
+| Markdown files scanned | 258 |
+| Approximate Markdown word count | 110,675 |
+| Broken relative inline link/image paths | 0 |
+| Unclosed fenced code blocks | 0 |
+| Empty Markdown files | 0 |
+| Validator outcome | PASS |
 
-| Metric | Last recorded value | Status |
-|---|---:|---|
-| Repository files | 233 | Historical snapshot from 2026-08-01 |
-| Markdown documents | 226 | Historical snapshot from 2026-08-01 |
-| Approximate Markdown word count | 49,042 | Historical snapshot from 2026-08-01 |
-| Relative Markdown links checked | 300 | Historical result; not rerun |
-| Broken relative Markdown links | 0 | Historical result; not rerun |
-| Structural problems | 0 | Historical result; not rerun |
+Word count is approximate and may shift as documentation changes. The catalogue's file count is a snapshot, not a substitute for rerunning the validator after edits.
 
-## Review actions completed
+## What is checked
 
-- Updated the root README documentation date and clarified links to the catalogue and validation report.
-- Updated the repository-wide documentation index date and explicitly marked its aggregate counts as historical.
-- Added the docs/README.md entry point to the documentation catalogue.
-- Refreshed the private-beta and production-prerequisites review dates.
-- Marked the older manual-test CI evidence as historical and instructed testers to verify the exact current candidate SHA and matching workflow.
-- Preserved the rule that real-device, installed-browser, Last.fm, accessibility, and installer results remain NOT RUN until someone performs and records those tests.
+- Recursively scans Markdown files while excluding common generated/build directories.
+- Reports empty Markdown files.
+- Detects unclosed fenced code blocks.
+- Resolves ordinary inline Markdown links and images whose destinations point to repository-local files or directories.
+- Prints Markdown inventory and approximate word count.
+- Runs in Windows CI so documentation changes are checked alongside the application's existing build and test steps.
 
-## Required validation before claiming a clean documentation build
+## What is not checked
 
-Run these checks from a clean clone of the current main branch:
+This is a structural/path validator, not a complete documentation review. It does **not** validate:
 
-1. Enumerate tracked files and regenerate the catalogue/counts using the repository's actual generator, if present.
-2. Run the repository's Markdown lint and documentation/link validation scripts.
-3. Check relative Markdown links across both docs/ and Scrobblix-Docs/.
-4. Validate JSON/YAML configuration and GitHub workflow/template files with the project's prescribed tools.
-5. Review generated index output for duplicate, missing, or stale paths.
-6. Confirm that any stated CI status references the exact commit SHA and its matching workflow run.
-7. Keep real-world manual test results NOT RUN until executed on the required Windows/browser/provider environment.
+- external URL reachability, policy freshness, or legal correctness;
+- Markdown reference-style links, heading fragments, every CommonMark edge case, or all relative-link syntaxes;
+- correctness of product claims against source, architecture quality, or completeness of requirements;
+- vulnerability remediation, dependency/license audit, SBOM, external penetration testing, or signing provenance;
+- actual GUI behavior, accessibility, playback tracking, installed-browser events, live Last.fm acceptance, long-duration reliability, installer/update/rollback, or uninstall.
 
-## Limitations
+Those areas require their own tools, review, or real environment. Do not infer a pass in one area from a green result in another.
 
-This report does not claim that all documentation has been exhaustively read, all links have been rechecked, or all automated checks passed. It is not evidence of a successful application build, a professional security audit, legal clearance, installer qualification, accessibility certification, or real-world playback testing.
+## Documentation review completed in this pass
 
-External URLs, trademark/product-name clearance, third-party license inventory, release signing, and all live-provider/device tests remain subject to their own validation processes.
+The 2026-10-28 reconciliation checked and corrected major implementation-facing documents covering the physical SQLite schema/migrations, backup/export, Last.fm request/signature and queue semantics, scrobble eligibility, browser Native Messaging, security/privacy, app lifecycle/GSMTC, release packaging/update model, dependency policy, product feature status, requirements traceability, UX implementation boundaries, and user troubleshooting.
+
+A known mismatch between generic YouTube manifest matches and the built-in sender-origin allow-list is tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73). The documentation records the gap rather than silently widening trusted origins.
+
+## Remaining acceptance work
+
+Real Windows/Spotify, installed Chrome/Edge/Firefox, live Last.fm account/scrobble reconciliation, tray/notification, keyboard/screen reader/high-contrast/scaling, support-bundle redaction on Windows, 8–24-hour soak, signed production installation, update/rollback and uninstall remain **unqualified** until the exact candidate is tested and evidence is recorded in the [manual test matrix](Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
+
+The validator must be rerun after any subsequent documentation edit. The results above are explicitly tied to the commit and workflow URL shown in the header.

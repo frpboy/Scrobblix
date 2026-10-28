@@ -9,7 +9,7 @@ This is the canonical catalogue for the repository's documentation and selected 
 
 ## Repository statistics
 
-The tracked tree contains 411 files and 258 Markdown documents on the documentation-validation branch as of 2026-10-28. Run `node scripts/validate-docs.mjs` to calculate the current approximate Markdown word count and verify relative link paths, non-empty files, and fenced-code balance. These counts are a snapshot, not a substitute for running the command.
+The tracked tree snapshot used for this pass contains 411 files and 258 Markdown documents. On commit `eb7d568174792acb2238d937bac7b1e1e5d40af3`, Windows CI run [40634619855](https://github.com/frpboy/Scrobblix/actions/runs/40634619855) measured approximately 110,675 Markdown words and the validator found zero broken relative inline link/image paths, zero unclosed fenced code blocks, and zero empty Markdown files. These are measurements for that exact revision; run `node scripts/validate-docs.mjs` after future edits.
 
 ## Repository root
 
@@ -29,7 +29,7 @@ The tracked tree contains 411 files and 258 Markdown documents on the documentat
 | [`LICENSE`](LICENSE) | **LICENSE.** Repository configuration or non-Markdown project file. |
 | [`README.md`](README.md) | **Scrobblix.** Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history,... |
 | [`PRODUCTION_RELEASE_PREREQUISITES.md`](PRODUCTION_RELEASE_PREREQUISITES.md) | **Production Release Prerequisites.** External credentials/identities, Native Messaging threat review, live qualification, signed distribution and private-beta release gates. |
-| [`SECURITY.md`](SECURITY.md) | **Security Policy.** Only the latest stable release and the active pre-release branch receive security fixes. Older versions may be fixed when practical but are not guaranteed. |
+| [`SECURITY.md`](SECURITY.md) | **Security Policy.** Pre-release reporting guidance; current releases are unsigned development previews. |
 | [`SUPPORT.md`](SUPPORT.md) | **Support.** Before reporting a missed scrobble, capture: |
 | [`THIRD_PARTY_NOTICES.md`](THIRD_PARTY_NOTICES.md) | **Third-Party Notices.** This file is a release-time registry, not a substitute for generated license review. |
 
