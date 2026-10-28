@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Private-beta readiness; core surfaces implemented, real-world qualification pending  
-> **Last updated:** 2026-10-22
+> **Last updated:** 2026-10-28
 
 
 Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
@@ -124,8 +124,8 @@ The repository includes the [Anti-Slop core](skills/antislop/SKILL.md) and [UI s
 
 ## Documentation map
 
-- [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md): complete file-by-file catalogue.
-- [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md): generated structural validation results and limitations.
+- [`DOCUMENTATION_INDEX.md`](DOCUMENTATION_INDEX.md): repository-wide file-by-file catalogue, including the `docs/` entry point.
+- [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md): validation report, historical metrics, and explicit checks still to run.
 - [`00_Project/RECOMMENDATIONS.md`](Scrobblix-Docs/00_Project/RECOMMENDATIONS.md): consolidated product, architecture, privacy, release, and scope recommendations.
 - [`00_Project`](Scrobblix-Docs/00_Project/README.md): vision, scope, principles, terminology, product rules, risks, and decisions.
 - [`01_Product`](Scrobblix-Docs/01_Product/README.md): PRD, features, personas, journeys, metrics, and product strategy.
