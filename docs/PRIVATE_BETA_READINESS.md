@@ -1,6 +1,6 @@
 # Private Beta Readiness
 
-Updated: 2026-10-22  
+Updated: 2026-10-28  
 Integration baseline: `main`
 
 ## Decision
