@@ -8,7 +8,7 @@ const ignoredDirectories = new Set([
 const markdownFiles = [];
 let approximateWordCount = 0;
 const filePaths = new Set();
-const directoryPaths = new Set();
+const directoryPaths = new Set(["."]);
 
 function walk(directory) {
   for (const entry of fs.readdirSync(directory, { withFileTypes: true })) {
@@ -75,7 +75,7 @@ function resolveLocalTarget(fromFile, target) {
   const joined = decoded.startsWith("/")
     ? decoded.slice(1)
     : path.posix.join(path.posix.dirname(fromFile), decoded);
-  return path.posix.normalize(joined);
+  return path.posix.normalize(joined).replace(/\\/+$/, "") || ".";
 }
 
 function checkMarkdownLinks(content, relativePath, diagnostics) {
