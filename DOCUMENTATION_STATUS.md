@@ -2,7 +2,7 @@
 
 > **Project:** Scrobblix  
 > **Status:** Core implementation documented; private-beta acceptance is the current delivery focus  
-> **Last updated:** 2026-10-22  
+> **Last updated:** 2026-10-28  
 > **Integration baseline:** `main`
 
 Documentation distinguishes three different claims:
