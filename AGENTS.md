@@ -2,13 +2,13 @@
 
 All coding agents working on Scrobblix must read:
 
-1. `16_AI_Agents/AI_AGENT_GUIDE.md`
-2. `16_AI_Agents/PROJECT_CONTEXT.md`
-3. `00_Project/PRODUCT_RULES.md`
-4. `05_Architecture/ARCHITECTURE.md`
-5. `12_Testing/DEFINITION_OF_DONE.md`
+1. `Scrobblix-Docs/16_AI_Agents/AI_AGENT_GUIDE.md`
+2. `Scrobblix-Docs/16_AI_Agents/PROJECT_CONTEXT.md`
+3. `Scrobblix-Docs/00_Project/PRODUCT_RULES.md`
+4. `Scrobblix-Docs/05_Architecture/ARCHITECTURE.md`
+5. `Scrobblix-Docs/12_Testing/DEFINITION_OF_DONE.md`
 
-Then read the feature-specific requirements, UX, schema, interface, engine, and security documents before changing code. Scrobblix is Rahul Muraleedharan's personal project (`frpboy`), not a Zabnix project.
+Then read the feature-specific requirements, UX, schema, interface, engine, and security documents before changing code. When editing Markdown, run `node scripts/validate-docs.mjs` from repository root and update the canonical index when adding a new document. Scrobblix is Rahul Muraleedharan's personal project (`frpboy`), not a Zabnix project.
 
 
 <!-- antislop:start -->
