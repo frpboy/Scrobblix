@@ -35,6 +35,31 @@ const connectionCode = document.querySelector<HTMLElement>("#native-diagnostic")
 let currentSite: { origin: string; pattern: string } | undefined;
 let connectionTestRunning = false;
 
+async function getCustomSites(): Promise<CustomSite[]> {
+  const stored = await popupApi.storage.local.get({ customSites: [] as CustomSite[] });
+  const value = (stored as unknown as Record<string, unknown>).customSites;
+  return Array.isArray(value) ? value.filter(isCustomSite) : [];
+}
+
+function isCustomSite(value: unknown): value is CustomSite {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const site = value as Record<string, unknown>;
+  if (typeof site.id !== "string" || typeof site.origin !== "string"
+      || typeof site.pattern !== "string" || !/^site_[a-f0-9]{32}$/u.test(site.id)) {
+    return false;
+  }
+
+  try {
+    const origin = new URL(site.origin);
+    return (origin.protocol === "http:" || origin.protocol === "https:")
+      && origin.origin === site.origin
+      && site.pattern === `${site.origin}/*`;
+  } catch {
+    return false;
+  }
+}
+
+
 // Wire the diagnostic control synchronously before async storage, tab, or permission
 // initialization. It must remain usable even when one of those setup calls stalls.
 connectionButton.addEventListener("click", () => void testConnection());
@@ -42,9 +67,10 @@ connectionButton.addEventListener("click", () => void testConnection());
 void initialise();
 
 async function initialise(): Promise<void> {
-  const [settings, tab] = await Promise.all([
-    popupApi.storage.local.get({ paused: false, customSites: [] as CustomSite[] }),
+  const [settings, tab, sites] = await Promise.all([
+    popupApi.storage.local.get({ paused: false }),
     popupApi.tabs.query({ active: true, lastFocusedWindow: true }),
+    getCustomSites(),
   ]);
 
   pauseButton.textContent = settings.paused ? "Resume tracking" : "Pause tracking";
@@ -56,8 +82,8 @@ async function initialise(): Promise<void> {
 
   currentSite = toSite(tab[0]?.url);
   currentSiteText.textContent = currentSite?.origin ?? "This page cannot be tracked";
-  await refreshTrackAction(settings.customSites);
-  renderCustomSites(settings.customSites);
+  await refreshTrackAction(sites);
+  renderCustomSites(sites);
   trackButton.addEventListener("click", () => void trackCurrentSite());
   await testConnection();
 }
@@ -92,7 +118,7 @@ async function trackCurrentSite(): Promise<void> {
     return;
   }
 
-  const sites = (await popupApi.storage.local.get({ customSites: [] as CustomSite[] })).customSites;
+  const sites = await getCustomSites();
   const site: CustomSite = { id: `site_${crypto.randomUUID().replaceAll("-", "")}`, ...currentSite };
   await popupApi.scripting.registerContentScripts([{ id: site.id, matches: [site.pattern], js: ["dist/media-observer.js"], runAt: "document_idle", persistAcrossSessions: true }]);
   const nextSites = [...sites, site];
@@ -119,7 +145,7 @@ function renderCustomSites(sites: CustomSite[]): void {
 async function removeSite(site: CustomSite): Promise<void> {
   await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
   await popupApi.permissions.remove({ origins: [site.pattern] });
-  const sites = (await popupApi.storage.local.get({ customSites: [] as CustomSite[] })).customSites.filter((entry: CustomSite) => entry.id !== site.id);
+  const sites = (await getCustomSites()).filter((entry) => entry.id !== site.id);
   await popupApi.storage.local.set({ customSites: sites });
   renderCustomSites(sites);
   await refreshTrackAction(sites);
