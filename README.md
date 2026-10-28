@@ -65,6 +65,7 @@ npm --prefix browser-extension run check
 npm --prefix browser-extension run build
 node scripts/test-browser-security.mjs
 node scripts/validate-browser-manifests.mjs
+node scripts/validate-docs.mjs
 dotnet run --project src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release
 ```
 
@@ -86,6 +87,7 @@ npm --prefix browser-extension run check
 npm --prefix browser-extension run build
 node scripts/test-browser-security.mjs
 node scripts/validate-browser-manifests.mjs
+node scripts/validate-docs.mjs
 ```
 
 If WinUI reports `0x80040154 Class not registered`, install/register the
