@@ -1,8 +1,8 @@
 # Support Bundle
 
 > **Project:** Scrobblix  
-> **Status:** Diagnostics-only export implemented on private-beta readiness branch; real Windows qualification pending  
-> **Last updated:** 2026-10-22
+> **Status:** Diagnostics-only export implementation exists in the current source baseline; real Windows qualification pending  
+> **Last reviewed:** 2026-10-28
 
 ## Default export contract
 
