@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** The current native Queue page renders a provider-action summary and action list; commands depend on action state and include supported retry, retry for retry-exhausted scrobbles, explicit resolution of an ambiguous outcome as accepted, and cancellation of eligible pending/retry work. The tabs, bulk controls and row details below are UX targets unless visible in the current build. A local queue/IPC acknowledgement is not Last.fm acceptance.
 
 ## Purpose
 
