@@ -116,6 +116,9 @@ jobs:
       - name: Validate release workflow wiring
         run: node scripts/test-release-workflow.mjs
 
+      - name: Validate Markdown documentation links and structure
+        run: node scripts/validate-docs.mjs
+
       - name: Run domain and infrastructure assertions
         run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
 
