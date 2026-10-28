@@ -4,7 +4,7 @@ This directory contains documentation for implementation, release readiness, sec
 
 For the full documentation catalogue, start with the repository's [Documentation Index](../DOCUMENTATION_INDEX.md) and the structured product/engineering library in [Scrobblix-Docs](../Scrobblix-Docs/).
 
-## Start here
+## Latest documentation review\n\n- [Documentation refresh record](DOCUMENTATION_REFRESH_2026-10-28.md) — scope, integrity notes, and outstanding validation tasks.\n\n## Start here
 
 ### Project and implementation
 - [Implementation Resume Guide](IMPLEMENTATION_RESUME.md) — current baseline, validation discipline, and safe continuation commands.
