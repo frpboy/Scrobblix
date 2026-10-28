@@ -10,8 +10,8 @@ Scrobblix accepts bug reports, documentation improvements, test cases, source ad
 
 ## Before contributing
 
-1. Read [`00_Project/PRODUCT_RULES.md`](00_Project/PRODUCT_RULES.md).
-2. Read [`05_Architecture/ARCHITECTURE.md`](05_Architecture/ARCHITECTURE.md) and applicable ADRs.
+1. Read [`00_Project/PRODUCT_RULES.md`](Scrobblix-Docs/00_Project/PRODUCT_RULES.md).
+2. Read [`05_Architecture/ARCHITECTURE.md`](Scrobblix-Docs/05_Architecture/ARCHITECTURE.md) and applicable ADRs.
 3. Search existing issues and discussions.
 4. For architectural changes, open a proposal before implementation.
 5. Never include real Last.fm session keys, API secrets, personal listening exports, or copyrighted album art in tests.
