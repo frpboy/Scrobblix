@@ -36,3 +36,5 @@ Built-in site permissions and user-granted optional site access are distinct. Us
 ## Qualification status
 
 Automated source/security tests, manifest validation and extension build checks are part of Windows CI. They do not validate real installed-browser permissions, native host launch, OS registration, actual media events or uninstall cleanup. Manual acceptance remains `NOT RUN` for each advertised browser until recorded in the [real-world test matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
+
+**Origin consistency note (tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73)):** The manifests include generic YouTube host matches, but the code-level built-in sender allow-list currently only includes `https://music.youtube.com` and `https://open.spotify.com`. Generic `youtube.com` / `www.youtube.com` observations are not implicitly trusted as built-in origins and may be rejected unless explicitly registered as a custom site. Do not advertise those generic origins as natively supported until the manifest and validation layers are reconciled and tested.
