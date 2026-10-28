@@ -75,7 +75,10 @@ function resolveLocalTarget(fromFile, target) {
   const joined = decoded.startsWith("/")
     ? decoded.slice(1)
     : path.posix.join(path.posix.dirname(fromFile), decoded);
-  return path.posix.normalize(joined).replace(/\\/+$/, "") || ".";
+  const normalized = path.posix.normalize(joined);
+  return normalized.length > 1 && normalized.endsWith("/")
+    ? normalized.slice(0, -1)
+    : normalized;
 }
 
 function checkMarkdownLinks(content, relativePath, diagnostics) {
