@@ -51,6 +51,7 @@ dotnet run --project src\Scrobblix.Desktop\Scrobblix.Desktop.csproj builds Debug
     npm --prefix browser-extension run check
     npm --prefix browser-extension run build
     node scripts/validate-browser-manifests.mjs
+node scripts/validate-docs.mjs
 
 Then launch manually:
 
