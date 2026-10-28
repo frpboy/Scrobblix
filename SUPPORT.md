@@ -18,10 +18,8 @@ Before reporting a missed scrobble, capture:
 
 - Scrobblix version and installation channel;
 - Windows version;
-- source application/browser and website;
-- whether GSMTC and/or the browser companion detected the session;
-- track metadata shown by Scrobblix;
-- eligibility progress and final reason code;
+- source application/player category and whether GSMTC and/or the browser companion detected a session;
+- sanitized eligibility progress and final reason code;
 - queue/API state;
 - sanitized diagnostic bundle.
 
