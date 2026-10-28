@@ -1,29 +1,33 @@
-# Data Management
+# Data Management — Current Capabilities vs Policy Targets
 
-## Export history
+> **Audience:** Scrobblix users and testers  
+> **Status:** Current preview behavior; data lifecycle features are not all implemented  
+> **Last reviewed:** 2026-10-28
 
-Users can export selected history as CSV or versioned JSON. Export includes the chosen date range and clearly labeled local/provider statuses. Secrets and internal authentication material are never exported.
+## History and exports
+
+Scrobblix stores local playback observations, play records, provider actions and loved-track state in SQLite. The current documented history export is CSV. Do not rely on the older proposal for versioned JSON/date-range export unless that option is present in the exact release UI.
+
+Local history and remote Last.fm history are separate. Deleting a local record, if/when available, does not delete a scrobble already accepted by Last.fm.
 
 ## Backup
 
-A full backup includes the database, non-secret settings, schema metadata, and compatibility information. Artwork and rebuildable caches may be optional. Provider credentials require reconnection unless a separately designed encrypted secret-export feature exists.
+The current source implements a versioned backup/restore path with archive/schema/integrity validation, staged restore and a pre-restore safety snapshot. API secrets/session keys and cached artwork are excluded from backup archives; reconnect provider credentials after a restore if needed.
 
-## Restore
+Use a backup made by Scrobblix and preserve the original database before recovery. Test restore against disposable data before relying on a backup for irreplaceable history.
 
-Restore performs these steps before replacing active data:
+## Restore behavior
 
-1. Verify archive structure and size limits.
-2. Validate backup and schema versions.
-3. Check database integrity.
-4. Create a rollback copy of current data.
-5. Run migrations in an isolated transaction/copy.
-6. Present a summary of imported records and skipped items.
-7. Resume background services only after validation succeeds.
+A safe restore path should validate archive structure/size, manifest and schema version, database integrity and migration compatibility before replacing active data; create a safety snapshot; stage writes; and recover the original state if replacement fails. The implementation has staging/safety behavior, but the entire corruption/sidecar/rollback matrix still requires real Windows qualification.
 
-## Delete local data
+## Deletion and retention
 
-A full local-data deletion should offer separate choices for history, pending queue, settings, logs, artwork, browser integration, and credentials. The operation must explain that deletion does not remove scrobbles already accepted by Last.fm.
+The current source baseline does not establish a complete user-facing menu for deleting selected history ranges, wiping all data, choosing per-category retention periods, or purging all logs/cache. Do not follow this document as if all those controls exist in the current UI.
 
-## Portability
+Before a future release advertises full deletion, define and test the scope for history, observations, provider actions (including ambiguous/pending actions), preferences, logs, artwork cache, browser registration, and credentials. The confirmation must explain that removing local data does not remove remote Last.fm records.
 
-JSON is the canonical machine-readable export. CSV is optimized for analysis and human inspection but may not preserve every state transition or nested diagnostic field.
+## Portability and privacy
+
+Credentials are not exported. Listening history and diagnostics are sensitive even when stored on the user's own PC. The support bundle is a separate diagnostics-only export and is not a backup/history export.
+
+For current data paths, see [Database Schema](../06_Data/DATABASE_SCHEMA.md), [Retention and Deletion](../06_Data/RETENTION_AND_DELETION.md), and [Support Bundle](../14_Operations/SUPPORT_BUNDLE.md).
