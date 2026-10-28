@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Specification with implementation/qualification boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** The app uses native WinUI 3 controls and the Fluent visual direction, with current source-level UI contract checks and theme/brand assets. The design tokens and examples below are implementation guidance, not proof of pixel consistency, responsive quality, screen-reader accessibility or high-contrast qualification; those require real Windows testing.
 
 ## Foundation
 

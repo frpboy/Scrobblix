@@ -2,11 +2,14 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Specification with implementation/qualification boundary  
+> **Last reviewed:** 2026-10-28
 
 
 Every screen must define purpose, entry points, data dependencies, states, actions, accessibility, and diagnostics. The current UI exposes local Statistics and searchable recent History; advanced timeline/detail actions remain tracked in the prioritized backlog.
+
+
+**Implementation status (2026-10-28):** This catalog is a product/UX target, not a list of completed screens. Current navigation surfaces include Home, History, Statistics, Loved, Queue, Sources, Diagnostics and Settings. Detailed onboarding, advanced timeline/filters and every listed state/action must be checked against source and the Feature Catalog before being described as shipped.
 
 ## Screen inventory
 

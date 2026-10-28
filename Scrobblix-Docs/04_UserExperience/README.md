@@ -22,3 +22,5 @@ This section defines the full desktop and companion experience.
 - `ACCESSIBILITY.md`
 - `CONTENT_DESIGN.md`
 - `WINDOWING_RESPONSIVE.md`
+
+**Implementation vs target:** This folder defines the intended UX and acceptance criteria. It is not a shipped-feature inventory. Use the root [Feature Catalog](../01_Product/FEATURE_CATALOG.md) for current implementation status and the [Real-world Manual Test Matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md) for actual qualification results. A native page existing in source does not mean every screen state here has been implemented or accessibility-tested.

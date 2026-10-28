@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Specification with implementation/qualification boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Qualification status (2026-10-28):** This is an acceptance specification, not a certification report. Source-level UI contract checks do not replace real keyboard-only, Narrator/screen-reader, high-contrast, 200% scaling, focus, dialog, reduced-motion and narrow-window tests. The matching real-Windows rows remain NOT RUN until executed and recorded against the exact candidate SHA.
 
 ## Keyboard
 
