@@ -1,5 +1,5 @@
-# COVERAGE-CRITICS.md
+# Coverage Critics
 
-**NOT RUN — blocked.** The available integration has GitHub operations but no independent research-agent/Task interface for the skill-required coverage critics. No critic result is fabricated.
+**NOT RUN — blocked.** The available integration has GitHub repository operations but no independent research-agent/Task interface for the skill-required coverage critics. No critic verdict is fabricated.
 
-Required critic work: check omitted lower-trust surfaces, lifecycle modes, trust boundaries and sinks; map prior needs-validation records; verify selected companion attack-class blocks; identify duplicate/broad units and deferred coverage; assign uncovered boundaries in a new wave. The source review was selective across a 405-entry tree and cannot claim complete coverage.
+Required critique: omitted lower-trust surfaces, lifecycle modes, trust boundaries and sinks; prior needs-validation mapping; selected companion attack-class blocks; duplicate/broad units and deferred coverage; and new waves for uncovered boundaries. The source review was selective across a 481-entry tree and cannot claim complete coverage.
