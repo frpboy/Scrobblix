@@ -1,32 +1,44 @@
-# Application Lifecycle
+# Application Lifecycle — Implementation Snapshot
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Source-backed lifecycle outline; full Windows qualification pending  
+> **Last reviewed:** 2026-10-28
 
-## Startup phases
+## Startup path in current source
 
-1. Bootstrap minimal logging and crash guard.
-2. Enforce single instance/route activation.
-3. Resolve data paths and acquire database ownership.
-4. Validate/migrate storage.
-5. Load settings and credentials metadata.
-6. Start queue recovery/provider health.
-7. Start source adapters and Native Host pipe.
-8. Start analytics/cleanup/update checks.
-9. Show tray and requested page.
+The desktop bootstrap in `src/Scrobblix.Desktop/App.xaml.cs` currently:
 
-Startup health remains visible; do not hide migration/repair failure behind a missing tray icon.
+1. Acquires the per-user single-instance gate; a second launch exits rather than creating another playback/SQLite owner.
+2. Loads local Last.fm configuration when available and constructs the main WinUI window.
+3. Creates the user's local Scrobblix data directory and file logger, configures Diagnostics logging and window close handling.
+4. Attempts to install the native notification-area icon; if tray setup fails, normal window use remains available.
+5. Starts the single-instance activation listener and loads local UI preferences; malformed/unreadable preferences fall back safely to notifications off.
+6. Initializes the opt-in Windows notification service if available; a registration failure leaves notifications off but does not intentionally disable tracking.
+7. Initializes local storage and application components, then starts playback observation, browser ingress and provider-action processing as appropriate to the configured user state.
 
-## Sleep/resume
+The sequence above is a source-level overview. A successful build does not prove the full startup lifecycle is robust on every Windows profile.
 
-Subscribe to appropriate system lifecycle/session events. Before suspend where available, persist active state snapshot. On resume, close open played-time intervals at pre-suspend monotonic boundary, refresh source snapshots, network, clock sanity, credentials/provider health, and queue schedule.
+## Single instance and window/tray behavior
+
+The app is intended to maintain one desktop owner for the database and playback engine per user profile. A second start should signal/activate the existing instance. Minimizing the main window hides it to the tray; playback/queue work continues. The tray's explicit Exit command closes the window and cancels application/tracking work.
+
+The current tray prototype does not yet re-register itself after Explorer/taskbar restart. Real tray click/menu behavior, process cleanup and startup failure recovery remain manual qualification items.
+
+## Storage, queue and recovery
+
+SQLite initialization applies the embedded migrations in order and verifies the stored checksums of applied migrations. Unsupported migration history and checksum changes fail rather than silently continuing with an incompatible schema. Provider actions persist locally and use leases/idempotency to limit concurrent duplicate work; an ambiguous provider POST outcome must remain an explicit uncertain state.
+
+The exact current physical schema is documented in [Database Schema](../06_Data/DATABASE_SCHEMA.md). Do not describe future settings, transition-history, provider-attempt or analytics tables as physically persisted until migrations implement them.
 
 ## Shutdown
 
-Stop accepting new UI commands, cancel adapters, drain critical in-process command queue within a strict timeout, commit safe state, release leases/IPC, close database, and exit. Do not delay shutdown for remote provider delivery.
+Closing the main window cancels the tracking/app cancellation sources, stops the single-instance activation listener, disposes tray/notification resources, and writes a shutdown event when the logger remains available. Shutdown must not wait indefinitely for remote provider delivery. Continue to verify that background operations stop safely and handles/SQLite access are released before a new launch.
 
-## Crash recovery
+## Sleep/resume and crash recovery
 
-On next start, recover expired queue leases, close active play intervals conservatively, run quick database check, and surface prior abnormal termination only when action is useful.
+Sleep/wake, Windows user switching, unclean process termination, SQLite recovery and expired queue-lease recovery must be qualified on a real Windows device. Do not claim all lifecycle cases are implemented just because the product specification lists them. For an unexpected exit, capture the exact build, exit code, relevant Windows Application event and sanitized log tail before declaring root cause.
+
+## Verification
+
+Record the commit SHA, Windows build, scenario IDs, actual result and sanitized supporting evidence in the [real-world manual test matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md). Keep untouched scenarios as NOT RUN.
