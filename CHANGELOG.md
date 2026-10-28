@@ -4,6 +4,14 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ## [Unreleased]
 
+### Documentation and validation
+
+- Added a repository-wide Markdown path/structure validator and wired it into Windows CI.
+- Reconciled key architecture, SQLite schema, Last.fm API, queue, Native Messaging, privacy/security, desktop lifecycle, browser, release, and user guides against source so target behavior is not mislabeled as shipped.
+- Added feature implementation statuses and refreshed requirement traceability; historical CI/audit snapshots are explicitly marked as historical.
+- Identified the built-in YouTube manifest/sender-allow-list mismatch for follow-up in [issue #73](https://github.com/frpboy/Scrobblix/issues/73). Real browser qualification remains outstanding.
+
+
 ### Fixed
 
 - Fixed Now Playing artwork disappearing during GSMTC polling: enriched artwork and metadata now persist for the active play, provider-fetched covers take precedence over weaker session thumbnails, and unchanged artwork images are no longer repeatedly reloaded.
