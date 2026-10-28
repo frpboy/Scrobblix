@@ -46,6 +46,15 @@ The tracked tree contains 411 files and 258 Markdown documents on the documentat
 | [`PULL_REQUEST_TEMPLATE.md`](Scrobblix-Docs/.github/PULL_REQUEST_TEMPLATE.md) | Pull request checklist template. |
 
 
+## Supporting Markdown guides
+
+| File | Purpose |
+|---|---|
+| [Browser Companion README](browser-extension/README.md) | Build, installation, protocol/security boundary and real-browser qualification instructions. |
+| [Anti-Slop skill](skills/antislop/SKILL.md) | Core UI quality-review workflow and delivery gate. |
+| [Anti-Slop UI skill](skills/antislop-ui/SKILL.md) | UI-specific review and implementation guidance. |
+| [Provider asset README](src/Scrobblix.Desktop/Assets/providers/README.md) | Provenance requirements for shipped provider artwork. |
+
 ## Desktop UI evolution
 
 | File | Purpose |
