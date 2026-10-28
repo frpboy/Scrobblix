@@ -2,14 +2,14 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Reviewed:** 2026-10-22  
+> **Reviewed:** 2026-10-28  
 > **Index scope:** file catalogue reconciled for private-beta readiness; aggregate counts below are historical.
 
 This file is the repository-wide catalogue. Section README files provide guided reading paths; this index provides a file-by-file inventory.
 
 ## Repository statistics
 
-The last generated aggregate counts (233 files, 226 Markdown documents and approximately 49,042 Markdown words) were calculated on 2026-08-01. They are **historical and not current metrics**; these counts were not regenerated as part of this documentation update.
+The last recorded aggregate counts (233 files, 226 Markdown documents and approximately 49,042 Markdown words) date from 2026-08-01. They are **historical, not current metrics**. This refresh does not claim to have regenerated repository-wide counts or executed the full documentation validation suite.
 
 ## Repository root
 
