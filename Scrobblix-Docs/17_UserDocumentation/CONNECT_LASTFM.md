@@ -2,11 +2,13 @@
 
 > **Status:** Authentication UX specification; implementation scope verified 2026-10-28
 
-## Implemented authorization flow
+## Configure and authorize
+
+Before connecting, the user must enter a Last.fm API key and shared secret in Settings and save them to Windows Credential Locker. Scrobblix can also initialize these values from the documented environment variables for development, but should show clearly where the active values came from. The credentials are required for signed API calls; local playback history should remain usable without them.
 
 Source-of-truth code is in `LastFmDesktopAuthenticator.cs`, `LastFmRequestSigner.cs`, and `LastFmScrobbleProvider.cs`.
 
-1. The user starts **Connect Last.fm** in Scrobblix.
+1. After API credentials are configured, the user starts **Connect Last.fm** in Scrobblix.
 2. The app calls `auth.getToken` and opens the Last.fm authorization page in the default browser.
 3. The user signs in on Last.fm and approves the application there; Scrobblix must never ask for the user's Last.fm password.
 4. The user returns to Scrobblix and completes the authorization flow with the token.
