@@ -1,113 +1,150 @@
 # Database Schema
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Implementation-backed schema snapshot  
+> **Last reviewed:** 2026-10-28
 
-## Conventions
+## Source of truth
 
-SQLite schema uses `snake_case`, UTC timestamps, explicit foreign keys, and migration-managed indexes. UUID/ULID text keys are preferred for cross-process/event correlation. The exact storage representation is finalized in migration 0001 and remains stable.
+The physical schema is created by the embedded SQL migrations in src/Scrobblix.Infrastructure/Storage/Migrations and registered in SqliteDatabase.cs. The current migration sequence is 0001_initial, 0002_accounts, 0003_local_history_artwork, 0004_richer_metadata, and 0005_loved_tracks.
 
-## Core tables
+SqliteDatabase validates that the applied migration history is a known prefix and compares the stored SHA-256 checksum with each embedded migration. **Do not edit a migration that may already have been applied.** Add a new numbered migration, update the schema documentation, and add migration/data assertions with the change.
 
-### `accounts`
+The tables below are the current migration-backed SQLite schema, not the full conceptual data model in the product design documents.
 
-| Column | Type | Notes |
+## Physical tables
+
+### schema_migrations
+
+| Column | Type | Nullability / constraint | Purpose |
+|---|---|---|---|
+| migration_id | TEXT | Primary key | Ordered migration identifier |
+| checksum | TEXT | NOT NULL | SHA-256 digest of the embedded migration text |
+| applied_utc | TEXT | NOT NULL | UTC timestamp when migration was applied |
+
+### playback_observations
+
+| Column | Type | Nullability / constraint |
 |---|---|---|
-| account_id | TEXT PK | Local account identifier |
-| provider | TEXT | `lastfm` initially |
-| remote_username | TEXT | Non-secret profile identity |
-| is_connected | INTEGER | Derived cached state, not proof of credential validity |
-| connected_utc | TEXT NULL | |
-| last_verified_utc | TEXT NULL | |
-| created_utc | TEXT | |
-| updated_utc | TEXT | |
+| observation_id | TEXT | Primary key |
+| source_instance_id | TEXT | NOT NULL |
+| session_id | TEXT | NULL allowed |
+| sequence_number | INTEGER | NOT NULL |
+| event_id | TEXT | NULL allowed |
+| captured_utc | TEXT | NOT NULL |
+| observed_utc | TEXT | NOT NULL |
+| source_name | TEXT | NOT NULL |
+| application_id | TEXT | NULL allowed |
+| artist, title, album | TEXT | NULL allowed |
+| duration_ms, position_ms | INTEGER | NULL allowed |
+| playback_state | INTEGER | NOT NULL |
+| normalized_artist, normalized_title | TEXT | NULL allowed |
+| artwork_path, artwork_source | TEXT | Added by migrations 0003/0004; NULL allowed |
+| album_artist | TEXT | Added by migration 0004; NULL allowed |
+| track_number, release_year | INTEGER | Added by migration 0004; NULL allowed |
+| recording_mbid, release_mbid | TEXT | Added by migration 0004; NULL allowed |
 
-Credential reference names may be stored; secret values may not.
+A unique constraint covers source_instance_id, session_id, sequence_number, and event_id. An index supports source/session/time lookups. SQLite treats NULL values as distinct in ordinary UNIQUE constraints; callers must provide an idempotent identity for repeated observations rather than assuming nullable identity components automatically deduplicate.
 
-### `source_instances`
+### plays
 
-`source_instance_id`, source kind, application/browser/site identifiers, display name, adapter version, first/last seen, enabled state, health, metadata JSON limited to non-secret compatibility fields.
+| Column | Type | Nullability / constraint |
+|---|---|---|
+| play_id | TEXT | Primary key |
+| started_utc | TEXT | NOT NULL |
+| ended_utc | TEXT | NULL allowed |
+| artist, title, album | TEXT | NULL allowed |
+| duration_ms | INTEGER | NULL allowed |
+| confirmed_played_ms | INTEGER | NOT NULL |
+| eligibility_threshold_ms | INTEGER | NULL allowed |
+| eligible_utc | TEXT | NULL allowed |
+| local_status | INTEGER | NOT NULL |
+| terminal_reason_code | TEXT | NULL allowed |
+| created_utc, updated_utc | TEXT | NOT NULL |
+| artwork_path, artwork_source | TEXT | Added by migrations 0003/0004; NULL allowed |
+| album_artist | TEXT | Added by migration 0004; NULL allowed |
+| track_number, release_year | INTEGER | Added by migration 0004; NULL allowed |
+| recording_mbid, release_mbid | TEXT | Added by migration 0004; NULL allowed |
 
-### `playback_observations`
+An index supports descending started_utc history queries. Domain enum values stored in INTEGER columns must be changed compatibly with the application, migration rules, and existing local data.
 
-`observation_id`, `source_instance_id`, source session/tab key, sequence, captured UTC, monotonic tick snapshot, raw/normalized artist/title/album, duration, position, playback state, artwork reference, chosen-by-user hint, metadata completeness, payload version, canonical play link. The source-event identity is `(source_instance_id, session_id, sequence_number, event_id)`. Because SQLite UNIQUE constraints treat `NULL` values as distinct, the storage boundary persists absent optional `session_id` and `event_id` identity components as empty strings so repeated source events remain idempotent. Source instance IDs must be unique for each collector lifetime when sequence numbers restart. Retention may purge these before canonical history.
+### provider_actions
 
-### `plays`
+| Column | Type | Nullability / constraint |
+|---|---|---|
+| action_id | TEXT | Primary key |
+| play_id | TEXT | NULL allowed; references plays(play_id) |
+| account_id | TEXT | NOT NULL |
+| provider | TEXT | NOT NULL |
+| action_type | INTEGER | NOT NULL |
+| state | INTEGER | NOT NULL |
+| idempotency_key | TEXT | NOT NULL, UNIQUE |
+| attempt_count | INTEGER | NOT NULL, defaults to 0 |
+| due_utc | TEXT | NOT NULL |
+| lease_owner, lease_expires_utc | TEXT | NULL allowed |
+| last_reason_code | TEXT | NULL allowed |
+| created_utc, updated_utc | TEXT | NOT NULL |
+| completed_utc | TEXT | NULL allowed |
+| track_key | TEXT | Added by migration 0005; NULL allowed |
 
-| Column | Purpose |
-|---|---|
-| play_id | Canonical identity |
-| account_id | Optional provider account context |
-| started_utc | Original detected start estimate |
-| ended_utc | Terminal time |
-| artist/title/album/album_artist | Canonical payload fields |
-| duration_seconds | Best accepted duration |
-| confirmed_played_ms | Accumulated playing intervals |
-| eligibility_threshold_ms | Stored decision evidence |
-| eligible_utc | First eligibility time |
-| local_status | active/ended/abandoned/ignored/duplicate |
-| terminal_reason_code | Stable reason |
-| winning_source_instance_id | Arbitration result |
-| duplicate_of_play_id | If merged/duplicate |
-| created_utc/updated_utc | Audit |
+An index supports provider/account/state/due-time selection, and a later index supports track-key history. Treat leases and idempotency as concurrency/recovery safeguards; they do not prove that an ambiguous remote request was accepted or rejected.
 
-### `play_state_transitions`
+### accounts
 
-Append-only: transition ID, play ID, from/to state, event type, reason code, event UTC, monotonic marker/delta, source observation, correlation ID, sanitized detail JSON.
+Created by migration 0002.
 
-### `provider_actions`
+| Column | Type | Nullability / constraint |
+|---|---|---|
+| account_id | TEXT | Primary key |
+| provider | TEXT | NOT NULL |
+| remote_username | TEXT | NOT NULL |
+| credential_resource | TEXT | NOT NULL; reference/name, not the session key |
+| is_connected | INTEGER | NOT NULL |
+| connected_utc, last_verified_utc | TEXT | NULL allowed |
+| created_utc, updated_utc | TEXT | NOT NULL |
 
-| Column | Purpose |
-|---|---|
-| action_id | Queue identity |
-| play_id | Nullable for non-play actions |
-| account_id | Required |
-| provider | Last.fm |
-| action_type | scrobble/now_playing/love/unlove |
-| state | pending/in_flight/retry/auth_blocked/etc. |
-| payload_json | Validated non-secret payload |
-| idempotency_key | Unique local duplicate key |
-| attempt_count | |
-| due_utc | Retry schedule |
-| lease_owner/lease_expires_utc | Concurrency |
-| last_reason_code | |
-| created_utc/updated_utc/completed_utc | |
+A unique constraint covers provider and remote_username. The connected flag is stored state; it is not by itself proof that current credentials remain valid.
 
-Now-playing may be persisted as an audit action but must expire and never be retried as stale.
+### loved_tracks
 
-### `provider_attempts`
+Created by migration 0005.
 
-Attempt ID, action ID, started/completed UTC, request classification (not full signature), HTTP status, provider error/ignored code, result classification, retry-after, latency, correlation ID, redacted response summary.
+| Column | Type | Nullability / constraint |
+|---|---|---|
+| track_key | TEXT | Primary key |
+| source_play_id | TEXT | NOT NULL; references plays(play_id) |
+| artist, title | TEXT | NOT NULL |
+| album | TEXT | NULL allowed |
+| is_loved | INTEGER | NOT NULL; CHECK in (0, 1) |
+| provider_loved | INTEGER | NULL allowed; CHECK in (0, 1) |
+| current_action_id | TEXT | NULL allowed; references provider_actions(action_id) |
+| created_utc, updated_utc | TEXT | NOT NULL |
 
-### `settings`
+An index supports loved-state and updated-time queries.
 
-Typed key/value/version rows only for settings not better handled by platform settings. Validation occurs in application layer. Sensitive values prohibited.
+## Index and constraint inventory
 
-### `exclusions`
+- playback_observations: unique source/session/sequence/event identity and index on source_instance_id, session_id, captured_utc.
+- plays: descending index on started_utc.
+- provider_actions: unique idempotency_key; index on provider, account_id, state, due_utc; index on track_key and created_utc.
+- accounts: unique provider/remote_username and index on provider/is_connected.
+- loved_tracks: foreign keys to plays/provider_actions, boolean CHECK constraints, and index on is_loved/updated_utc.
+- schema_migrations: primary key on migration identifier.
 
-Scope (`application`, `site`, `source_instance`), match key, enabled, optional reason, created/updated.
+Foreign-key enforcement is explicitly enabled in the initial migration. Keep all new queries parameterized, keep timestamps UTC, and bound any JSON or free-form payload before persistence.
 
-### `artwork_cache_entries`
+## Conceptual entities not present as standalone tables
 
-Content hash, local relative path, source URI hash (not necessarily raw URL), media type, dimensions, byte size, last access, expiry, attribution fields.
+The earlier architecture baseline described source_instances, play_state_transitions, provider_attempts, settings, exclusions, artwork_cache_entries, and analytics projections. **The current SQL migration chain does not create those tables.** Treat them as proposed domain concepts only unless a future migration makes them physical schema. Do not build a query, report, or migration on the assumption these tables exist today.
 
-### Analytics tables
+## Migration and verification workflow
 
-`daily_summary`, `entity_play_counts`, `listening_sessions`, and migration/version metadata are rebuildable projections.
+1. Update the application/store code and create a new numbered migration for physical schema changes.
+2. Keep the migration ID/resource registration order synchronized with SqliteDatabase.
+3. Never alter an applied migration: checksum validation intentionally rejects content changes.
+4. Add tests covering fresh initialization, existing-database upgrade, foreign keys, uniqueness/idempotency, and malformed or unsupported migration history.
+5. Run the repository's Windows CI and manual backup/restore qualification when relevant.
+6. Update backup/restore, retention, export, privacy, and data-flow docs if the change affects them.
 
-## Required indexes
-
-- plays by started time descending.
-- plays by normalized artist/title and started time.
-- plays by local/provider status.
-- observations by source/session/captured time.
-- provider actions by state/due/account/provider.
-- unique provider action idempotency key.
-- transitions by play/time.
-- attempts by action/time.
-
-## Schema integrity
-
-Use check constraints where SQLite supports them reliably, application validation, foreign keys, unique indexes, and migration tests. Arbitrary JSON fields are bounded and schema-versioned; do not use JSON as a substitute for normalized query-critical fields.
+Schema documentation does not replace inspecting the current migration files.
