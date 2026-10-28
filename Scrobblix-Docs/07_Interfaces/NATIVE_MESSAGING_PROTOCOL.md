@@ -18,7 +18,8 @@ The current host checks these required top-level fields:
 
 After caller identity validation, the implemented message behaviors are:
 - `ping.v1` → `pong.v1`;
-- `playback.observation.v1` → forward the validated protocol payload to the desktop named pipe;
+- `playback.observation.v1` → forward the validated protocol payload to the desktop named pipe, returning `accepted.v1` only after the host successfully writes the observation to the pipe;
+- unavailable desktop pipe → `extension.host_not_connected` error;
 - unsupported types → `extension.unsupported_message`;
 - invalid/malformed frame or envelope → a bounded error response or connection termination.
 
@@ -42,7 +43,7 @@ There is no generic localhost HTTP/WebSocket server. The desktop process/image c
 
 Reject invalid/non-positive frames and frames over 256 KiB. Validate JSON fields, protocol version, message type, declared extension identity and playback metadata bounds before forwarding. Responses must use stable, bounded reason codes and must never contain credentials or raw listening metadata unless the message contract explicitly requires the metadata itself.
 
-The current implementation forwards one supported playback observation type. It does not currently implement a general multi-message handshake, a challenge-response protocol, full-snapshot replay, or accepted-sequence acknowledgement. Do not design the extension around those absent behaviors.
+The current implementation forwards one supported playback observation type and returns a host-level `accepted.v1` acknowledgement tied to its message ID. This acknowledgement only means the native host wrote the frame to the desktop pipe; it is not a sequence acknowledgement and does not certify that the desktop persisted or scrobbled the track. The protocol does not implement a general multi-message handshake, challenge-response protocol, or full-snapshot replay. Do not design the extension around those absent behaviors.
 
 ## Real-browser qualification
 
