@@ -13,9 +13,9 @@ Scrobblix accepts bug reports, documentation improvements, test cases, source ad
 1. Read [Product Rules](Scrobblix-Docs/00_Project/PRODUCT_RULES.md).
 2. Read [System Architecture](Scrobblix-Docs/05_Architecture/ARCHITECTURE.md) and applicable ADRs.
 3. Run `node scripts/validate-docs.mjs` for documentation structure and inline relative links when editing Markdown.
-3. Search existing issues and discussions.
-4. For architectural changes, open a proposal before implementation.
-5. Never include real Last.fm session keys, API secrets, personal listening exports, or copyrighted album art in tests.
+4. Search existing issues and discussions.
+5. For architectural changes, open a proposal before implementation.
+6. Never include real Last.fm session keys, API secrets, personal listening exports, or copyrighted album art in tests.
 
 ## Change categories
 
