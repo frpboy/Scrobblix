@@ -6,6 +6,7 @@ const ignoredDirectories = new Set([
   ".git", "node_modules", "bin", "obj", ".vs", "artifacts", "TestResults",
 ]);
 const markdownFiles = [];
+let approximateWordCount = 0;
 const filePaths = new Set();
 const directoryPaths = new Set();
 
@@ -107,6 +108,7 @@ for (const file of markdownFiles) {
     diagnostics.push({ type: "empty Markdown file", path: file.relativePath, line: 1 });
     continue;
   }
+  approximateWordCount += (content.match(/[\p{L}\p{N}][\p{L}\p{N}’'_-]*/gu) || []).length;
   checkMarkdownLinks(content, file.relativePath, diagnostics);
 }
 
@@ -117,6 +119,7 @@ const emptyFiles = diagnostics.filter((item) => item.type === "empty Markdown fi
 console.log([
   "Scrobblix documentation validation",
   "Markdown files scanned: " + markdownFiles.length,
+  "Approximate Markdown words: " + approximateWordCount,
   "Broken relative links: " + brokenLinks.length,
   "Unclosed fenced code blocks: " + unclosedFences.length,
   "Empty Markdown files: " + emptyFiles.length,
