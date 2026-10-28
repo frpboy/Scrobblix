@@ -1,31 +1,39 @@
 # Packaging and Installer
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Future production-release target; not implemented by the current CI package  
+> **Last reviewed:** 2026-10-28
 
-## Primary packaging
+## Current distribution
 
-Signed MSIX is the preferred baseline, potentially distributed through `.appinstaller`, GitHub Releases, Microsoft Store, and later WinGet. Final acceptance depends on validating startup, tray, Native Messaging registration, protocol activation, notifications, and updates.
+Current CI assembles an unpackaged WinUI desktop application, native host, browser companion, setup scripts and instructions into unsigned development ZIP bundles. Tag-based releases publish GitHub prereleases with SHA-256 checksums. These bundles are for development/testing; they are not signed installers or stable production releases and may require the matching Microsoft Windows App Runtime.
 
-## Installer responsibilities
+See docs/RELEASE_PROCESS.md and the root README for the current workflow. Do not tell ordinary users to bypass Windows warnings for an unsigned public build.
 
-- Install app/native host binaries.
-- Register package/protocol/startup tasks as needed.
-- Register Chromium and Firefox Native Messaging manifests for supported install scope.
-- Use exact allow-listed extension IDs.
-- Create/repair entries atomically and remove them on uninstall.
-- Preserve user database/settings across ordinary updates.
+## Target production packaging
+
+A signed MSIX/App Installer is the preferred future release channel, with possible Microsoft Store or WinGet distribution after independent qualification. This is a target, not a current shipped installer.
+
+Production acceptance must prove:
+
+- package identity, publisher, signature and install source are valid;
+- x64 installation works on the officially supported Windows baseline;
+- app launch, notification-area behavior, startup preference and notifications work;
+- browser Native Messaging manifests are registered only for the current user and exact trusted extension identities;
+- upgrades preserve supported settings, history, provider actions, credentials and host registration;
+- rollback and uninstall do not corrupt the database or silently remove user data;
+- removal cleans registration and installed host files where safe, while documenting retained listening history/logs;
+- code-signing provenance, dependency/license review, SBOM, checksums and release notes are retained.
 
 ## Architecture support
 
-Target x64 first; add ARM64 when build/test capacity exists. Avoid x86 unless evidence requires it.
+x64 is the initial target. ARM64 should not be advertised until the build artifact and real-device matrix cover it. Do not add x86 support without a concrete compatibility requirement.
 
-## Signing
+## Signing and update integrity
 
-Sign packages and relevant binaries with a trusted code-signing certificate. Publish hashes and provenance/SBOM. CI secrets and certificate access are restricted and audited.
+Production signing, publisher verification and a signed update path are open release gates. A checksum downloaded from the same untrusted channel is not a substitute for publisher/signature verification. Signing credentials must never be included in repository files, test bundles, or untrusted pull-request jobs.
 
-## Portable build
+## Portable development ZIP
 
-Later optional ZIP may omit automatic Native Messaging registration, startup integration, and app identity features unless a user-invoked registration helper exists. Label limitations explicitly.
+The existing preview/test ZIP is a development artifact with manual setup and native-host registration steps. It should not be represented as a consumer-ready portable install. Keep the limitations visible in every download/release surface until a signed installation path is qualified.
