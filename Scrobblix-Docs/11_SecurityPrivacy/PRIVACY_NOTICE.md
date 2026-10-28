@@ -1,34 +1,44 @@
-# Privacy Notice Draft
+# Privacy Notice Draft — Scrobblix
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Draft for review; not a final published legal notice  
+> **Last reviewed:** 2026-10-28
 
 ## Summary
 
-Scrobblix processes playback metadata on your Windows device to maintain local listening history and, when you connect Last.fm, submit eligible listening events to Last.fm. Scrobblix does not record system audio or microphone input.
+Scrobblix processes playback metadata on your Windows device to show current playback and maintain local listening records. If you configure and connect a Last.fm account, it submits eligible playback events and separate Now Playing/Love/Unlove actions to Last.fm. Scrobblix does not intentionally record system audio or microphone input.
+
+This is a product-documentation draft. Before public distribution, confirm every statement against the actual release package, browser permissions, Last.fm API terms, and applicable privacy law; publish a contact and applicable legal/business details.
 
 ## Data processed locally
 
-Track title, artist, album, duration, playback state/position, source application/browser/site, timestamps, scrobble/love outcomes, settings, logs, and derived listening statistics. Browser Companion processes only enabled supported media sites and sends observations locally through Native Messaging.
+Depending on enabled sources and settings, Scrobblix may process media metadata (artist, title, album and duration), playback state/position, event timestamps, source application/origin context, local play and provider-action status, optional artwork URLs/cache, reason codes, settings and minimized operational logs. Data is stored in local SQLite/files/settings as implemented. The optional browser companion sends supported observations to the local desktop app through Native Messaging.
+
+The browser companion requires source-specific browser permissions and an explicit registration plus browser permission for user-added sites. An origin-mismatch issue is tracked for generic YouTube matches; do not claim every manifest-listed origin is supported until that issue is resolved and qualified.
 
 ## Data sent to Last.fm
 
-When enabled and authenticated, Scrobblix sends the metadata required for now-playing, scrobble, love, and unlove requests, including artist, track, timestamp and optional album/duration fields. Last.fm processes that data under its own terms/privacy policy.
+When configured and connected, Scrobblix sends API requests needed for authorization/session exchange, scrobble, Now Playing, Love and Unlove operations. Current scrobble fields include artist, track, original timestamp and optional album/duration. Last.fm processes these requests under its own terms and privacy notice. A successful local queue or IPC message is not by itself proof of remote acceptance.
 
-## Scrobblix telemetry
+## Scrobblix-operated telemetry and crash reporting
 
-No usage telemetry or listening history is uploaded to a Scrobblix server by default. Crash/support data remains local unless the user explicitly chooses to share a previewed support bundle or a future opt-in feature.
+The current app is local-first and has no Scrobblix-operated remote telemetry or automatic support-bundle upload established in the source baseline. Diagnostics/export remain local until the user chooses to share an exported archive. Do not claim that a complete telemetry/crash reporting settings page exists.
 
-## Controls
+## Current controls and limits
 
-Users can pause tracking, disable Last.fm, disable/uninstall Browser Companion, revoke site permissions, configure retention, export history, clear caches/logs, delete local history, disconnect the account, and uninstall.
+Users can configure provider credentials/authorization, pause tracking where available, control the optional browser companion and site permissions, and explicitly export the allow-listed support bundle. The current source does **not** establish a complete configurable retention scheduler, full history deletion UX, cache/diagnostic purge controls in every area, arbitrary JSON export, or automatic crash reporting. Do not state these are available as shipped user controls until confirmed in the release.
 
-## Retention and security
+The support bundle is designed to exclude provider credentials/session keys, the full listening database/history, artwork, raw/free-form logs, full URLs, usernames and raw crash dumps. Real Windows Save/export and redaction qualification remains pending.
 
-Retention follows user settings. Session credential is stored through Windows Credential Locker. Local files are protected by the user's Windows account and device security. No software can guarantee protection if the account/device is compromised.
+## Security and retention
+
+Last.fm session credentials use the Windows Credential Locker abstraction. Local files remain subject to the security of the Windows user account/device. Scrobblix cannot guarantee protection if the operating system or signed-in account is compromised. Do not infer a defined automatic retention period where none is implemented.
 
 ## Third parties
 
-Windows, browser stores/browsers, Last.fm, distribution/update hosts, and source websites operate under their own policies. Final public privacy notice must list actual services used at release and provide contact information.
+Third parties may include Microsoft Windows/Windows App SDK, browser vendors/stores, Last.fm, and the media sites the user chooses to observe. A final public notice should accurately list actual providers and distribution channels and disclose relevant browser-store terms. Do not imply affiliation or endorsement by Last.fm.
+
+## Release publication checklist
+
+Before publishing this notice, obtain privacy/legal review, inventory every persisted/sent field from the exact release, check the current browser manifests, verify each control exists in UI, state retention/deletion behavior accurately, and publish a monitored privacy contact.
