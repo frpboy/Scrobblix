@@ -5,7 +5,7 @@
 > **Reviewed:** 2026-10-28  
 > **Index scope:** repository documentation catalogue. Counts are a tracked-tree snapshot for 2026-10-28; the validation command reports current Markdown metrics.
 
-This file is the repository-wide catalogue. Section README files provide guided reading paths; this index provides a file-by-file inventory.
+This is the canonical catalogue for the repository's documentation and selected support files. Section README files provide guided reading paths. It is not a manifest of every application source file or generated artifact; the Git tree remains authoritative for the complete repository inventory.
 
 ## Repository statistics
 
