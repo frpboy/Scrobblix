@@ -10,7 +10,7 @@ This is a readiness document, not a claim that Scrobblix is ready to release. Ch
 
 The mainline codebase contains Home, History/search/export, Statistics, Loved, Queue, Sources, Diagnostics and Settings; GSMTC tracking; Last.fm authentication and provider-action paths; persistent queue retry/recovery logic; metadata/artwork fallback; backup/restore logic; tray and opt-in notifications; Chromium/Firefox development manifests; and Native Messaging host code and helper scripts.
 
-The private-beta readiness PR adds clearer Home delivery text, a real-world acceptance matrix, and a diagnostics-only support bundle. Treat those branch additions as candidate changes until the exact-head CI passes and they are integrated.
+The current mainline contains the Home delivery/readiness surfaces, real-world acceptance matrix, and diagnostics-only support-bundle implementation. Their presence is an implementation inventory, not release qualification: re-run the exact current candidate's CI and complete the real-Windows/manual acceptance gates before beta.
 
 **Implementation exists is not the same as live behavior being validated.** The gates below must be tested against the actual Windows/Spotify/Last.fm/browser/installer environment before private beta.
 

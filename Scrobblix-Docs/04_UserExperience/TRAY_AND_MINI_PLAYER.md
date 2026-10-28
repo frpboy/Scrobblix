@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** A notification-area tray prototype exists: minimizing hides the main window while tracking continues; the menu supports open/exit and local playback/queue actions including pause/resume, Love/Unlove, copy actions, retry for retry-exhausted scrobbles, navigation and opening logs. This is not a separate always-on mini-player, and re-registration after Explorer/taskbar restart is not established. Real shell/UI behavior remains unqualified.
 
 ## Tray icon states
 

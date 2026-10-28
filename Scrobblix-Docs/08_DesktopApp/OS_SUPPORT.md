@@ -2,21 +2,35 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Target baseline; release qualification is not complete  
+> **Last reviewed:** 2026-10-28
 
-## Official baseline
+## Target support baseline
 
-At documentation date, Windows 10 general support ended on 2025-10-14. Scrobblix v1 should officially target supported Windows 11 releases at launch. Current recommendation: Windows 11 25H2 or later, reassessed immediately before beta/v1.
+The README's current implementation baseline targets Windows 11, with Windows 11 25H2 or later as the supported release target. This is a planned/selected baseline, not proof that every Windows edition, device, or servicing configuration has passed qualification. Re-check the supported Microsoft lifecycle and SDK/runtime requirements before beta and each public release.
+
+Windows 10 general support ended on 2025-10-14; do not promise Windows 10 compatibility for Scrobblix v1 without a deliberate compatibility decision and matching tests.
 
 ## Technical minimum vs supported minimum
 
-WinUI/Windows App SDK may technically run on older Windows versions. Technical launch is not official support. Unsupported Windows may be blocked or allowed with a clear warning and no compatibility promise; decide before beta.
+A Windows App SDK component may technically run on a system that Scrobblix does not officially support. A successful local build is not a compatibility guarantee. Do not silently widen the supported OS range just because an unpackaged executable launches.
 
-## Test policy
+## Qualification matrix
 
-Test current supported Home/Pro and Enterprise releases, x64 and eventually ARM64, common scaling/multi-monitor, standard and non-admin users, packaged install/update/uninstall, sleep/resume, and locked-down browser profiles.
+Before release, test the exact candidate against:
+- supported Windows 11 Home/Pro and Enterprise images where available;
+- x64 architecture first; ARM64 only after separate build and real-device qualification;
+- standard/non-administrator accounts and enterprise restrictions;
+- common display scaling, multi-monitor and window sizes;
+- lock/unlock, sleep/resume, browser restart, app restart and shutdown;
+- install/upgrade/rollback/uninstall after a signed package path exists.
 
-## Version detection
+Record OS edition/build, app SHA and actual results in the real-world manual test matrix. Leave untested combinations as `NOT RUN`.
 
-Report exact OS build in diagnostics but avoid hard-coding marketing version assumptions into core logic. Use capability checks where possible.
+## Runtime prerequisites
+
+The unpackaged development bundle may require the Windows App Runtime version used to build it. If WinUI reports `0x80040154 Class not registered`, install/register the matching runtime and retry. A future signed installer must handle runtime installation/repair and explain failures without asking users to bypass Windows security warnings.
+
+## Version detection and diagnostics
+
+Record the actual OS build/runtime identifiers in diagnostics where appropriate. Use capability checks rather than hard-coded marketing-version assumptions in core playback logic. Avoid placing full local paths, usernames, or personal data into exported diagnostics.

@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** The current WinUI Home presents current observed track/source, confirmed-played-time and eligibility progress, Last.fm/delivery status, a concise Today summary and three recent tracks. Routine status banners are intentionally suppressed. The layouts and state examples below are UX targets, not proof that every proposed control/state exists or has passed visual/accessibility testing. See the Feature Catalog and real-world manual test matrix.
 
 ## Purpose
 

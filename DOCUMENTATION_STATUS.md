@@ -35,6 +35,14 @@ No status document or successful older CI run may substitute for the latter two.
 - `PRODUCTION_RELEASE_PREREQUISITES.md`: external credentials, browser identities, signing and final qualification.
 - `Scrobblix-Docs/14_Operations/SUPPORT_BUNDLE.md`: diagnostics ZIP contents, privacy boundary and qualification requirements.
 
+## Findings from the 2026-10-28 reconciliation
+
+- The architecture, physical SQLite schema, Last.fm requests/signing, eligibility, durable queue/retry behavior, Native Messaging protocol, reason codes, browser permissions, security boundaries, desktop lifecycle, release model, dependency policy and user-facing guides were checked against implementation source and corrected where they materially overstated support.
+- The product catalog and requirements traceability now show implementation status separately from product priority and real-world qualification.
+- A new `scripts/validate-docs.mjs` check is wired into Windows CI. It checks non-empty Markdown, fenced-code balance, and repository-relative destinations in ordinary inline links/images. It is **not** a semantic review, external URL checker, heading-anchor validator, vulnerability scanner or accessibility certification.
+- Issue [#73](https://github.com/frpboy/Scrobblix/issues/73) tracks the built-in YouTube manifest-match versus sender-allow-list inconsistency.
+- The validator does not execute live playback. Real Windows/Spotify, Last.fm account, Chrome/Edge/Firefox, tray/notification, accessibility, 8–24-hour soak, installer/signing and update/rollback checks remain unqualified until recorded in the manual test matrix.
+
 ## Review cadence
 
 - Product/scope/roadmap: before each beta milestone and after any major scope change.

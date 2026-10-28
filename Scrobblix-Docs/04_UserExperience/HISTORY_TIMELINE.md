@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** The current native History surface provides local chronological history, search/filter and CSV export. It is not Last.fm's remote library. Grouped timeline/session views, the full filter matrix, arbitrary historical metadata editing, selected-range deletion and JSON export are not all established as shipped features. Local deletion does not retract a remote scrobble already accepted by Last.fm.
 
 ## Purpose
 

@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** Current Sources surfaces show observed source identity/state and last-observation context, and indicate when Browser Companion events are received. Registration or files on disk do not prove a browser is delivering events; a fully qualified inventory for every installed browser/player is not established. A built-in-origin mismatch for generic YouTube matches is tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73). Browser cards and controls below are targets where absent from the current build.
 
 ## Purpose
 

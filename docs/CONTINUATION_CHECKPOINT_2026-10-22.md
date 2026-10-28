@@ -1,3 +1,5 @@
+> **Historical checkpoint — do not treat as current GitHub state.** This document reflects a snapshot from 2026-10-23. The PR and commit states below are historical; for current code/CI status use [the root README](../README.md), [Implementation Resume](IMPLEMENTATION_RESUME.md), [Private Beta Readiness](PRIVATE_BETA_READINESS.md), and the [live Actions runs](https://github.com/frpboy/Scrobblix/actions). The real-world qualification matrix remains the authority for manual-test results.
+
 # Scrobblix continuation checkpoint — 2026-10-23
 
 This checkpoint is a source-of-truth handoff for continuing from the current committed state. Inspect live GitHub state again before relying on any SHA or CI result.

@@ -2,13 +2,13 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Pre-release security reporting policy  
+> **Last reviewed:** 2026-10-28
 
 
 ## Supported versions
 
-Only the latest stable release and the active pre-release branch receive security fixes. Older versions may be fixed when practical but are not guaranteed.
+Scrobblix is currently distributed through unsigned development preview ZIPs; a signed stable production release is not established. Security fixes are prioritized for current `main` and the active release candidate, with older preview artifacts fixed where practical but not guaranteed. Do not interpret this policy as a promise that any preview is suitable for production.
 
 ## Reporting a vulnerability
 
@@ -32,4 +32,4 @@ Do not include real credentials or personal listening data. Use test accounts an
 - Prepare a coordinated patch and advisory.
 - Credit reporters who request credit, unless disclosure creates risk.
 
-See [`11_SecurityPrivacy/THREAT_MODEL.md`](11_SecurityPrivacy/THREAT_MODEL.md) for the formal threat model.
+See [the current threat model](Scrobblix-Docs/11_SecurityPrivacy/THREAT_MODEL.md) for the source-backed security boundary and remaining risks. This is not a formal external penetration-test report.

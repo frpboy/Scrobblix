@@ -1,37 +1,45 @@
-# Retention and Deletion
+# Retention and Deletion — Policy vs Implementation
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Privacy requirements; full retention/deletion workflow is not established as shipped  
+> **Last reviewed:** 2026-10-28
 
-## Defaults
+## Current persisted data
 
-- Canonical local history: unlimited by default, clearly disclosed.
-- Raw observations/state transitions: retain 30–90 days by default, configurable within safe bounds.
-- Provider attempts: 90 days or a capped count.
-- Completed queue items: minimal audit retention, then represented through play/provider status.
-- Logs: rolling size/time policy; verbose logs expire quickly.
-- Artwork: LRU/expiry under a user-visible size budget.
+The migration-backed SQLite tables are `schema_migrations`, `playback_observations`, `plays`, `provider_actions`, `accounts`, and `loved_tracks`. Logs, non-secret UI preferences, and artwork cache are stored separately under the user profile. Last.fm session credentials and application API credentials are managed through Windows Credential Locker.
 
-## Deletion semantics
+Do not describe source-transition, provider-attempt, analytics, exclusions, or retention-job tables as present unless a migration creates them. Refer to the [Database Schema](DATABASE_SCHEMA.md) for the exact physical schema.
 
-### Delete one local play
+## Privacy policy recommendations
 
-Removes the local play and dependent local observations/transitions/analytics. If a provider action is still pending, ask whether to cancel it. An already accepted Last.fm scrobble remains remote.
+The following are product policy targets that require explicit implementation and UI review; they should not be treated as proof of shipped cleanup workflows:
 
-### Delete all history
+- Local listening history: retain until the user deletes it, with a clear disclosure and an accessible deletion control.
+- Raw observations: choose a limited retention period or bounded quota before private/public release if full indefinite retention is not justified.
+- Provider-action history: retain only enough local status to explain delivery and avoid duplicate reprocessing; define a capped/age-based cleanup policy.
+- Logs: use a bounded rolling policy and redact track identities, secrets, authorization URLs and private paths.
+- Artwork: bound per-item size and eventually document a disk/cache budget and eviction behavior.
+- Support bundle: user-initiated diagnostics-only export; no automatic upload. Credentials, listening database/history, artwork, free-form log messages, and raw crash dumps are excluded by design.
 
-Requires explicit scope confirmation, stops writers, creates optional safety backup, deletes canonical history and derived models, clears relevant caches, and records only a minimal non-personal audit that deletion occurred if needed.
+## Current disconnect behavior
 
-### Disconnect Last.fm
+Disconnecting Last.fm removes the locally stored session credential and disconnects the provider account, which blocks future provider queue delivery for that account. Local listening history is not automatically deleted. Revoking the authorization at Last.fm is a separate provider-side action.
 
-Deletes the session credential and blocks/cancels provider actions according to user choice. Local history is retained unless separately deleted.
+Do not describe automatic deletion of all pending actions, local plays, cached artwork, or logs as current behavior unless the corresponding implementation and regression tests are present.
 
-### Uninstall
+## Deletion requirements before release
 
-Document whether app data is removed by package uninstall and provide an in-app “delete all local data” action before uninstall. Do not claim secure erasure beyond OS/filesystem guarantees.
+Before beta, define and test:
+- delete one local play and its related local observation/action behavior;
+- delete all local history and the implications for queued or ambiguous submissions;
+- disconnect/revoke an account and safely handle pending actions;
+- clean up preferences/cache/logs on uninstall or explain exactly what is retained;
+- retention expiry behavior, storage limits and recoverability;
+- backup/restore interaction with deletion and privacy settings.
 
-## Retention job
+The current implementation should never claim secure erasure beyond the operating system and filesystem guarantees. If deletion is implemented, stop relevant writers, make state changes transactionally consistent, and keep provider-side scrobbles distinct: deleting local history does not delete an already accepted Last.fm record.
 
-Runs opportunistically with bounded batches, never during migration/backup, and reports failures without blocking core tracking. Deletion cascades are transactionally consistent.
+## Verification
+
+Do not mark a retention/deletion scenario PASS based on policy text. Record exact candidate SHA and real behavior in the test matrix; leave incomplete scenarios as NOT RUN.

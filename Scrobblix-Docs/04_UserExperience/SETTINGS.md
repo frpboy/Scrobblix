@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** Current Settings is organized into General, Last.fm, Detection, Notifications, Privacy, Storage and collapsed Advanced sections. API credentials/session handling uses the Windows Credential Locker abstraction. Do not assume every proposed setting below—such as a stable/beta updater channel, automatic sign-in launch, retention period, full data wipe or JSON export—is shipped; see Privacy Controls and Data Management for the current boundary.
 
 ## General
 

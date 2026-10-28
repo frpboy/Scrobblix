@@ -5,11 +5,11 @@ Integration baseline: `main`
 
 ## Decision
 
-Scrobblix has the main product flows implemented. Recent local evidence shows a Browser Companion named-pipe `IOException` storm and a separate rebuild collision with a still-running desktop process. The supplied logs do not establish that the pipe failure is the actual cause of the unexpected process exit; crash diagnosis stays open until the exact fixed candidate is retested with Windows exit/event evidence.
+Scrobblix has the main product flows implemented, but release qualification remains incomplete. Older local logs captured Browser Companion named-pipe `IOException` bursts and a rebuild collision with a still-running desktop process. PR #7 was merged on 2026-10-22 with the private-beta readiness changes, but those historical logs do not prove the same symptoms still reproduce on today's `main`. Retest the exact current candidate on Windows and capture exit/Event Viewer evidence if it fails; do not claim the crash is fixed or still present solely from the old logs.
 
 ## Track 0 — crash and startup stability (P0)
 
-- [ ] Build and launch from the exact `feat/private-beta-readiness` candidate SHA and matching Windows Actions run.
+- [ ] Fetch the current `main` (or explicitly nominated candidate) SHA and build/launch that exact commit; record its matching Windows Actions run. Do not rely on a branch name or a historical green run.
 - [ ] Verify the launcher refuses to rebuild while `Scrobblix.Desktop` is open, including a minimized-to-tray instance, and never terminates a user process.
 - [ ] Reproduce Browser Companion/native-host pipe contention; verify bounded exponential retry, warning throttling, suppressed counts, and successful reconnect.
 - [ ] Repeat startup, normal exit, close-to-tray, restart, and browser restart. Reconcile history and queue/action IDs to prove no track loss or duplicate acceptance.

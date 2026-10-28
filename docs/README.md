@@ -4,7 +4,12 @@ This directory contains documentation for implementation, release readiness, sec
 
 For the full documentation catalogue, start with the repository's [Documentation Index](../DOCUMENTATION_INDEX.md) and the structured product/engineering library in [Scrobblix-Docs](../Scrobblix-Docs/).
 
-## Latest documentation review\n\n- [Documentation refresh record](DOCUMENTATION_REFRESH_2026-10-28.md) — scope, integrity notes, and outstanding validation tasks.\n\n## Start here
+## Latest documentation review
+
+- [Documentation refresh record](DOCUMENTATION_REFRESH_2026-10-28.md) — scope, integrity notes, and outstanding validation tasks.
+- [Automated documentation validator](../scripts/validate-docs.mjs) — checks Markdown relative-link targets, empty files, and fenced-code balance; run it before opening a documentation PR.
+
+## Start here
 
 ### Project and implementation
 - [Implementation Resume Guide](IMPLEMENTATION_RESUME.md) — current baseline, validation discipline, and safe continuation commands.
@@ -25,7 +30,10 @@ For the full documentation catalogue, start with the repository's [Documentation
 - Keep documentation aligned with the implementation and tests in the same change whenever possible.
 - Distinguish implemented behavior from planned work and unverified assumptions.
 - Never include API keys, Last.fm session keys, credentials, private user data, or production secrets.
+- Run `node scripts/validate-docs.mjs` for local documentation structure and relative-link checks; this check does not validate external URLs, heading fragments, product correctness, or real-world behavior.
 - Record reproducible validation commands and clearly state when a check requires a real Windows device, browser, or Last.fm account.
 - Prefer updating an existing canonical document over creating duplicate guidance.
 
 If a link is missing, check [DOCUMENTATION_INDEX.md](../DOCUMENTATION_INDEX.md) for the canonical path before adding a new document.
+
+The last completed full Windows CI run measured by this documentation pass is [run 40634619855](https://github.com/frpboy/Scrobblix/actions/runs/40634619855), on commit `eb7d568174792acb2238d937bac7b1e1e5d40af3`. See the [validation report](../DOCUMENTATION_VALIDATION.md) for exact metrics and scope. Later report/index edits must be validated on their own final commit before merge.

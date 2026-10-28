@@ -2,7 +2,7 @@
 
 > **Purpose:** Produce auditable evidence for private beta readiness.  
 > **Manual status:** All real-machine, provider, installed-browser, UX and installer scenarios remain `NOT RUN`; repository CI does not set these rows to PASS.  
-> **Historical code-candidate CI:** SHA `23bc40a9e7a959145d3494fb7e6382d079020710` passed Windows workflow [run 39732158406](https://github.com/frpboy/Scrobblix/actions/runs/39732158406) on 2026-10-22. This is historical evidence only. Before a new test run, verify the current PR/branch state and latest CI run for the exact candidate SHA; do not infer current status from this older record.  
+> **Historical code-candidate CI:** SHA `23bc40a9e7a959145d3494fb7e6382d079020710` passed Windows workflow [run 39732158406](https://github.com/frpboy/Scrobblix/actions/runs/39732158406) on 2026-10-22. This is historical evidence only. PR #7 was merged on 2026-10-22, but its old CI result does not validate current main. Before each new test run, verify the current candidate SHA and matching Actions run; do not infer current status from a branch label or older run.  
 > **Baseline rule:** Fill the run header using the exact app build installed for the manual test; do not carry the CI success into manual results.  
 > **Last updated:** 2026-10-28
 

@@ -1,3 +1,5 @@
+> **Historical audit snapshot — not the current mainline report.** The audit branch/commit and PR/issue states in this document describe an earlier review. Issue #27 subsequently closed after a documentation update, PR #7 was merged, and issue [#73](https://github.com/frpboy/Scrobblix/issues/73) now tracks the built-in YouTube-origin/manifest mismatch found during the 2026-10-28 documentation reconciliation. Re-check live GitHub state and current CI before relying on any historical SHA/count. Real Windows/provider/browser release gates remain separate and must be recorded in the [manual test matrix](REAL_WORLD_MANUAL_TEST_MATRIX.md).
+
 # Scrobblix Repository Audit Report
 
 > **Audit date:** 2026-10-23  

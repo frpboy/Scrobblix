@@ -18,3 +18,5 @@
 | Test strategy/matrix | testing docs/traceability |
 
 An AI agent must not create duplicate contradictory docs. Update authoritative files and links. New documents require index entries.
+
+Before submitting a documentation change, run `node scripts/validate-docs.mjs` from the repository root. The command checks that Markdown files are non-empty, fenced code blocks are balanced, and ordinary inline Markdown link/image targets resolve to a repository path. It is a path/structure check only: it does not validate external URLs, anchor fragments, semantics, implementation correctness, accessibility, or live-provider behavior. CI runs the same command on pull requests and pushes covered by the CI workflow.

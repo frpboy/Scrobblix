@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** The current native Statistics surface shows total sessions, confirmed listening time, eligible-session count, accepted-scrobble count and top artists from local data. Do not infer that proposed period selectors, comparisons, heatmaps, export-image actions, advanced album charts or reliability funnels are shipped. Clearly distinguish observed/eligible local plays from provider-accepted scrobbles. Real calculation/visual accessibility qualification remains open.
 
 ## Purpose
 

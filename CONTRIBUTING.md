@@ -2,19 +2,20 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Current contribution guidance  
+> **Last reviewed:** 2026-10-28
 
 
 Scrobblix accepts bug reports, documentation improvements, test cases, source adapters, browser-site adapters, accessibility fixes, translations, and implementation changes that follow the documented architecture.
 
 ## Before contributing
 
-1. Read [`00_Project/PRODUCT_RULES.md`](00_Project/PRODUCT_RULES.md).
-2. Read [`05_Architecture/ARCHITECTURE.md`](05_Architecture/ARCHITECTURE.md) and applicable ADRs.
-3. Search existing issues and discussions.
-4. For architectural changes, open a proposal before implementation.
-5. Never include real Last.fm session keys, API secrets, personal listening exports, or copyrighted album art in tests.
+1. Read [Product Rules](Scrobblix-Docs/00_Project/PRODUCT_RULES.md).
+2. Read [System Architecture](Scrobblix-Docs/05_Architecture/ARCHITECTURE.md) and applicable ADRs.
+3. Run `node scripts/validate-docs.mjs` for documentation structure and inline relative links when editing Markdown.
+4. Search existing issues and discussions.
+5. For architectural changes, open a proposal before implementation.
+6. Never include real Last.fm session keys, API secrets, personal listening exports, or copyrighted album art in tests.
 
 ## Change categories
 
@@ -60,6 +61,10 @@ test(gsmtc): cover paused-to-stopped transition
 - `feature/<issue>-<slug>`: ordinary work.
 - `fix/<issue>-<slug>`: bug fixes.
 - `release/<version>`: only when release stabilization requires it.
+
+## Validation and merge discipline
+
+Document changes should identify which checks were run and their exact candidate SHA. Windows CI covers the repository's configured build/assertion/browser/manifest/package checks and the Markdown validator; it does not prove live Last.fm, installed-browser, GUI accessibility, or signed-installer behavior. Never mark those manual checks PASS without evidence. Read the repo's [real-world manual test matrix](Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
 
 ## Developer certificate
 

@@ -2,8 +2,8 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Current agent guidance  
+> **Last reviewed:** 2026-10-28
 
 ## Authority order
 
@@ -42,3 +42,8 @@ Do not silently override docs with assumptions. Flag conflicts and update the au
 ## Change output
 
 Summarize files changed, requirement IDs, architecture impact, migrations, tests, manual verification, known limitations, and follow-up issues. Be explicit when environment prevents verification.
+
+
+## Documentation and implementation status
+
+Do not assume that a detailed PRD, UX, architecture diagram, feature catalog, or roadmap entry is implemented. Use actual source, migration and test paths to describe current behavior. Keep product target, implementation inventory, passing exact-SHA CI evidence and real-world qualification as separate statuses. For Markdown changes, run `node scripts/validate-docs.mjs` and update the canonical index. The validator is only a structural/path check and is not a substitute for semantic review.

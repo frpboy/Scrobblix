@@ -1,27 +1,41 @@
-# Extension Permissions
+# Browser Companion Permissions
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Current manifest policy; real-browser permission UX pending  
+> **Last reviewed:** 2026-10-28
 
-## Principle
+## Current manifest permissions
 
-Request the minimum permission at the moment it is needed and explain the direct benefit.
+The Chromium manifest currently declares:
 
-## Likely permissions
+| Permission | Purpose | Status/notes |
+|---|---|---|
+| `nativeMessaging` | Send validated metadata to the local Scrobblix Native Messaging host | Required for desktop integration |
+| `storage` | Keep local extension settings/state | Required by extension code |
+| `activeTab` | Temporary access associated with explicit user interaction | Must remain tied to the browser-granted interaction |
+| `scripting` | Inject/execute the companion observer when permitted | Required for the supported workflow |
+| Built-in host permissions | Observe the listed supported playback sites | Static manifest scopes; disclose them plainly |
+| Optional `http://*/*` and `https://*/*` host patterns | Allow the user to add another site and grant access to that exact origin through browser UX | Optional permission; never use as silent blanket scraping permission |
 
-- `nativeMessaging` — communicate with installed Scrobblix host.
-- `storage` — adapter preferences and local extension state.
-- `tabs` or limited tab access only if necessary for source identity; avoid broad URL/title collection.
-- `scripting` and site access limited to supported playback sites.
+The permission list is taken from `browser-extension/manifest.json`; verify the Firefox manifest separately because browser API and permission behavior can differ.
 
-For a companion with no options page, declare the small fixed set of supported playback sites in Chromium `host_permissions` so the observer can run immediately after the user approves installation. Firefox retains optional development permissions. Do not request `<all_urls>` unless a later generic mode has strong justification and store approval.
+## Least privilege and site grants
 
-## Incognito/private browsing
+Do not add broader required permissions without a concrete feature need, a privacy/security review, and a manifest/test update. The optional HTTP/HTTPS patterns enable user-initiated site additions; the extension should only act on an origin after the browser has granted permission and the user has requested the addition. A generic host permission pattern in `optional_host_permissions` is not permission to silently start observing every site.
 
-Disabled by default. If browser allows user opt-in, disclose that private-window playback metadata is sent locally to Scrobblix and define whether it is stored. Respect browser separation rules.
+Prefer source-specific media metadata over collecting page content. Never read passwords, cookies, form fields, messages, or unrelated browsing history. Never capture system audio or video frames.
 
-## Permission UX
+## Private browsing
 
-The extension/options and desktop Sources page show current permissions, why each exists, affected sites, and revoke instructions. Loss of permission becomes an explicit adapter health state.
+Incognito behavior must remain disabled by default and comply with browser defaults unless the user explicitly enables an extension for private windows. Before advertising private-window support, test it and disclose that media metadata may be sent locally to the desktop and persisted in local history. Do not infer a tested incognito state from manifest absence alone.
+
+## Permission UX and revocation
+
+The popup should state what the companion does, provide clear user action to test host reachability or add a site, and show actionable errors. When the user removes a site, revoke the associated browser permission and remove the site's local allow-list entry. A host registration entry does not prove that the extension is currently enabled or delivering observations.
+
+## Release gate
+
+Test the exact Chrome, Edge and Firefox versions on Windows. Record required/optional permission prompts, added-site grant/revoke, extension disable/uninstall, Native Messaging registration and absence of events after permission removal. Keep those manual results `NOT RUN` until performed.
+
+**Origin consistency note (tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73)):** The manifests include generic YouTube host matches, but the code-level built-in sender allow-list currently only includes `https://music.youtube.com` and `https://open.spotify.com`. Generic `youtube.com` / `www.youtube.com` observations are not implicitly trusted as built-in origins and may be rejected unless explicitly registered as a custom site. Do not advertise those generic origins as natively supported until the manifest and validation layers are reconciled and tested.

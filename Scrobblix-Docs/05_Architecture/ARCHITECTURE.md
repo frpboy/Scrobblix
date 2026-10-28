@@ -1,80 +1,83 @@
 # System Architecture
 
 > **Project:** Scrobblix  
-> **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Owner:** Rahul Muraleedharan (frpboy)  
+> **Status:** Implementation-backed snapshot; planned release capabilities are called out separately  
+> **Last reviewed:** 2026-10-28
 
+## Purpose and source of truth
 
-## Architectural style
+This document describes the current repository structure and boundaries visible in source. The solution files, project files, SQL migrations, and CI workflow are the implementation sources of truth. UI mocks and broad product specifications describe intended behavior; they are not evidence that every planned capability is shipped.
 
-Scrobblix uses a modular monolith with Clean Architecture boundaries and event-driven background services. A monorepo contains the Windows UI, native host, browser extension, tests, documentation, packaging, and build tooling.
+## Current component map
 
-```mermaid
-flowchart LR
-    GSMTC[Windows GSMTC] --> GAdapter[GSMTC Adapter]
-    Sites[Browser Sites] --> Ext[Browser Companion]
-    Ext --> NM[Native Messaging Host]
-    GAdapter --> Obs[Observation Ingress]
-    NM --> Obs
-    Obs --> Norm[Normalizer]
-    Norm --> Arb[Source Arbitration]
-    Arb --> Play[Playback State Machine]
-    Play --> Hist[(SQLite History)]
-    Play --> Elig[Eligibility]
-    Elig --> Queue[(Durable Action Queue)]
-    Queue --> Sync[Provider Sync Worker]
-    Sync --> LFM[Last.fm API]
-    Hist --> Read[History/Analytics Read Models]
-    Play --> UI[WinUI Presentation]
-    Queue --> UI
-    Sync --> UI
-    Health[Health & Diagnostics] --> UI
-```
+| Component | Current responsibility | Implementation location |
+|---|---|---|
+| Domain | Playback state, canonical-play tracking, eligibility, metadata identity, queue action lifecycle, reason codes | src/Scrobblix.Domain |
+| Application | Playback observation ingestion, source arbitration orchestration, queue processing, presentation/read models, CSV export | src/Scrobblix.Application |
+| Infrastructure | SQLite persistence, migration/checksum validation, Last.fm API, request signing, credential abstraction, metadata enrichment, backup/restore and diagnostics export | src/Scrobblix.Infrastructure |
+| Windows integration | Global System Media Transport Controls (GSMTC) observation source and Windows credential storage | src/Scrobblix.Windows |
+| Desktop UI | WinUI 3 window, settings and pages, local logging, notification-area tray, opt-in Windows notifications | src/Scrobblix.Desktop |
+| Native Messaging host | Browser Native Messaging framing, extension identity allow-list, and forwarding to the desktop named pipe | src/Scrobblix.NativeHost |
+| Browser Companion | TypeScript Manifest V3 extension for Chromium and a Firefox development manifest | browser-extension |
+| Tests | Domain and infrastructure assertions plus browser, manifest, desktop UI, workflow and PowerShell checks | tests and scripts |
+| Release tooling | Windows CI build and unsigned test-bundle assembly; GitHub preview-release workflow | .github/workflows and scripts |
 
-## Layers
+The solution uses separate domain, application, infrastructure, Windows, desktop, and native-host projects. Do not collapse these into a single-project architecture diagram or assume all external integrations live in the UI project.
 
-### Domain
+## Runtime and trust boundaries
 
-Pure business concepts: observation, media identity, canonical play, state machine, played-time accumulator, eligibility, duplicate key, queue action model, reason codes, provider outcome classification. No WinRT, HTTP, SQLite, UI, or logging implementation references.
+1. A Windows media session is queried through GSMTC. The observation source attaches a fresh collector instance ID and sequence to observations. Artwork is cached under the user's local Scrobblix data directory and subject to provider/source policy.
+2. Optional browser site adapters send metadata through the extension service worker and browser Native Messaging protocol. The extension is not a Last.fm client and does not receive Last.fm credentials.
+3. The Native Messaging host validates the envelope and the caller's registered extension ID before dispatching a supported message. Frames are length-prefixed and capped at 256 KiB.
+4. The native host forwards the observation over the per-user named pipe named scrobblix.browser.v1 by default. The pipe is current-user-only. The desktop adds checks for the client image path and the parent browser process.
+5. The desktop/application ingestion pipeline validates and arbitrates observations, updates canonical play state, and writes local history and durable provider actions to SQLite.
+6. The provider action processor calls Last.fm over HTTPS. The desktop stores the session key through the Windows Credential Locker abstraction. Provider outcomes and reason codes drive user-visible queue status.
 
-### Application
+The named-pipe peer checks are defense-in-depth. They are not a cryptographic challenge or proof that an executable was signed by the expected publisher. Same-user file/registry tampering and signed-distribution provenance remain security/release concerns.
 
-Use cases and orchestration: ingest observation, reconcile source, connect provider, queue scrobble, process due actions, query history, export, backup, run health checks. Depends on domain and interfaces.
+## Data and persistence boundaries
 
-### Infrastructure
+SQLite is the local persistence store. The migration-backed physical tables are currently:
 
-GSMTC, SQLite, Last.fm HTTP/signing, Credential Locker, Native Messaging transport, notifications, file system, network monitor, updater, logging, clock abstractions.
+- schema_migrations
+- playback_observations
+- plays
+- provider_actions
+- accounts
+- loved_tracks
 
-### Presentation
+See the implementation-backed [Database Schema](../06_Data/DATABASE_SCHEMA.md). Do not describe conceptual entities such as source instances, transition history, provider-attempt history, settings, or analytics projections as existing SQLite tables unless a migration actually creates them. Some ideas in the broader architecture baseline remain design proposals.
 
-WinUI views/view-models, navigation, commands, formatting, accessible content, and user interaction. It consumes application services/read models and never performs provider/database logic directly.
+The user's Last.fm session key is stored via Windows Credential Locker. It must not be written to SQLite, logs, exported bundles, browser extension storage, or repository configuration. Backup archives must exclude credentials and unrelated caches.
 
-### Browser Companion
+## Last.fm integration
 
-Separate TypeScript application with content/site adapters, service worker, permission manager, protocol client, fixtures, and browser packaging.
+Last.fm calls are isolated behind the provider interface and infrastructure implementation. Current supported operations include authorization token/session exchange, scrobble submission, Now Playing, Love, and Unlove. Request signing follows Last.fm's API signing protocol. It uses MD5 because that is part of the legacy provider protocol; it is not used as a password-storage or general-purpose security hash.
 
-## Process model
+An HTTP success code alone is not proof of an accepted scrobble. Parse provider responses and preserve explicit accepted, ignored, authentication, retryable, permanent-failure, and ambiguous-outcome states. Do not blindly resend an outcome-unknown scrobble without a deliberate duplicate-handling policy.
 
-Recommended initial processes:
+## Browser integration and native messaging
 
-1. `Scrobblix.exe` — UI plus hosted background services; single instance.
-2. `Scrobblix.NativeHost.exe` — short-lived/connected Native Messaging host launched by browsers; forwards validated observations through a private authenticated IPC channel to the main process or hosts the shared application ingress safely.
+The browser companion is optional when GSMTC supplies adequate metadata. It improves source/tab precision and browser-specific observation delivery; it is not required for every desktop music-player scenario.
 
-The exact main-process IPC is an implementation detail behind an interface. Named pipes with per-user ACL and handshake are recommended; do not open a general localhost HTTP/WebSocket endpoint.
+The host reads the per-user Chromium and Firefox extension allow-lists from the Scrobblix NativeMessaging registry configuration. Chromium origins are matched against the registered extension ID. Firefox uses the registered add-on ID. Identity validation occurs before message types, including ping, are handled. Unsupported messages and untrusted identities fail closed.
 
-## Data model strategy
+There is no general unauthenticated localhost HTTP/WebSocket endpoint in the current design. Do not add one as a shortcut around Native Messaging without a new threat assessment and architecture decision.
 
-SQLite is the authoritative store for observations retained by policy, canonical plays, state transitions, queue actions/attempts, settings metadata, and cached analytics. Credential Locker stores provider session secrets. Artwork is a bounded file cache referenced by content hash.
+## Build, release, and validation reality
 
-## Provider strategy
+The CI workflow currently runs on Windows and performs solution restore/build, assertion tests, browser type checking/build, security and manifest checks, PowerShell parsing, and publishing/assembly of development test bundles. The documentation validator is added by the companion CI change and checks Markdown structure and repository-relative link targets.
 
-`IScrobbleProvider` isolates Last.fm. Provider-specific parameters and response codes remain in infrastructure, mapped into stable domain outcomes. This prevents provider quirks from leaking throughout UI and queue logic.
+The current published workflow produces unsigned development ZIPs and GitHub preview releases. It does not currently establish that a signed MSIX/App Installer, automatic updater, store publication, or production-signing pipeline exists. Do not describe those as implemented.
 
-## Design constraints
+CI does not prove real Spotify session correctness, the live Last.fm account flow, real-browser installation/identity registration, Windows accessibility, long-duration reliability, install/upgrade/rollback/uninstall, or privacy behavior on a user's machine. Track these in the [real-world manual test matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md) and leave unexecuted checks as NOT RUN.
 
-- All time-sensitive logic uses an injected wall clock plus monotonic time source.
-- All external inputs are validated and size-bounded.
-- Queue leasing prevents concurrent duplicate processing.
-- UI reads immutable snapshots/read models rather than owning mutable engine state.
-- Significant state transitions are persisted and observable.
+## Architectural constraints
+
+- Keep domain logic independent of WinUI, WinRT, HTTP, SQLite APIs, and process-specific details.
+- Validate and bound external observations before they reach the canonical-play state machine.
+- Persist provider actions with a stable local idempotency key and use leases to avoid concurrent processing.
+- Distinguish local detection/history from remote Last.fm acceptance.
+- Do not leak listening data, API credentials, session keys, or raw logs through diagnostics.
+- Update the corresponding requirements, migration/interface docs, security review, and test matrix whenever implementation behavior changes.

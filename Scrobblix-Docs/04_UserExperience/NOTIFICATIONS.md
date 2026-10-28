@@ -2,9 +2,12 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** UX specification with implementation boundary  
+> **Last reviewed:** 2026-10-28
 
+
+
+**Implementation status (2026-10-28):** Windows app notifications are opt-in and off by default; track/artist details are hidden unless separately enabled, and success notices depend on a parsed accepted provider result. Notifications expire automatically after a short interval. Grouped alerts, a persistent notification center, update notices and every default shown below are UX targets unless verified in current code; never report a track as scrobbled because it was merely queued or forwarded by the host.
 
 ## Notification classes
 

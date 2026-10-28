@@ -1,3 +1,5 @@
+> **Historical release-gate snapshot — not current status.** This document was prepared on 2026-10-23 and references earlier main commits/workflows. Do not use its SHA, PR/issue states, or CI results as current evidence. For current implementation status, start at [README](../README.md) and [Implementation Resume](IMPLEMENTATION_RESUME.md); for manual gates, use [Private Beta Readiness](PRIVATE_BETA_READINESS.md) and the [real-world manual test matrix](../Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
+
 # Scrobblix v1 — implementation and release status
 
 Updated: 2026-10-23 (UTC)

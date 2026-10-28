@@ -1,56 +1,65 @@
-# Browser Extension Architecture
+# Browser Companion Architecture — Implementation Snapshot
 
 > **Project:** Scrobblix  
-> **Status:** Development architecture; real browser qualification pending  
-> **Updated:** 2026-10-22
+> **Status:** Development integration; real browser qualification remains pending  
+> **Last reviewed:** 2026-10-28
 
-## Components
+## Implemented components
 
-- Chromium Manifest V3 service worker and separate Firefox development manifest.
-- Content-script bootstrap and supported page/media observers.
-- Shared sender/payload validation for supported origins and bounded metadata.
-- Native Messaging client with versioned envelopes, sequence identifiers and reconnect/snapshot behavior.
-- Per-user native host that validates browser caller identity and forwards playback observations to the desktop's current-user named pipe.
-- Desktop playback ingress, schema validation and source arbitration.
+- Chromium Manifest V3 extension with a TypeScript service worker, content/media observer, popup, manifest checks and build output under `dist`.
+- A separate Firefox development manifest with an explicit add-on identity.
+- Source-origin and playback-payload validation, bounded text/number values, and user-controlled optional access for additional HTTP/HTTPS media sites.
+- Browser Native Messaging host that validates caller identity and supported message type before forwarding supported observations to the desktop named pipe.
+- Desktop-side IPC checks, source arbitration and playback tracking.
+
+The current Native Messaging host recognizes `ping.v1` and `playback.observation.v1`; it does not implement the older design's general hello/snapshot/acknowledgement protocol. See [Native Messaging Protocol](../07_Interfaces/NATIVE_MESSAGING_PROTOCOL.md) for the exact current boundary.
 
 ## Data flow
 
 ```text
-Supported browser tab
-  -> content observer (metadata / play / pause / seek / end)
-  -> service worker sender + payload validation
-  -> Native Messaging frame
-  -> per-user native host identity and size validation
+Supported / user-authorized browser page
+  -> content observer (published media metadata and state)
+  -> extension sender / payload validation
+  -> browser Native Messaging framing
+  -> per-user native host (identity + size + envelope checks)
   -> current-user named pipe
-  -> desktop message validation
-  -> canonical playback tracker / source arbiter
-  -> local history and queue eligibility
+  -> desktop ingress validation
+  -> source arbitration / canonical playback tracking
+  -> local history and eligible provider-action queue
 ```
 
-The extension does not submit to Last.fm. Delivery, credentials, queue recovery and provider acceptance stay in the desktop application.
+The extension does not contact Last.fm, hold Last.fm credentials, capture system audio, or replace desktop GSMTC. Provider delivery, local credential storage, queue recovery and provider acceptance remain in the desktop app.
 
-## Manifest and identity rules
+## Manifest and origin model
 
-- Chrome and Edge use the Chromium Manifest V3 `background.service_worker` entry. Do not add the legacy `background.scripts` field.
-- Firefox uses a separate Manifest V3 development manifest with its own add-on identity and host registration.
-- Do not assume Chrome and Edge share an unpacked extension ID. Register the exact IDs issued by the installed browsers.
-- The native host fails closed when a sender ID is missing or does not match the per-user allow-list.
-- Unsupported page origins, malformed message types, out-of-bounds values, non-positive durations, invalid state names and non-HTTPS artwork are rejected before forwarding.
+- Chromium uses Manifest V3 `background.service_worker`; do not add legacy `background.scripts`.
+- The required host permissions cover the documented built-in sites in the manifest.
+- The extension declares optional HTTP/HTTPS host permission patterns so the user can add another site with an explicit browser grant. The extension must not use that optional permission to silently scrape arbitrary sites.
+- Chrome and Edge can provide different unpacked extension IDs. Register the actual ID from each browser separately.
+- Firefox uses its own development manifest/add-on ID and separate host registration.
+- The current source defaults to no automatic audio capture and no broad background history collection.
 
-## Service-worker lifecycle
+## Source identity and state
 
-Manifest V3 service workers can suspend. The observer must not depend on indefinite in-memory timers. Sequence IDs and last-known metadata are used for reconnect/snapshot reconciliation; a restart must not create a second canonical play for a play already observed by GSMTC or the extension. Source priority and duplicate behavior still require real-world verification.
+Browser observations are additional metadata events, not proof that a remote scrobble was accepted. Source status must be based on observed events and valid state transitions, not file presence or registry registration alone. Cross-source reconciliation with GSMTC, duplicate suppression and behavior after worker/browser restart require real-machine tests.
 
-## Security boundaries and residual risk
+## Security and residual risk
 
-Registration writes per-user HKCU entries and installs the native-host files under the current user's local application data. Native Messaging stdout is reserved for protocol responses. The desktop pipe and process-image/parent checks are defense-in-depth, not cryptographic executable identity. Same-user tampering with per-user files/registry remains part of the residual threat model; signed publisher identity, installation-directory ACL review, race/handle review and formal threat assessment remain release gates.
+The native host checks the declared extension identity against the per-user registry allow-list before processing messages. A current-user-only named pipe and desktop checks for native-host executable path/browser parent process are additional safeguards, not cryptographic publisher identity. Per-user registry/file tampering, extension identity handling, same-user IPC, signature/provenance and store supply-chain risks remain part of the threat model.
 
 ## Build and validation
 
-Use the root-level helper to build the TypeScript companion, validate both manifests, publish the native host and assemble the development bundle:
+From the repository root:
 
 ```powershell
-.\scripts\setup-browser-companion.ps1
+npm --prefix browser-extension ci
+npm --prefix browser-extension run check
+npm --prefix browser-extension run build
+node scripts/test-browser-security.mjs
+node scripts/validate-browser-manifests.mjs
+node scripts/validate-docs.mjs
 ```
 
-Static sender/payload assertions and manifest validation run in Windows CI. Actual Chrome, Edge and Firefox installation, event delivery, browser/extension/host restart, invalid sender tests and uninstall cleanup remain **NOT RUN** until recorded in [the real-world manual test matrix](../12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
+Windows CI validates compile/source contracts and packages a development companion bundle. It does not prove actual Chrome, Edge or Firefox event delivery. Installed-browser permissions, exact IDs, play/pause/seek, extension reload, host unavailable/recovery, uninstall and no-duplicate behavior remain manual acceptance cases and stay `NOT RUN` until executed.
+
+**Origin consistency note (tracked in [issue #73](https://github.com/frpboy/Scrobblix/issues/73)):** The manifests include generic YouTube host matches, but the code-level built-in sender allow-list currently only includes `https://music.youtube.com` and `https://open.spotify.com`. Generic `youtube.com` / `www.youtube.com` observations are not implicitly trusted as built-in origins and may be rejected unless explicitly registered as a custom site. Do not advertise those generic origins as natively supported until the manifest and validation layers are reconciled and tested.

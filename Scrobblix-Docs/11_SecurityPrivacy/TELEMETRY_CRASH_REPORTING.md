@@ -1,22 +1,40 @@
-# Telemetry and Crash Reporting
+# Telemetry and Crash Reporting — Current State and Policy
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Documentation baseline  
-> **Last updated:** 2026-08-01
+> **Status:** Local diagnostics only; remote telemetry/crash upload not established  
+> **Last reviewed:** 2026-10-28
 
-## Default
+## Current default behavior
 
-Telemetry is off. No listening history, page metadata, or crash dump is uploaded automatically.
+Scrobblix uses a local-first design. The current source baseline does not establish a Scrobblix-operated telemetry endpoint, remote usage analytics dashboard, automatic crash-report upload, or third-party crash SDK. Listening data and logs remain local unless a user chooses to share an exported support bundle or files through another channel.
 
-## Local metrics
+Do not describe a telemetry toggle or automatic crash-reporting preference as a shipped UI control unless the exact release contains it.
 
-Health/reliability metrics may be calculated and displayed locally. They remain in the user's database/logs under retention controls.
+## Current local diagnostics
 
-## Future opt-in telemetry
+The app records minimized operational logs and shows source/queue/provider/storage statuses in the local Diagnostics UI. The support exporter builds a user-initiated, allow-listed ZIP with a versioned manifest, summarized event counts, sanitized operational events and README. It excludes the listening database, credentials, artwork and arbitrary/free-form log messages by design.
 
-Requires a separate data map, purpose limitation, schema, retention, endpoint/security, consent UX, deletion mechanism, privacy update, and ADR. Prefer aggregate counters that cannot reconstruct listening history. Do not use advertising identifiers or cross-product tracking.
+The export is not automatically uploaded. Real Windows Save/cancel behavior, seeded-canary redaction, ZIP content review and accessibility remain qualification gates.
 
-## Crashes
+## Future opt-in telemetry requirements
 
-Capture local crash metadata/dumps only when platform configuration and privacy allow. Dumps can contain secrets/history, so support bundle excludes raw dumps by default or clearly warns/previews. Automatic third-party crash SDKs are not introduced casually.
+Any future telemetry proposal requires a separate data map and architecture decision before implementation:
+- purposes and user benefit clearly explained;
+- field-level schema and examples;
+- recipient/endpoint, transport and access controls;
+- consent and revocation UX;
+- retention and deletion behavior;
+- exclusion of listening history, titles/artists/albums, full URLs, usernames, credentials and cross-product identifiers unless a separately reviewed explicit opt-in is approved;
+- tests for minimization/redaction and accidental upload prevention;
+- updated privacy notice, release disclosure and support documentation.
+
+Prefer aggregate reliability counters that cannot reconstruct listening patterns. Do not introduce advertising identifiers, cross-app tracking or telemetry merely as an incidental dependency.
+
+## Crash reporting
+
+Crashes may be diagnosed from local event logs and Windows Application events. Raw dumps can contain secrets, listening history and memory contents; they are not included in the support bundle by default. Any future crash-upload feature requires a threat/privacy review, separate consent, a strict allow-list and a retention/deletion process.
+
+## Qualification and release
+
+Do not mark a telemetry/crash privacy test complete from docs or a successful build. Validate the exact release configuration and network behavior, including that no unauthorized outbound data is emitted.
