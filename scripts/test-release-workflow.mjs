@@ -8,7 +8,7 @@ const release = read(".github/workflows/release.yml");
 assert.match(ci, /workflow_call:/, "CI must be callable as a reusable workflow for release builds.");
 assert.match(ci, /test-release-workflow\.mjs/, "CI must run this release workflow contract test.");
 assert.match(release, /tags:\s*\n\s*- ["']v\*["']/, "Release automation must run only for version-style v* tags.");
-assert.match(release, /uses:\s*\.\/.github\/workflows\/ci\.yml/, "Release publication must depend on the existing full CI workflow.");
+assert.match(release, /uses:\s*\.\/\.github\/workflows\/ci\.yml/, "Release publication must depend on the existing full CI workflow.");
 assert.match(release, /needs:\s*validate-and-package/, "Publication must wait for the complete CI/package workflow.");
 assert.match(release, /permissions:\s*\n\s+contents:\s*write/, "Only the publish job should require repository contents write permission.");
 assert.match(release, /Scrobblix-Windows-TestBundle/, "Windows package artifact must be downloaded for publication.");
