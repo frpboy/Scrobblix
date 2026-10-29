@@ -1,4 +1,4 @@
-import { isAuthorizedObservationSender, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
+import { isAuthorizedObservationSender, isBuiltInSupportedOrigin, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
 
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
@@ -60,7 +60,7 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   const settings = await readSettings();
   if (settings.paused || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = isSupportedPlaybackOrigin(sourceUrl.origin)
+  const hasGrantedOrigin = isBuiltInSupportedOrigin(sourceUrl.origin)
     || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
   if (!hasGrantedOrigin) return;
 
@@ -135,10 +135,6 @@ function isCustomSiteRegistration(value: unknown): value is CustomSiteRegistrati
   } catch {
     return false;
   }
-}
-
-function isSupportedPlaybackOrigin(origin: string): boolean {
-  return origin === "https://music.youtube.com" || origin === "https://open.spotify.com";
 }
 
 function isPopupMessage(message: unknown): message is PopupMessage {

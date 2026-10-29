@@ -17,17 +17,28 @@ requireCondition(chromium.background?.service_worker === "dist/service-worker.js
 requireCondition(chromium.action?.default_popup === "popup.html", "Chromium companion controls must have a popup.");
 requireCondition(!chromium.background?.scripts, "Chromium Manifest V3 must not use the legacy background.scripts field.");
 requireCondition(chromium.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Chromium media observer is missing.");
-requireCondition(chromium.content_scripts?.some(script => script.matches?.includes("https://www.youtube.com/*")), "Chromium media observer must support YouTube.");
-requireCondition(chromium.content_scripts?.some(script => script.matches?.includes("https://youtube.com/*")), "Chromium media observer must support bare YouTube URLs.");
-requireCondition(chromium.host_permissions?.includes("https://www.youtube.com/*"), "Chromium YouTube access must be granted at installation.");
+requireCondition(chromium.content_scripts?.some(script => script.matches?.includes("https://music.youtube.com/*")), "Chromium media observer must support built-in YouTube Music.");
+requireCondition(chromium.content_scripts?.some(script => script.matches?.includes("https://open.spotify.com/*")), "Chromium media observer must support the built-in Spotify web player.");
+requireCondition(chromium.host_permissions?.includes("https://music.youtube.com/*"), "Chromium YouTube Music access must be granted at installation.");
+requireCondition(chromium.host_permissions?.includes("https://open.spotify.com/*"), "Chromium Spotify Web access must be granted at installation.");
 requireCondition(chromium.optional_host_permissions?.includes("https://*/*"), "Chromium companion must request additional sites only when the user chooses them.");
 requireCondition(firefox.manifest_version === 3, "Firefox companion must use Manifest V3.");
 requireCondition(firefox.background?.scripts?.includes("dist/service-worker.js"), "Firefox background script is missing.");
 requireCondition(firefox.action?.default_popup === "popup.html", "Firefox companion controls must have a popup.");
 requireCondition(!firefox.background?.service_worker, "Firefox manifest must not depend on a service_worker property.");
+
+const genericYoutubePatterns = ["https://youtube.com/*", "https://www.youtube.com/*"];
+for (const pattern of genericYoutubePatterns) {
+  requireCondition(!chromium.content_scripts?.some(script => script.matches?.includes(pattern)), `Chromium must not inject on generic YouTube (${pattern}); require explicit custom-site registration.`);
+  requireCondition(!chromium.host_permissions?.includes(pattern), `Chromium must not request built-in host access for generic YouTube (${pattern}).`);
+  requireCondition(!firefox.content_scripts?.some(script => script.matches?.includes(pattern)), `Firefox must not inject on generic YouTube (${pattern}); require explicit custom-site registration.`);
+  requireCondition(!firefox.optional_host_permissions?.includes(pattern), `Firefox must not duplicate a generic YouTube optional host entry (${pattern}).`);
+}
+requireCondition(firefox.optional_host_permissions?.includes("https://*/*"), "Firefox custom-site registration must retain optional HTTPS origins.");
 requireCondition(firefox.browser_specific_settings?.gecko?.id === "scrobblix@frpboy.in", "Firefox add-on ID must match the registered native-host identity.");
 requireCondition(firefox.content_scripts?.some(script => script.js?.includes("dist/media-observer.js")), "Firefox media observer is missing.");
-requireCondition(firefox.content_scripts?.some(script => script.matches?.includes("https://www.youtube.com/*")), "Firefox media observer must support YouTube.");
+requireCondition(firefox.content_scripts?.some(script => script.matches?.includes("https://music.youtube.com/*")), "Firefox media observer must support built-in YouTube Music.");
+requireCondition(firefox.content_scripts?.some(script => script.matches?.includes("https://open.spotify.com/*")), "Firefox media observer must support the built-in Spotify web player.");
 
 for (const path of ["dist/service-worker.js", "dist/media-observer.js", "dist/message-validation.js", "dist/popup.js", "popup.html", "popup.css"]) {
   await access(resolve(extensionRoot, path));
@@ -58,6 +69,10 @@ const serviceWorker = await readFile(resolve(root, "browser-extension/src/servic
 const popupSource = await readFile(resolve(root, "browser-extension/src/popup.ts"), "utf8");
 const popupHtml = await readFile(resolve(root, "browser-extension/popup.html"), "utf8");
 requireCondition(serviceWorker.includes('const hostName = "com.frpboy.scrobblix"'), "Extension must request the documented native host name.");
+requireCondition(serviceWorker.includes("isBuiltInSupportedOrigin(sourceUrl.origin)"), "Service worker must use the canonical built-in origin policy.");
+requireCondition(serviceWorker.includes("isAuthorizedObservationSender(sender, settings.customSites)"), "Custom playback origins must require explicit local registration.");
+requireCondition(serviceWorker.includes("scrobblixWorkerApi.permissions.contains({ origins: ["), "Non-built-in playback origins must require browser-granted permission.");
+requireCondition(serviceWorker.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must request the exact origin only.");
 requireCondition(serviceWorker.includes('"HOST_NOT_REGISTERED"'), "Connection diagnostics must classify host-resolution failures.");
 requireCondition(serviceWorker.includes('isErrorResponse(response) && response.messageId === messageId'), "Native host diagnostic errors must correlate to the current request ID.");
 requireCondition(serviceWorker.includes('"EXTENSION_NOT_AUTHORIZED"'), "Connection diagnostics must distinguish authorization failures.");
