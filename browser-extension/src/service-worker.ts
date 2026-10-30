@@ -102,6 +102,12 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
     finished = true;
     clearTimeout(timeout);
   });
+  // connectNative is synchronous, but keep a final synchronous revocation
+  // boundary immediately before delivery so no stale authorization is posted.
+  if (customSite && customSiteAuthorization.isRevoked(customSite.id)) {
+    finish();
+    return;
+  }
   port.postMessage({
     protocolVersion: 1,
     messageId,

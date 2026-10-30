@@ -5,6 +5,10 @@ export class CustomSiteAuthorization {
     this.revokedSiteIds.add(siteId);
   }
 
+  isRevoked(siteId: string): boolean {
+    return this.revokedSiteIds.has(siteId);
+  }
+
   async authorize(
     siteId: string,
     hasPermission: () => Promise<boolean>,
