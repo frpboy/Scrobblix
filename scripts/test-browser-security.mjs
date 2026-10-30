@@ -76,7 +76,7 @@ const deferred = () => {
   return { promise, resolve };
 };
 const authorization = new CustomSiteAuthorization();
-const permissionCheck = deferred<boolean>();
+const permissionCheck = deferred();
 let nativeHostPosts = 0;
 const pendingForward = authorization.authorize(
   "site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",

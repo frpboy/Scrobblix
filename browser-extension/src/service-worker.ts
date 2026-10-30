@@ -64,7 +64,7 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   const settings = await readSettings();
   const builtInOrigin = isBuiltInSupportedOrigin(sourceUrl.origin);
   const customSite = settings.customSites.find((site) => site.origin === sourceUrl.origin);
-  if (settings.paused || (!builtInOrigin && (!customSite || revokedCustomSiteIds.has(customSite.id)))
+  if (settings.paused || (!builtInOrigin && !customSite)
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
   const hasGrantedOrigin = builtInOrigin || (customSite !== undefined && await customSiteAuthorization.authorize(
