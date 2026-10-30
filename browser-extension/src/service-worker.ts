@@ -64,6 +64,10 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
     || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
   if (!hasGrantedOrigin) return;
 
+  // Re-read after the asynchronous permission check: a custom site may have been removed while it was pending.
+  const latestSettings = await readSettings();
+  if (latestSettings.paused || !isAuthorizedObservationSender(sender, latestSettings.customSites)) return;
+
   let port: chrome.runtime.Port;
   try {
     port = scrobblixWorkerApi.runtime.connectNative(hostName);
