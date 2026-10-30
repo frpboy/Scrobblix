@@ -70,9 +70,9 @@ assert.equal(isAuthorizedObservationSender(
 
 
 // Deterministically reproduce removal while the browser permission check is pending.
-const deferred = <T,>() => {
-  let resolve!: (value: T) => void;
-  const promise = new Promise<T>((complete) => { resolve = complete; });
+const deferred = () => {
+  let resolve;
+  const promise = new Promise((complete) => { resolve = complete; });
   return { promise, resolve };
 };
 const authorization = new CustomSiteAuthorization();
