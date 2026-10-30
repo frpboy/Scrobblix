@@ -18,6 +18,10 @@ Review the workflow YAML itself when changing these steps. This document is expl
 
 CI runs on pushes to main and feat/private-beta-readiness, pull requests targeting main, manual dispatch, and reusable workflow calls.
 
+## Runtime and concurrency controls
+
+The CI workflow uses a concurrency group scoped to the workflow and pull-request number (falling back to the Git ref for non-PR events). A newer run in the same group cancels the superseded run; separate PRs/refs remain isolated. The Windows `build-and-test` job has an explicit 45-minute timeout. These controls bound stalled validation and reduce redundant runner use without changing the validation steps or artifact outputs. The tag-triggered preview-release publisher remains a separate workflow/job and retains its isolated write permission.
+
 The current Windows job performs:
 
 1. Restore and Release build of Scrobblix.slnx using the .NET 10 SDK.
