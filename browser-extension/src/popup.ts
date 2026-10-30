@@ -143,10 +143,19 @@ function renderCustomSites(sites: CustomSite[]): void {
 }
 
 async function removeSite(site: CustomSite): Promise<void> {
+  // Revoke forwarding in the service worker before asynchronous browser cleanup.
+  const result = await popupApi.runtime.sendMessage({
+    type: "companion.remove-custom-site",
+    siteId: site.id,
+  }) as { removed?: boolean } | undefined;
+  if (!result?.removed) {
+    statusText.textContent = "This site is already removed or could not be revoked. Reload the extension and try again.";
+    return;
+  }
+
   await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
   await popupApi.permissions.remove({ origins: [site.pattern] });
-  const sites = (await getCustomSites()).filter((entry) => entry.id !== site.id);
-  await popupApi.storage.local.set({ customSites: sites });
+  const sites = await getCustomSites();
   renderCustomSites(sites);
   await refreshTrackAction(sites);
 }

@@ -4,7 +4,8 @@ const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome 
 
 export {};
 
-type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" };
+type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" }
+  | { type: "companion.remove-custom-site"; siteId: string };
 type CompanionSettings = { paused: boolean; customSites: CustomSiteRegistration[] };
 type NativeHostDiagnosticCode =
   | "HOST_NOT_REGISTERED"
@@ -29,6 +30,8 @@ type NativeHostStatus = {
 const hostName = "com.frpboy.scrobblix";
 const connectionTimeoutMs = 3_000;
 let sequence = 0;
+// Invalidate a custom-site registration synchronously when removal is requested.
+const revokedCustomSiteIds = new Set<string>();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (isPopupMessage(message)) {
@@ -58,11 +61,22 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
 
   if (sourceUrl.protocol !== "https:" && sourceUrl.protocol !== "http:") return;
   const settings = await readSettings();
-  if (settings.paused || !isAuthorizedObservationSender(sender, settings.customSites)) return;
+  const builtInOrigin = isBuiltInSupportedOrigin(sourceUrl.origin);
+  const customSite = settings.customSites.find((site) => site.origin === sourceUrl.origin);
+  if (settings.paused || (!builtInOrigin && (!customSite || revokedCustomSiteIds.has(customSite.id)))
+      || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = isBuiltInSupportedOrigin(sourceUrl.origin)
+  const hasGrantedOrigin = builtInOrigin
     || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
-  if (!hasGrantedOrigin) return;
+  if (!hasGrantedOrigin || (customSite && revokedCustomSiteIds.has(customSite.id))) return;
+
+  // Permission checks yield to the browser. Re-read registration after that await
+  // so a completed removal cannot be bypassed by the earlier settings snapshot.
+  const latestSettings = await readSettings();
+  if (latestSettings.paused || (customSite && (
+    revokedCustomSiteIds.has(customSite.id)
+    || !latestSettings.customSites.some((site) => site.id === customSite.id && site.origin === sourceUrl.origin)
+  ))) return;
 
   let port: chrome.runtime.Port;
   try {
@@ -138,16 +152,27 @@ function isCustomSiteRegistration(value: unknown): value is CustomSiteRegistrati
 }
 
 function isPopupMessage(message: unknown): message is PopupMessage {
-  return typeof message === "object" && message !== null && "type" in message
-    && ((message as { type?: unknown }).type === "companion.get-state"
-      || (message as { type?: unknown }).type === "companion.test-native-host");
+  if (typeof message !== "object" || message === null || !("type" in message)) return false;
+  const candidate = message as { type?: unknown; siteId?: unknown };
+  if (candidate.type === "companion.get-state" || candidate.type === "companion.test-native-host") return true;
+  return candidate.type === "companion.remove-custom-site"
+    && typeof candidate.siteId === "string"
+    && /^site_[a-f0-9]{32}$/u.test(candidate.siteId);
 }
 
-async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus> {
-  if (message.type === "companion.get-state") {
-    return readSettings();
+async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | { removed: boolean }> {
+  if (message.type === "companion.remove-custom-site") {
+    // This happens before the first await: in-flight forwards see revocation.
+    revokedCustomSiteIds.add(message.siteId);
+    const settings = await readSettings();
+    if (!settings.customSites.some((site) => site.id === message.siteId)) return { removed: false };
+    await scrobblixWorkerApi.storage.local.set({
+      customSites: settings.customSites.filter((site) => site.id !== message.siteId),
+    });
+    return { removed: true };
   }
 
+  if (message.type === "companion.get-state") return readSettings();
   return testNativeHost();
 }
 

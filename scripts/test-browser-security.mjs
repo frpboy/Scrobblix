@@ -47,10 +47,18 @@ assert.equal(isAuthorizedObservationSender(genericYoutubeSender, []), false);
 assert.equal(isAuthorizedObservationSender(genericYoutubeSender, [youtubeCustomSite]), true);
 
 const serviceWorkerSource = readFileSync("browser-extension/src/service-worker.ts", "utf8");
+const popupSource = readFileSync("browser-extension/src/popup.ts", "utf8");
 assert.ok(serviceWorkerSource.includes("isBuiltInSupportedOrigin(sourceUrl.origin)"), "Service worker must use the canonical built-in origin policy.");
 assert.ok(serviceWorkerSource.includes("isAuthorizedObservationSender(sender, settings.customSites)"), "Non-built-in origins must have explicit custom-site registration.");
 assert.ok(serviceWorkerSource.includes("scrobblixWorkerApi.permissions.contains({ origins: ["), "Custom origins must be checked against browser-granted permissions.");
 assert.ok(serviceWorkerSource.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must be limited to the exact origin.");
+const revokeAt = serviceWorkerSource.indexOf("revokedCustomSiteIds.add(message.siteId)");
+const revokeAwaitAt = serviceWorkerSource.indexOf("const settings = await readSettings()", revokeAt);
+assert.ok(revokeAt >= 0 && revokeAwaitAt > revokeAt, "Custom-site removal must invalidate in-flight forwards before awaiting storage.");
+assert.ok(serviceWorkerSource.includes("revokedCustomSiteIds.has(customSite.id)"), "Forwarding must reject a registration invalidated during an asynchronous permission check.");
+assert.ok(serviceWorkerSource.includes("latestSettings.customSites.some((site) => site.id === customSite.id && site.origin === sourceUrl.origin)"), "Forwarding must revalidate persisted registration after permission checks.");
+const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
+assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0 && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "Popup removal must revoke forwarding before unregistering content scripts or permissions.");
 assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example.evil.example/player" }, [customSite]), false);
 assert.equal(isAuthorizedObservationSender(
