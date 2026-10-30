@@ -16,7 +16,7 @@ assert.match(release, /Scrobblix-BrowserCompanion/, "Browser companion artifact 
 assert.match(release, /sha256sum/, "The release must produce SHA-256 checksums.");
 assert.match(release, /prerelease:\s*true/, "Releases must remain marked as previews until qualification/signing gates are closed.");
 assert.match(release, /make_latest:\s*["']false["']/, "Preview releases must not replace the latest stable release.");
-assert.match(release, /softprops\/action-gh-release@[0-9a-f]{40}\s+# v3\.0\.3/, "Release publication must pin the reviewed v3.0.3 action commit.");
+assert.match(release, /softprops\/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64\s+# v3\.0.3/, "Release publication must pin the reviewed v3.0.3 action commit.");
 assert.match(release, /fail_on_unmatched_files:\s*true/, "Missing release assets must fail publication.");
 assert.match(release, /RELEASE_TAG.*v\(/s, "Release tags must be checked against a semantic version pattern.");
 assert.match(release, /SHA256SUMS\.txt/, "Checksums must be included in the release notes and asset set.");
