@@ -143,10 +143,11 @@ function renderCustomSites(sites: CustomSite[]): void {
 }
 
 async function removeSite(site: CustomSite): Promise<void> {
-  await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
-  await popupApi.permissions.remove({ origins: [site.pattern] });
+  // Commit the removal before awaiting browser APIs so in-flight observations fail their final settings recheck.
   const sites = (await getCustomSites()).filter((entry) => entry.id !== site.id);
   await popupApi.storage.local.set({ customSites: sites });
+  await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
+  await popupApi.permissions.remove({ origins: [site.pattern] });
   renderCustomSites(sites);
   await refreshTrackAction(sites);
 }
