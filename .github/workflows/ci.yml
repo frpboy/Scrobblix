@@ -197,7 +197,7 @@ jobs:
             ''
             '1. Install the Microsoft Windows App Runtime version required by this build.'
             '2. Launch Scrobblix.Desktop.exe from the desktop folder. The app is unpackaged and may require runtime prerequisites on a clean PC.'
-            '3. Chromium: load browser-extension unpacked and register its ID with scripts/install-native-host.ps1 -ExtensionId <ID> -NativeHostPublishDirectory .\native-host. Firefox: load browser-extension-firefox as a temporary add-on, then run -RegisterFirefox -NativeHostPublishDirectory .\native-host. The companion is optional for GSMTC playback.'
+            '3. Chromium: load browser-extension unpacked and register its ID with scripts/install-native-host.ps1 -ExtensionId <ID> -NativeHostPublishDirectory .\native-host. Firefox: load browser-extension-firefox as a temporary add-on, then register with -RegisterFirefox -NativeHostPublishDirectory .\native-host. The companion is optional for GSMTC playback.'
             '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
             '5. This is a CI verification bundle, not a signed installer or production release.'
           ) | Set-Content -Path "$bundle/README-TESTING.txt" -Encoding utf8
