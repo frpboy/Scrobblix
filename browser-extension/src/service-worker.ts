@@ -66,14 +66,15 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   if (settings.paused || (!builtInOrigin && !customSite)
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = builtInOrigin || (customSite !== undefined && await customSiteAuthorization.authorize(
+  const authorizeCustomSite = () => customSite !== undefined && customSiteAuthorization.authorize(
     customSite.id,
     () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
     async () => {
       const latestSettings = await readSettings();
       return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
     },
-  ));
+  );
+  const hasGrantedOrigin = builtInOrigin || await authorizeCustomSite();
   if (!hasGrantedOrigin) return;
 
   let port: chrome.runtime.Port;
@@ -102,11 +103,21 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
     finished = true;
     clearTimeout(timeout);
   });
-  // connectNative is synchronous, but keep a final synchronous revocation
-  // boundary immediately before delivery so no stale authorization is posted.
-  if (customSite && customSiteAuthorization.isRevoked(customSite.id)) {
-    finish();
-    return;
+  // Revalidate after opening the native port as well. The final permission and
+  // registration checks are asynchronous, so the gate checks revocation again
+  // after each await before any observation is posted.
+  if (customSite) {
+    let stillAuthorized = false;
+    try {
+      stillAuthorized = await authorizeCustomSite();
+    } catch {
+      finish();
+      return;
+    }
+    if (!stillAuthorized || finished) {
+      finish();
+      return;
+    }
   }
   port.postMessage({
     protocolVersion: 1,

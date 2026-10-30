@@ -75,7 +75,7 @@ The service worker accepts content-script messages only from recognized built-in
 
 Built-in sites use extension-granted origin access. A user-added HTTP/HTTPS site is accepted only after the browser grants that exact origin; Scrobblix reads published media-session or media-element metadata and never invents missing fields. Standard YouTube videos can expose incomplete artist metadata, so Scrobblix tracks only metadata the page actually publishes.
 
-When a user removes a custom site, the popup first revokes its service-worker authorization and removes the local registration before unregistering the script or revoking the browser permission. The service worker revalidates the exact permission and latest registration after asynchronous checks, so an in-flight custom-site observation is discarded after revocation. Only the extension popup may request this removal operation.
+When a user removes a custom site, the popup first revokes its service-worker authorization and removes the local registration before unregistering the script or revoking the browser permission. The service worker revalidates the exact permission and latest registration after asynchronous checks, then repeats the authorization gate after opening the native port immediately before posting, so an in-flight custom-site observation is discarded after revocation. Only the extension popup may request this removal operation.
 
 The desktop pipe is current-user-only and has additional client/process checks, but these are defense-in-depth—not cryptographic proof of a signed executable. Same-user file/registry tampering and process-identity hardening remain in the security review.
 
