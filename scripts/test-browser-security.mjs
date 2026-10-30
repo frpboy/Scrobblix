@@ -47,6 +47,10 @@ assert.equal(isAuthorizedObservationSender(
 
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwards must use the revocation-aware authorization gate.");
+const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
+const finalRevocationAt = serviceWorkerSource.indexOf("customSiteAuthorization.isRevoked(customSite.id)", connectAt);
+const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
+assert.ok(connectAt >= 0 && finalRevocationAt > connectAt && nativePostAt > finalRevocationAt, "A final synchronous revocation check must occur after opening the native port and before posting.");
 assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke site removal.");
 const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
 assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0
@@ -72,6 +76,12 @@ authorization.revoke("site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 permissionCheck.resolve(true);
 assert.equal(await pendingForward, false, "A pending authorization must fail when its site is revoked.");
 assert.equal(nativeHostPosts, 0, "A removed site must not post its in-flight observation.");
+const postAuthorizationGate = new CustomSiteAuthorization();
+assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), true);
+postAuthorizationGate.revoke("site_dddddddddddddddddddddddddddddddd");
+assert.equal(postAuthorizationGate.isRevoked("site_dddddddddddddddddddddddddddddddd"), true,
+  "The final pre-delivery check must observe a revocation that occurs after authorization returns.");
+
 const activeAuthorization = new CustomSiteAuthorization();
 assert.equal(await activeAuthorization.authorize("site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", async () => true, async () => true), true,
   "A registered custom site with browser permission remains forwardable.");
