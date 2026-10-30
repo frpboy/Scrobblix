@@ -143,7 +143,6 @@ function renderCustomSites(sites: CustomSite[]): void {
 }
 
 async function removeSite(site: CustomSite): Promise<void> {
-  // Revoke forwarding in the service worker before asynchronous browser cleanup.
   const result = await popupApi.runtime.sendMessage({
     type: "companion.remove-custom-site",
     siteId: site.id,
