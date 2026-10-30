@@ -51,6 +51,13 @@ assert.ok(serviceWorkerSource.includes("isBuiltInSupportedOrigin(sourceUrl.origi
 assert.ok(serviceWorkerSource.includes("isAuthorizedObservationSender(sender, settings.customSites)"), "Non-built-in origins must have explicit custom-site registration.");
 assert.ok(serviceWorkerSource.includes("scrobblixWorkerApi.permissions.contains({ origins: ["), "Custom origins must be checked against browser-granted permissions.");
 assert.ok(serviceWorkerSource.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must be limited to the exact origin.");
+assert.ok(serviceWorkerSource.includes("const latestSettings = await readSettings()"), "Custom-site authorization must be revalidated after asynchronous permission checks.");
+assert.ok(serviceWorkerSource.includes("isAuthorizedObservationSender(sender, latestSettings.customSites)"), "An observation must be discarded if its custom-site registration was removed in flight.");
+
+const popupSource = readFileSync("browser-extension/src/popup.ts", "utf8");
+const removeSiteBody = popupSource.slice(popupSource.indexOf("async function removeSite("), popupSource.indexOf("\n}\n", popupSource.indexOf("async function removeSite(")));
+assert.ok(removeSiteBody.indexOf("storage.local.set({ customSites: sites })") < removeSiteBody.indexOf("scripting.unregisterContentScripts"), "Custom-site removal must commit settings before awaiting script unregistration.");
+assert.ok(removeSiteBody.indexOf("storage.local.set({ customSites: sites })") < removeSiteBody.indexOf("permissions.remove"), "Custom-site removal must invalidate forwarding before revoking browser permission.");
 assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example.evil.example/player" }, [customSite]), false);
 assert.equal(isAuthorizedObservationSender(
