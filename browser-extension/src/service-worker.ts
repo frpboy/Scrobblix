@@ -67,14 +67,15 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   if (settings.paused || (!builtInOrigin && !customSite)
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = builtInOrigin || (customSite !== undefined && await customSiteAuthorization.authorize(
+  const authorizeCustomSite = () => customSite !== undefined && customSiteAuthorization.authorize(
     customSite.id,
     () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
     async () => {
       const latestSettings = await readSettings();
       return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
     },
-  ));
+  );
+  const hasGrantedOrigin = builtInOrigin || await authorizeCustomSite();
   if (!hasGrantedOrigin) return;
 
   let port: chrome.runtime.Port;
@@ -103,6 +104,19 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
     finished = true;
     clearTimeout(timeout);
   });
+  if (customSite) {
+    let stillAuthorized = false;
+    try {
+      stillAuthorized = await authorizeCustomSite();
+    } catch {
+      finish();
+      return;
+    }
+    if (!stillAuthorized || finished) {
+      finish();
+      return;
+    }
+  }
   port.postMessage({
     protocolVersion: 1,
     messageId,

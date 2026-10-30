@@ -55,6 +55,10 @@ assert.ok(serviceWorkerSource.includes("scrobblixWorkerApi.permissions.contains(
 assert.ok(serviceWorkerSource.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must be limited to the exact origin.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate the site in the service-worker authorization gate before awaiting storage.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwarding must pass through the revocation-aware authorization gate.");
+const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
+const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomSite()", connectAt);
+const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
+assert.ok(connectAt >= 0 && finalAuthorizationAt > connectAt && nativePostAt > finalAuthorizationAt, "Permission, registration and revocation must be revalidated after opening the native port and before posting.");
 assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke custom-site removal.");
 const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
 assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0 && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "Popup removal must revoke forwarding before unregistering content scripts or permissions.");
@@ -91,6 +95,12 @@ authorization.revoke("site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 permissionCheck.resolve(true);
 assert.equal(await pendingForward, false, "A pending custom-site authorization must fail after removal starts.");
 assert.equal(nativeHostPosts, 0, "A removed custom site must not post its in-flight observation to the native host.");
+
+const postAuthorizationGate = new CustomSiteAuthorization();
+assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), true);
+postAuthorizationGate.revoke("site_dddddddddddddddddddddddddddddddd");
+assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), false,
+  "The second authorization immediately before native-host delivery must reject a site revoked after the first authorization.");
 
 const activeAuthorization = new CustomSiteAuthorization();
 assert.equal(await activeAuthorization.authorize("site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", async () => true, async () => true), true,
