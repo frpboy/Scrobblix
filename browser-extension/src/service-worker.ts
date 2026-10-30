@@ -1,5 +1,5 @@
 import { CustomSiteAuthorization } from "./custom-site-authorization.js";
-import { isAuthorizedObservationSender, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
+import { isAuthorizedObservationSender, isBuiltInSupportedOrigin, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
 
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
@@ -31,6 +31,7 @@ type NativeHostStatus = {
 const hostName = "com.frpboy.scrobblix";
 const connectionTimeoutMs = 3_000;
 let sequence = 0;
+// Invalidate a custom-site registration synchronously when removal is requested.
 const customSiteAuthorization = new CustomSiteAuthorization();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
@@ -61,7 +62,7 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
 
   if (sourceUrl.protocol !== "https:" && sourceUrl.protocol !== "http:") return;
   const settings = await readSettings();
-  const builtInOrigin = isSupportedPlaybackOrigin(sourceUrl.origin);
+  const builtInOrigin = isBuiltInSupportedOrigin(sourceUrl.origin);
   const customSite = settings.customSites.find((site) => site.origin === sourceUrl.origin);
   if (settings.paused || (!builtInOrigin && !customSite)
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
@@ -103,9 +104,6 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
     finished = true;
     clearTimeout(timeout);
   });
-  // Revalidate after opening the native port as well. The final permission and
-  // registration checks are asynchronous, so the gate checks revocation again
-  // after each await before any observation is posted.
   if (customSite) {
     let stillAuthorized = false;
     try {
@@ -166,10 +164,6 @@ function isCustomSiteRegistration(value: unknown): value is CustomSiteRegistrati
   }
 }
 
-function isSupportedPlaybackOrigin(origin: string): boolean {
-  return origin === "https://music.youtube.com" || origin === "https://open.spotify.com";
-}
-
 function isPopupMessage(message: unknown): message is PopupMessage {
   if (typeof message !== "object" || message === null || !("type" in message)) return false;
   const candidate = message as { type?: unknown; siteId?: unknown };
@@ -181,7 +175,7 @@ function isPopupMessage(message: unknown): message is PopupMessage {
 
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | { removed: boolean }> {
   if (message.type === "companion.remove-custom-site") {
-    // Revoke synchronously before storage cleanup yields to the browser.
+    // This happens before the first await: in-flight forwards see revocation.
     customSiteAuthorization.revoke(message.siteId);
     const settings = await readSettings();
     if (!settings.customSites.some((site) => site.id === message.siteId)) return { removed: false };

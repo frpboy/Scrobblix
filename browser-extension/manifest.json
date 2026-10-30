@@ -20,8 +20,6 @@
   "content_scripts": [
     {
       "matches": [
-        "https://youtube.com/*",
-        "https://www.youtube.com/*",
         "https://music.youtube.com/*",
         "https://open.spotify.com/*"
       ],
@@ -32,8 +30,6 @@
     }
   ],
   "host_permissions": [
-    "https://youtube.com/*",
-    "https://www.youtube.com/*",
     "https://music.youtube.com/*",
     "https://open.spotify.com/*"
   ],

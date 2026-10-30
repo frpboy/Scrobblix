@@ -1,13 +1,16 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CustomSiteAuthorization } from "../browser-extension/dist/custom-site-authorization.js";
-import { isAuthorizedObservationSender, isPlaybackObservation, isSupportedSender } from "../browser-extension/dist/message-validation.js";
-
-const serviceWorkerSource = readFileSync("browser-extension/src/service-worker.ts", "utf8");
-const popupSource = readFileSync("browser-extension/src/popup.ts", "utf8");
+import { isAuthorizedObservationSender, isBuiltInSupportedOrigin, isPlaybackObservation, isSupportedSender } from "../browser-extension/dist/message-validation.js";
 
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://open.spotify.com/track/abc" }), true);
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://music.youtube.com/watch?v=abc" }), true);
+assert.equal(isBuiltInSupportedOrigin("https://open.spotify.com"), true);
+assert.equal(isBuiltInSupportedOrigin("https://music.youtube.com"), true);
+assert.equal(isBuiltInSupportedOrigin("https://youtube.com"), false);
+assert.equal(isBuiltInSupportedOrigin("https://www.youtube.com"), false);
+assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://youtube.com/watch?v=abc" }), false);
+assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://www.youtube.com/watch?v=abc" }), false);
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "http://open.spotify.com/track/abc" }), false);
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://open.spotify.com.evil.example/track/abc" }), false);
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://example.com/" }), false);
@@ -34,6 +37,31 @@ assert.equal(isAuthorizedObservationSender(
   { tab: { id: 1 }, url: "https://open.spotify.com/track/abc" }, []), true);
 assert.equal(isAuthorizedObservationSender(validCustomSender, [customSite]), true);
 assert.equal(isAuthorizedObservationSender(validCustomSender, []), false);
+
+const genericYoutubeSender = { tab: { id: 3 }, url: "https://www.youtube.com/watch?v=abc" };
+const youtubeCustomSite = {
+  id: "site_fedcba9876543210fedcba9876543210",
+  origin: "https://www.youtube.com",
+  pattern: "https://www.youtube.com/*",
+};
+assert.equal(isAuthorizedObservationSender(genericYoutubeSender, []), false);
+assert.equal(isAuthorizedObservationSender(genericYoutubeSender, [youtubeCustomSite]), true);
+
+const serviceWorkerSource = readFileSync("browser-extension/src/service-worker.ts", "utf8");
+const popupSource = readFileSync("browser-extension/src/popup.ts", "utf8");
+assert.ok(serviceWorkerSource.includes("isBuiltInSupportedOrigin(sourceUrl.origin)"), "Service worker must use the canonical built-in origin policy.");
+assert.ok(serviceWorkerSource.includes("isAuthorizedObservationSender(sender, settings.customSites)"), "Non-built-in origins must have explicit custom-site registration.");
+assert.ok(serviceWorkerSource.includes("scrobblixWorkerApi.permissions.contains({ origins: ["), "Custom origins must be checked against browser-granted permissions.");
+assert.ok(serviceWorkerSource.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must be limited to the exact origin.");
+assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate the site in the service-worker authorization gate before awaiting storage.");
+assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwarding must pass through the revocation-aware authorization gate.");
+const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
+const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomSite()", connectAt);
+const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
+assert.ok(connectAt >= 0 && finalAuthorizationAt > connectAt && nativePostAt > finalAuthorizationAt, "Permission, registration and revocation must be revalidated after opening the native port and before posting.");
+assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke custom-site removal.");
+const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
+assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0 && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "Popup removal must revoke forwarding before unregistering content scripts or permissions.");
 assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example.evil.example/player" }, [customSite]), false);
 assert.equal(isAuthorizedObservationSender(
@@ -45,17 +73,8 @@ assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example/player" },
   [{ ...customSite, id: "not-a-site-id" }]), false);
 
-assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
-assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwards must use the revocation-aware authorization gate.");
-const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
-const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomSite()", connectAt);
-const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
-assert.ok(connectAt >= 0 && finalAuthorizationAt > connectAt && nativePostAt > finalAuthorizationAt, "Permission, registration and revocation must be revalidated after opening the native port and before posting.");
-assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke site removal.");
-const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
-assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0
-  && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "The popup must revoke forwarding before browser cleanup.");
 
+// Deterministically reproduce removal while the browser permission check is pending.
 const deferred = () => {
   let resolve;
   const promise = new Promise((complete) => { resolve = complete; });
@@ -74,24 +93,23 @@ const pendingForward = authorization.authorize(
 });
 authorization.revoke("site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 permissionCheck.resolve(true);
-assert.equal(await pendingForward, false, "A pending authorization must fail when its site is revoked.");
-assert.equal(nativeHostPosts, 0, "A removed site must not post its in-flight observation.");
+assert.equal(await pendingForward, false, "A pending custom-site authorization must fail after removal starts.");
+assert.equal(nativeHostPosts, 0, "A removed custom site must not post its in-flight observation to the native host.");
+
 const postAuthorizationGate = new CustomSiteAuthorization();
 assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), true);
 postAuthorizationGate.revoke("site_dddddddddddddddddddddddddddddddd");
-assert.equal(postAuthorizationGate.isRevoked("site_dddddddddddddddddddddddddddddddd"), true,
-  "The final pre-delivery check must observe a revocation that occurs after authorization returns.");
 assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), false,
   "The second authorization immediately before native-host delivery must reject a site revoked after the first authorization.");
 
 const activeAuthorization = new CustomSiteAuthorization();
 assert.equal(await activeAuthorization.authorize("site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", async () => true, async () => true), true,
-  "A registered custom site with browser permission remains forwardable.");
-const finalReadAuthorization = new CustomSiteAuthorization();
-assert.equal(await finalReadAuthorization.authorize(
+  "A registered custom site with browser permission must remain forwardable.");
+const removalDuringFinalRead = new CustomSiteAuthorization();
+assert.equal(await removalDuringFinalRead.authorize(
   "site_cccccccccccccccccccccccccccccccc",
   async () => true,
-  async () => { finalReadAuthorization.revoke("site_cccccccccccccccccccccccccccccccc"); return true; },
-), false, "Revocation during the final registration read must prevent forwarding.");
+  async () => { removalDuringFinalRead.revoke("site_cccccccccccccccccccccccccccccccc"); return true; },
+), false, "Revocation during the final registration read must also prevent forwarding.");
 
 console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork and in-flight custom-site revocation).");
