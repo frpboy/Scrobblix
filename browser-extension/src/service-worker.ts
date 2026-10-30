@@ -1,3 +1,4 @@
+import { CustomSiteAuthorization } from "./custom-site-authorization.js";
 import { isAuthorizedObservationSender, isBuiltInSupportedOrigin, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
 
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
@@ -31,7 +32,7 @@ const hostName = "com.frpboy.scrobblix";
 const connectionTimeoutMs = 3_000;
 let sequence = 0;
 // Invalidate a custom-site registration synchronously when removal is requested.
-const revokedCustomSiteIds = new Set<string>();
+const customSiteAuthorization = new CustomSiteAuthorization();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (isPopupMessage(message)) {
@@ -66,17 +67,15 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   if (settings.paused || (!builtInOrigin && (!customSite || revokedCustomSiteIds.has(customSite.id)))
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = builtInOrigin
-    || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
-  if (!hasGrantedOrigin || (customSite && revokedCustomSiteIds.has(customSite.id))) return;
-
-  // Permission checks yield to the browser. Re-read registration after that await
-  // so a completed removal cannot be bypassed by the earlier settings snapshot.
-  const latestSettings = await readSettings();
-  if (latestSettings.paused || (customSite && (
-    revokedCustomSiteIds.has(customSite.id)
-    || !latestSettings.customSites.some((site) => site.id === customSite.id && site.origin === sourceUrl.origin)
-  ))) return;
+  const hasGrantedOrigin = builtInOrigin || (customSite !== undefined && await customSiteAuthorization.authorize(
+    customSite.id,
+    () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
+    async () => {
+      const latestSettings = await readSettings();
+      return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
+    },
+  ));
+  if (!hasGrantedOrigin) return;
 
   let port: chrome.runtime.Port;
   try {
@@ -163,7 +162,7 @@ function isPopupMessage(message: unknown): message is PopupMessage {
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | { removed: boolean }> {
   if (message.type === "companion.remove-custom-site") {
     // This happens before the first await: in-flight forwards see revocation.
-    revokedCustomSiteIds.add(message.siteId);
+    customSiteAuthorization.revoke(message.siteId);
     const settings = await readSettings();
     if (!settings.customSites.some((site) => site.id === message.siteId)) return { removed: false };
     await scrobblixWorkerApi.storage.local.set({
