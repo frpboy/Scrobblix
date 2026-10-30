@@ -35,7 +35,7 @@ let sequence = 0;
 const customSiteAuthorization = new CustomSiteAuthorization();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-  if (isPopupMessage(message)) {
+  if (isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab) {
     void handlePopupMessage(message).then(sendResponse).catch(() => sendResponse({
       state: "unavailable",
       code: "UNKNOWN_CONNECTION_ERROR",

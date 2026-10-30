@@ -55,6 +55,7 @@ assert.ok(serviceWorkerSource.includes("scrobblixWorkerApi.permissions.contains(
 assert.ok(serviceWorkerSource.includes("${sourceUrl.origin}/*"), "Custom-site permission checks must be limited to the exact origin.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate the site in the service-worker authorization gate before awaiting storage.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwarding must pass through the revocation-aware authorization gate.");
+assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke custom-site removal.");
 const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
 assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0 && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "Popup removal must revoke forwarding before unregistering content scripts or permissions.");
 assert.equal(isAuthorizedObservationSender(
