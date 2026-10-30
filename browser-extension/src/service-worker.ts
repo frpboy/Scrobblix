@@ -1,10 +1,12 @@
+import { CustomSiteAuthorization } from "./custom-site-authorization.js";
 import { isAuthorizedObservationSender, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
 
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
 
-type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" };
+type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" }
+  | { type: "companion.remove-custom-site"; siteId: string };
 type CompanionSettings = { paused: boolean; customSites: CustomSiteRegistration[] };
 type NativeHostDiagnosticCode =
   | "HOST_NOT_REGISTERED"
@@ -29,9 +31,10 @@ type NativeHostStatus = {
 const hostName = "com.frpboy.scrobblix";
 const connectionTimeoutMs = 3_000;
 let sequence = 0;
+const customSiteAuthorization = new CustomSiteAuthorization();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
-  if (isPopupMessage(message)) {
+  if (isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab) {
     void handlePopupMessage(message).then(sendResponse).catch(() => sendResponse({
       state: "unavailable",
       code: "UNKNOWN_CONNECTION_ERROR",
@@ -58,10 +61,19 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
 
   if (sourceUrl.protocol !== "https:" && sourceUrl.protocol !== "http:") return;
   const settings = await readSettings();
-  if (settings.paused || !isAuthorizedObservationSender(sender, settings.customSites)) return;
+  const builtInOrigin = isSupportedPlaybackOrigin(sourceUrl.origin);
+  const customSite = settings.customSites.find((site) => site.origin === sourceUrl.origin);
+  if (settings.paused || (!builtInOrigin && !customSite)
+      || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const hasGrantedOrigin = isSupportedPlaybackOrigin(sourceUrl.origin)
-    || await scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] });
+  const hasGrantedOrigin = builtInOrigin || (customSite !== undefined && await customSiteAuthorization.authorize(
+    customSite.id,
+    () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
+    async () => {
+      const latestSettings = await readSettings();
+      return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
+    },
+  ));
   if (!hasGrantedOrigin) return;
 
   let port: chrome.runtime.Port;
@@ -142,16 +154,27 @@ function isSupportedPlaybackOrigin(origin: string): boolean {
 }
 
 function isPopupMessage(message: unknown): message is PopupMessage {
-  return typeof message === "object" && message !== null && "type" in message
-    && ((message as { type?: unknown }).type === "companion.get-state"
-      || (message as { type?: unknown }).type === "companion.test-native-host");
+  if (typeof message !== "object" || message === null || !("type" in message)) return false;
+  const candidate = message as { type?: unknown; siteId?: unknown };
+  if (candidate.type === "companion.get-state" || candidate.type === "companion.test-native-host") return true;
+  return candidate.type === "companion.remove-custom-site"
+    && typeof candidate.siteId === "string"
+    && /^site_[a-f0-9]{32}$/u.test(candidate.siteId);
 }
 
-async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus> {
-  if (message.type === "companion.get-state") {
-    return readSettings();
+async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | { removed: boolean }> {
+  if (message.type === "companion.remove-custom-site") {
+    // Revoke synchronously before storage cleanup yields to the browser.
+    customSiteAuthorization.revoke(message.siteId);
+    const settings = await readSettings();
+    if (!settings.customSites.some((site) => site.id === message.siteId)) return { removed: false };
+    await scrobblixWorkerApi.storage.local.set({
+      customSites: settings.customSites.filter((site) => site.id !== message.siteId),
+    });
+    return { removed: true };
   }
 
+  if (message.type === "companion.get-state") return readSettings();
   return testNativeHost();
 }
 
