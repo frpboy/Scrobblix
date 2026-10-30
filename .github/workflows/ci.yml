@@ -250,7 +250,7 @@ jobs:
             '.\scripts\install-native-host.ps1 -ExtensionId "CHROME_EXTENSION_ID" -NativeHostPublishDirectory ".\native-host" -RegisterChrome'
             'Edge: use -RegisterEdge. Both: pass -ExtensionId @("CHROME_ID","EDGE_ID") -RegisterChrome -RegisterEdge in one command.'
             ''
-            'Firefox: load firefox\manifest.json temporarily from about:debugging#/runtime/this-firefox, then register with .\scripts\install-native-host.ps1 -NativeHostPublishDirectory ".\native-host" -RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in".'
+            'Firefox: load firefox\manifest.json temporarily from about:debugging#/runtime/this-firefox, then run .\scripts\install-native-host.ps1 -NativeHostPublishDirectory ".\native-host" -RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in".'
             ''
             'Restart the browser and Scrobblix after registration. Firefox temporary add-ons are not persistent release installations.'
             'This is an unsigned development bundle, not a production/store release. No Last.fm credentials are included.'
