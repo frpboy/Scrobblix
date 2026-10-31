@@ -16,7 +16,7 @@ on:
 concurrency:
   # GitHub group names are case-insensitive. PR numbers are canonical;
   # push refs are limited to the exact case-sensitive branch filters below.
-  # Dispatch and reusable-workflow runs use unique IDs to isolate arbitrary refs.
+  # Dispatch uses run IDs; reusable calls use a caller-supplied unique key.
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/private-beta-readiness')) && github.ref) || (github.event_name == 'workflow_call' && inputs.concurrency_key) || github.run_id }}
   cancel-in-progress: true
 
