@@ -47,6 +47,9 @@ assert.equal(isAuthorizedObservationSender(
   [{ ...customSite, id: "not-a-site-id" }]), false);
 
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
+assert.ok(serviceWorkerSource.includes("serializeCustomSiteMutation"), "Custom-site adds and removals must share one serialized service-worker mutation boundary.");
+assert.ok(serviceWorkerSource.includes("companion.add-custom-site"), "The service worker must own custom-site registration writes.");
+assert.ok(!popupSource.includes("storage.local.set({ customSites"), "The popup must not write custom-site arrays directly.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwards must use the revocation-aware authorization gate.");
 const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
 const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomSite()", connectAt);
@@ -170,6 +173,7 @@ assert.equal(await finalReadAuthorization.authorize(
 
 const workerListeners = [];
 let workerSettings = { paused: false, customSites: [] };
+let storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
 let permissionBehavior = async () => true;
 let permissionCalls = 0;
 let connectNativeCalls = 0;
@@ -202,15 +206,21 @@ const workerApi = {
   },
   storage: {
     local: {
-      get: async (defaults) => ({ ...defaults, ...workerSettings }),
+      get: async (defaults) => storageGetBehavior(defaults),
       set: async (update) => { workerSettings = { ...workerSettings, ...update }; },
     },
+  },
+  scripting: {
+    registerContentScripts: async () => undefined,
+    unregisterContentScripts: async () => undefined,
+    getRegisteredContentScripts: async () => [],
   },
   permissions: {
     contains: async (details) => {
       permissionCalls += 1;
       return permissionBehavior(details, permissionCalls);
     },
+    remove: async () => true,
   },
 };
 
@@ -234,6 +244,15 @@ const removeFromWorker = (siteId) => new Promise((resolve) => {
   );
   assert.equal(keepAlive, true, "The service worker must keep the popup removal response channel open.");
 });
+const addToWorker = (site) => new Promise((resolve) => {
+  const keepAlive = workerListener(
+    { type: "companion.add-custom-site", site },
+    { id: workerApi.runtime.id },
+    resolve,
+  );
+  assert.equal(keepAlive, true, "The service worker must keep the popup add response channel open.");
+});
+
 
 // Exercise the actual forwarding listener while its first permission check is pending.
 workerSettings = { paused: false, customSites: [raceBeforeConnect] };
@@ -246,7 +265,7 @@ permissionBehavior = async () => {
 };
 workerListener(observation, customSender);
 await initialPermissionStarted.promise;
-assert.deepEqual(await removeFromWorker(raceBeforeConnect.id), { removed: true });
+assert.deepEqual(await removeFromWorker(raceBeforeConnect.id), { removed: true, cleanupSucceeded: true });
 initialPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, 0, "A site revoked during initial authorization must not open a native port.");
@@ -272,12 +291,110 @@ permissionBehavior = async (_details, callNumber) => {
 workerListener(observation, customSender);
 await finalPermissionStarted.promise;
 assert.equal(connectNativeCalls, 1, "The final authorization race should occur after the native port is opened.");
-assert.deepEqual(await removeFromWorker(raceBeforePost.id), { removed: true });
+assert.deepEqual(await removeFromWorker(raceBeforePost.id), { removed: true, cleanupSucceeded: true });
 finalPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during final authorization must not post playback data.");
 
+// Overlapping adds must serialize at the service-worker storage boundary.
+const addSiteOne = {
+  id: "site_11111111111111111111111111111111",
+  origin: "https://one.example",
+  pattern: "https://one.example/*",
+};
+const addSiteTwo = {
+  id: "site_22222222222222222222222222222222",
+  origin: "https://two.example",
+  pattern: "https://two.example/*",
+};
+workerSettings = { paused: false, customSites: [] };
+permissionCalls = 0;
+permissionBehavior = async () => true;
+let storageReads = 0;
+const addReadStarted = deferred();
+const releaseAddRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    addReadStarted.resolve();
+    await releaseAddRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const addOnePending = addToWorker(addSiteOne);
+await addReadStarted.promise;
+const addTwoPending = addToWorker(addSiteTwo);
+await Promise.resolve();
+assert.equal(storageReads, 1, "A second add must wait instead of reading a stale registration snapshot.");
+releaseAddRead.resolve();
+const addResults = await Promise.all([addOnePending, addTwoPending]);
+assert.deepEqual(addResults.map((result) => result.added), [true, true]);
+assert.deepEqual(
+  workerSettings.customSites.map((site) => site.id).sort(),
+  [addSiteOne.id, addSiteTwo.id].sort(),
+  "Concurrent adds must preserve both successful registrations.",
+);
+
+// Overlapping removals must not reintroduce a registration removed by the first operation.
+const removeSiteOne = { ...addSiteOne, id: "site_33333333333333333333333333333333" };
+const removeSiteTwo = { ...addSiteTwo, id: "site_44444444444444444444444444444444" };
+workerSettings = { paused: false, customSites: [removeSiteOne, removeSiteTwo] };
+storageReads = 0;
+const removeReadStarted = deferred();
+const releaseRemoveRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    removeReadStarted.resolve();
+    await releaseRemoveRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const removeOnePending = removeFromWorker(removeSiteOne.id);
+await removeReadStarted.promise;
+const removeTwoPending = removeFromWorker(removeSiteTwo.id);
+await Promise.resolve();
+assert.equal(storageReads, 1, "A second removal must wait for the first persisted mutation.");
+releaseRemoveRead.resolve();
+const removeResults = await Promise.all([removeOnePending, removeTwoPending]);
+assert.deepEqual(removeResults.map((result) => result.removed), [true, true]);
+assert.deepEqual(workerSettings.customSites, [], "Concurrent removals must leave both removed IDs absent.");
+
+// An add queued behind a removal must preserve the new, unrelated registration.
+const existingSite = { ...removeSiteOne, id: "site_55555555555555555555555555555555" };
+const newlyAddedSite = {
+  id: "site_66666666666666666666666666666666",
+  origin: "https://three.example",
+  pattern: "https://three.example/*",
+};
+workerSettings = { paused: false, customSites: [existingSite] };
+storageReads = 0;
+const interleaveReadStarted = deferred();
+const releaseInterleaveRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    interleaveReadStarted.resolve();
+    await releaseInterleaveRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const removeExistingPending = removeFromWorker(existingSite.id);
+await interleaveReadStarted.promise;
+const addNewPending = addToWorker(newlyAddedSite);
+await Promise.resolve();
+assert.equal(storageReads, 1, "The add must wait behind the in-flight removal.");
+releaseInterleaveRead.resolve();
+const [removeExistingResult, addNewResult] = await Promise.all([removeExistingPending, addNewPending]);
+assert.equal(removeExistingResult.removed, true);
+assert.equal(addNewResult.added, true);
+assert.deepEqual(workerSettings.customSites.map((site) => site.id), [newlyAddedSite.id],
+  "An add queued after a removal must remain stored without restoring the removed ID.");
+
+storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+
 // Positive control: a still-registered site with granted browser permission must forward.
+
 const activeSite = {
   id: "site_cccccccccccccccccccccccccccccccc",
   origin: "https://radio.example",
