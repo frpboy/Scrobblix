@@ -435,7 +435,7 @@ storageSetBehavior = async () => { throw new Error("synthetic storage write fail
 const storageFailureResult = await removeFromWorker(storageFailureSite);
 assert.equal(storageFailureResult.removed, false, "A failed storage write must not be reported as a completed removal.");
 assert.equal(storageFailureResult.cleanupSucceeded, false, "A failed browser permission removal must be reported.");
-assert.match(storageFailureResult.detail, /blocked for the current browser session/i,
+assert.match(storageFailureResult.detail, /blocked for this extension session/i,
   "The popup must explain that a session tombstone is blocking the stale registration.");
 assert.deepEqual(workerSettings.customSites, [storageFailureSite], "A failed storage write must not pretend the persisted registration was removed.");
 assert.equal(permissionRemoveCalls, 1, "Browser permission removal must be attempted even when persistence fails.");
@@ -474,7 +474,7 @@ removedPermissionOrigin = undefined;
 const removeReadFailure = await removeFromWorker(readFailureSite);
 assert.equal(removeReadFailure.removed, false, "A failed registration-state read must not report a successful removal.");
 assert.equal(removeReadFailure.cleanupSucceeded, false, "The failed permission cleanup must be reported.");
-assert.match(removeReadFailure.detail, /blocked for the current browser session/i,
+assert.match(removeReadFailure.detail, /blocked for this extension session/i,
   "The popup must receive a removal-specific session-revocation result rather than a connection diagnostic.");
 assert.equal(permissionRemoveCalls, 2, "Both failed add and failed remove storage reads must attempt exact-origin permission cleanup.");
 assert.ok(sessionRevokedSiteIds.includes(readFailureSite.id),
