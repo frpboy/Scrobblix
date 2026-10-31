@@ -3,7 +3,7 @@
 This addendum supersedes the historical 2026-10-23 baseline values below for current repository state. The detailed current inventory, issue/PR dispositions, environment limits and next actions are maintained in [REPOSITORY_AUDIT_CHECKPOINT.md](REPOSITORY_AUDIT_CHECKPOINT.md) and [REPOSITORY_AUDIT_REGISTER.json](REPOSITORY_AUDIT_REGISTER.json).
 
 - **Current main:** `5227d5312f6a4fa358d517b0b0dd5c495a29bb96`; [Windows CI run 40640792254](https://github.com/frpboy/Scrobblix/actions/runs/40640792254) passed on that exact SHA.
-- **Current inventory:** 412 file blobs in a non-truncated recursive tree; 11 open issues and 7 open PRs.
+- **Current inventory:** 412 file blobs in a non-truncated recursive tree; 11 open issues and 8 open PRs.
 - **Open remediation PRs with exact-head Windows CI passing:** #80 (Actions SHA pinning), #84 (in-flight custom-site revocation), #86 (release workflow concurrency), #89 (branch-protection documentation), and #91 (named-pipe environment-variable alignment). These PRs remain open and unmerged.
 - **Stacked or pending work:** #81 (YouTube origin alignment) is stacked on #84 and has no integrated Windows CI result on its current base. Draft #90 (custom-site mutation serialization/failure recovery) is being validated on exact head `67dfc09640dffa739b76a173c0f9a5f3605efc8f`; run [41156473471](https://github.com/frpboy/Scrobblix/actions/runs/41156473471) was pending at this addendum. Its temporary base is `main` for combined #84 + #87 validation and must be restored to the #84 branch after checks.
 - **Unresolved qualification:** #17 remains NOT RUN; #74 Windows pipe ACL/peer validation, #75 synthetic credential-canary coverage, and #76 exact-commit dependency/license/SBOM/Git-history scans remain NEEDS VALIDATION.
