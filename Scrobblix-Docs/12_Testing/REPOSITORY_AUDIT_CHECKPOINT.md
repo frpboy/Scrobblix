@@ -28,7 +28,7 @@
 | #87 custom-site mutation serialization and failure handling | Draft PR [#90](https://github.com/frpboy/Scrobblix/pull/90) is under exact-head Windows CI validation. It is temporarily targeted at `main` only to validate the combined #84 + #87 stack; after CI, restore its base to `fix/82-cancel-custom-site-inflight-observations-main` and keep it stacked until #84 merges. |
 | #88 branch-protection documentation and effective policy | PR [#89](https://github.com/frpboy/Scrobblix/pull/89) has passing exact-head CI; not merged. Main branch metadata reports `protected: false`, the rulesets query returned an empty list, and the direct branch-protection endpoint returned HTTP 403. Effective protection therefore remains **UNVERIFIED**; do not claim protections are enabled. |
 
-Additional open PRs are tracked in the live GitHub inventory. PR #92 was closed in favor of PR #90 and is not an active remediation branch. No PR in this list has been merged during this pass.
+All seven open PRs are listed above. PR #92 was closed in favor of PR #90 and is not an active remediation branch. No PR in this list has been merged during this pass.
 
 ### Coverage and environment limits
 
