@@ -442,6 +442,22 @@ assert.equal(forwardedPlaybackMessages.length, beforeRestartPosts,
   "A worker restart must not post an observation for a stale registration after failed persistence.");
 storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 
+// Storage-read failures must return mutation-specific responses, not a Native Messaging diagnostic.
+storageGetBehavior = async () => { throw new Error("synthetic storage read failure"); };
+const readFailureSite = {
+  id: "site_88888888888888888888888888888888",
+  origin: "https://read-failure.example",
+  pattern: "https://read-failure.example/*",
+};
+const addReadFailure = await addToWorker(readFailureSite);
+assert.equal(addReadFailure.added, false, "A failed registration-state read must not report a successful add.");
+assert.match(addReadFailure.detail, /custom site could not be registered/i,
+  "The popup must receive a registration-specific error when storage cannot be read.");
+const removeReadFailure = await removeFromWorker(storageFailureSite.id);
+assert.equal(removeReadFailure.removed, false, "A failed registration-state read must not report a successful removal.");
+assert.match(removeReadFailure.detail, /custom site could not be removed/i,
+  "The popup must receive a removal-specific error rather than a connection diagnostic.");
+
 storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
 
 // Positive control: a still-registered site with granted browser permission must forward.
