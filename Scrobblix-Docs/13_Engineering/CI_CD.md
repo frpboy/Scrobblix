@@ -20,7 +20,7 @@ CI runs on pushes to main and feat/private-beta-readiness, pull requests targeti
 
 ## Runtime and concurrency controls
 
-The CI workflow uses a concurrency group scoped to the workflow and pull-request number (falling back to the Git ref for non-PR events). A newer run in the same group cancels the superseded run; separate PRs/refs remain isolated. The Windows `build-and-test` job has an explicit 45-minute timeout. These controls bound stalled validation and reduce redundant runner use without changing the validation steps or artifact outputs. The tag-triggered preview-release publisher remains a separate workflow/job and retains its isolated write permission.
+The CI workflow uses a concurrency group scoped to the workflow and pull-request number for pull-request events. A newer run for the same PR cancels its superseded validation. Non-PR runs use their unique GitHub run ID rather than the branch/tag ref: GitHub compares concurrency group names case-insensitively, so grouping directly by a ref could make distinct case-sensitive refs cancel one another and suppress a required preview release. This deliberately limits cancellation deduplication to PR runs; independent push, dispatch, and reusable-workflow invocations remain isolated. The Windows `build-and-test` job has an explicit 45-minute timeout. These controls bound stalled validation without changing validation steps or artifact outputs. The tag-triggered preview-release publisher remains a separate workflow/job and retains its isolated write permission.
 
 The current Windows job performs:
 
