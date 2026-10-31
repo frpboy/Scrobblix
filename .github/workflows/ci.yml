@@ -265,7 +265,7 @@ jobs:
             ''
             'Restart the browser and Scrobblix after registration. Firefox temporary add-ons are not persistent release installations.'
             'This is an unsigned development bundle, not a production/store release. No Last.fm credentials are included.'
-            'To unregister the native host, run .\scripts/uninstall-native-host.ps1. Remove the browser extension separately in the browser UI.'
+            'To unregister the native host, run .\scripts\uninstall-native-host.ps1. Remove the browser extension separately in the browser UI.'
           ) | Set-Content -Path "$companion/INSTALL.txt" -Encoding utf8
           $requiredCompanionFiles = @(
             "$companion/chromium/manifest.json",
