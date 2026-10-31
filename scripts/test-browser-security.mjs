@@ -46,7 +46,8 @@ assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example/player" },
   [{ ...customSite, id: "not-a-site-id" }]), false);
 
-assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
+assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(site.id)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
+assert.ok(serviceWorkerSource.includes("persistCustomSiteSessionRevocation(site.id)"), "Removal must persist a per-site session tombstone before storage awaits.");
 assert.ok(serviceWorkerSource.includes("serializeCustomSiteMutation"), "Custom-site adds and removals must share one serialized service-worker mutation boundary.");
 assert.ok(serviceWorkerSource.includes("companion.add-custom-site"), "The service worker must own custom-site registration writes.");
 assert.ok(!popupSource.includes("storage.local.set({ customSites"), "The popup must not write custom-site arrays directly.");
