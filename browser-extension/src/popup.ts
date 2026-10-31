@@ -1,3 +1,5 @@
+import { cleanupCustomSiteBrowserAccess } from "./custom-site-cleanup.js";
+
 const popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
@@ -152,11 +154,17 @@ async function removeSite(site: CustomSite): Promise<void> {
     return;
   }
 
-  await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
-  await popupApi.permissions.remove({ origins: [site.pattern] });
+  const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
+    unregisterContentScripts: (details) => popupApi.scripting.unregisterContentScripts(details),
+    removePermissions: (details) => popupApi.permissions.remove(details),
+  });
   const sites = await getCustomSites();
   renderCustomSites(sites);
   await refreshTrackAction(sites);
+
+  if (!cleanupSucceeded) {
+    statusText.textContent = "Forwarding has been revoked, but browser cleanup was incomplete. Open extension settings and remove any remaining Scrobblix site access.";
+  }
 }
 
 async function testConnection(): Promise<void> {
