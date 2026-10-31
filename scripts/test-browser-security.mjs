@@ -1,30 +1,30 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { isAuthorizedObservationSender, isPlaybackObservation, isSupportedSender } from "../browser-extension/dist/message-validation.js";
 
 const desktopPipeSource = readFileSync("src/Scrobblix.Desktop/App.xaml.cs", "utf8");
 const nativeHostPipeSource = readFileSync("src/Scrobblix.NativeHost/Program.cs", "utf8");
 assert.match(
   desktopPipeSource,
-  /var pipeName = Environment\\.GetEnvironmentVariable\\("SCROBBLIX_BROWSER_PIPE"\\) \\?\\? "scrobblix\\.browser\\.v1";/,
+  /var pipeName = Environment\.GetEnvironmentVariable\("SCROBBLIX_BROWSER_PIPE"\) \?\? "scrobblix\.browser\.v1";/,
   "The desktop pipe server must honor the documented development pipe-name override.",
 );
 assert.match(
   desktopPipeSource,
-  /new NamedPipeServerStream\\(\\s*pipeName,/,
+  /new NamedPipeServerStream\(\s*pipeName,/,
   "The desktop pipe server must listen on the resolved pipe name.",
 );
 assert.match(
   nativeHostPipeSource,
-  /var pipeName = Environment\\.GetEnvironmentVariable\\("SCROBBLIX_BROWSER_PIPE"\\) \\?\\? "scrobblix\\.browser\\.v1";/,
+  /var pipeName = Environment\.GetEnvironmentVariable\("SCROBBLIX_BROWSER_PIPE"\) \?\? "scrobblix\.browser\.v1";/,
   "The native host must use the same documented development pipe-name override.",
 );
 assert.match(
   nativeHostPipeSource,
-  /new NamedPipeClientStream\\(\\s*"\\.",\\s*pipeName,/,
+  /new NamedPipeClientStream\(\s*"\.",\s*pipeName,/,
   "The native host client must connect using the resolved pipe name.",
 );
 
-import { isAuthorizedObservationSender, isPlaybackObservation, isSupportedSender } from "../browser-extension/dist/message-validation.js";
 
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://open.spotify.com/track/abc" }), true);
 assert.equal(isSupportedSender({ tab: { id: 1 }, url: "https://music.youtube.com/watch?v=abc" }), true);
