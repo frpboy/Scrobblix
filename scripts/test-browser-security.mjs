@@ -47,12 +47,14 @@ assert.equal(isAuthorizedObservationSender(
   [{ ...customSite, id: "not-a-site-id" }]), false);
 
 const removeHandlerAt = serviceWorkerSource.indexOf('if (message.type === "companion.remove-custom-site")');
-const revokeAt = serviceWorkerSource.indexOf("customSiteAuthorization.revoke(message.site.id)", removeHandlerAt);
+const revokeAt = serviceWorkerSource.indexOf("customSiteAuthorization.revoke(site.id)", removeHandlerAt);
+const persistRevocationAt = serviceWorkerSource.indexOf("persistCustomSiteSessionRevocation(site.id)", removeHandlerAt);
 const queuedMutationAt = serviceWorkerSource.indexOf("return serializeCustomSiteMutation", removeHandlerAt);
 const awaitSessionRevocationAt = serviceWorkerSource.indexOf("await sessionRevocationPromise", queuedMutationAt);
-assert.ok(removeHandlerAt >= 0 && revokeAt > removeHandlerAt && queuedMutationAt > revokeAt && awaitSessionRevocationAt > queuedMutationAt,
+assert.ok(removeHandlerAt >= 0 && revokeAt > removeHandlerAt && persistRevocationAt > revokeAt
+  && queuedMutationAt > persistRevocationAt && awaitSessionRevocationAt > queuedMutationAt,
   "Removal must revoke in-memory authorization before awaiting session or local storage.");
-assert.ok(serviceWorkerSource.includes("persistCustomSiteSessionRevocation(message.site.id)"),
+assert.ok(persistRevocationAt >= 0,
   "Removal must persist a per-site session tombstone before local storage mutation.");
 assert.ok(serviceWorkerSource.includes("serializeCustomSiteMutation"), "Custom-site adds and removals must share one serialized service-worker mutation boundary.");
 assert.ok(serviceWorkerSource.includes("companion.add-custom-site"), "The service worker must own custom-site registration writes.");
