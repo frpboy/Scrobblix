@@ -1,6 +1,7 @@
 export type CustomSiteBrowserCleanup = {
   unregisterContentScripts: (details: { ids: string[] }) => Promise<void>;
   removePermissions: (details: { origins: string[] }) => Promise<boolean>;
+  containsPermissions: (details: { origins: string[] }) => Promise<boolean>;
 };
 
 /**
@@ -23,9 +24,15 @@ export async function cleanupCustomSiteBrowserAccess(
 
   try {
     const permissionRemoved = await cleanup.removePermissions({ origins: [pattern] });
-    if (!permissionRemoved) failed = true;
+    if (!permissionRemoved && await cleanup.containsPermissions({ origins: [pattern] })) {
+      failed = true;
+    }
   } catch {
-    failed = true;
+    try {
+      if (await cleanup.containsPermissions({ origins: [pattern] })) failed = true;
+    } catch {
+      failed = true;
+    }
   }
 
   return !failed;
