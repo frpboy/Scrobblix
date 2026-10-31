@@ -156,6 +156,7 @@ async function removeSite(site: CustomSite): Promise<void> {
 
   const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
     unregisterContentScripts: (details) => popupApi.scripting.unregisterContentScripts(details),
+    containsContentScript: async (details) => (await popupApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
     removePermissions: (details) => popupApi.permissions.remove(details),
     containsPermissions: (details) => popupApi.permissions.contains(details),
   });
