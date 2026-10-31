@@ -197,7 +197,7 @@
         "Scrobblix-Docs/09_BrowserExtension/PERMISSIONS.md",
         "Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md"
       ],
-      "validation": "Draft PR #90 current head 67dfc09640dffa739b76a173c0f9a5f3605efc8f is undergoing Windows CI in run 41156473471 (pending at checkpoint). Tests cover storage read/write failures, per-site session tombstones, concurrent removals, simulated browser-session expiry and storage.session-unavailable fallback. PR is temporarily based on main for integrated validation; restore base to PR #84 branch after checks. No pass or merge is claimed."
+      "validation": "Draft PR #90 exact-head Windows CI run 41156914390 passed on head 7ef909376741c09e3f108374451427937d1e95ac. Base restored to fix/82-cancel-custom-site-inflight-observations-main at 2703a69cd252bb1f82cbcd70d6895ac0ee68aec9. Tests cover storage read/write failures, per-site tombstones, concurrent removals, session expiry, failed tombstone writes, missing storage.session and worker-restart fallback. PR remains draft and unmerged; re-run CI after #84 merges."
     },
     {
       "id": "AUD-BROWSER-004",
@@ -391,10 +391,10 @@
       },
       {
         "number": 90,
-        "head": "67dfc09640dffa739b76a173c0f9a5f3605efc8f",
-        "base": "main (temporary integrated validation)",
-        "ci": "in_progress",
-        "run": 41156473471
+        "head": "7ef909376741c09e3f108374451427937d1e95ac",
+        "base": "fix/82-cancel-custom-site-inflight-observations-main",
+        "ci": "passed",
+        "run": 41156914390
       },
       {
         "number": 91,
@@ -404,8 +404,9 @@
       },
       {
         "number": 93,
-        "ci": "pending_after_latest_docs_update",
-        "refsIssue": 78
+        "ci": "pending_after_latest_docs_refresh",
+        "refsIssue": 78,
+        "previousHeadCiRun": 41156677952
       }
     ]
   },
