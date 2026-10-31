@@ -77,7 +77,7 @@ assert.ok(!removeSiteSource.includes("storage.local.set")
   "The popup must not mutate registration storage or browser access directly.");
 const workerRemovalAt = serviceWorkerSource.indexOf('if (message.type === "companion.remove-custom-site")');
 const workerPersistAt = serviceWorkerSource.indexOf("storage.local.set", workerRemovalAt);
-const workerCleanupAt = serviceWorkerSource.indexOf("cleanupCustomSiteBrowserAccess", workerPersistAt);
+const workerCleanupAt = serviceWorkerSource.indexOf("cleanupCustomSite(site)", workerPersistAt);
 assert.ok(workerRemovalAt >= 0 && workerPersistAt > workerRemovalAt && workerCleanupAt > workerPersistAt,
   "The worker must persist removal before attempting independent browser cleanup.");
 
