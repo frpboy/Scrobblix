@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "auditDate": "2026-10-23",
+  "auditDate": "2026-10-31",
   "repository": "frpboy/Scrobblix",
   "baseBranch": "main",
-  "baseSha": "d27d06d809d59b1ca17e81a29019fc44be700b90",
-  "auditBranch": "docs/reconcile-current-main-final",
+  "baseSha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
+  "auditBranch": "docs/78-refresh-audit-checkpoint-2026-10-31",
   "findings": [
     {
       "id": "AUD-PRIV-001",
@@ -105,16 +105,16 @@
       "id": "AUD-DOC-001",
       "title": "Release gate status and continuation checkpoint stale at baseline",
       "severity": "P2",
-      "status": "documentation_refresh_in_progress",
+      "status": "fixed_merged",
       "issue": 27,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/27",
-      "fixPR": null,
-      "fixPRUrl": null,
+      "fixPR": 41,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/41",
       "evidence": [
         "docs/RELEASE_GATE_STATUS_2026-10-22.md",
         "docs/CONTINUATION_CHECKPOINT_2026-10-22.md"
       ],
-      "validation": "This refreshed documentation PR targets current main at d27d06d809d59b1ca17e81a29019fc44be700b90. Close issue #27 after the replacement docs PR merges and exact-head CI passes."
+      "validation": "Merged in PR #41 as commit b18f1a9868d2873f2bb0e9b25bb88c55fe6ba2a3; exact-head Windows CI run 39906585141 passed. Issue #27 is closed."
     },
     {
       "id": "AUD-CSV-001",
@@ -164,6 +164,162 @@
         "tests/Scrobblix.Domain.Tests/Program.cs"
       ],
       "validation": "PR #40 exact-head Windows CI passed in run 39903263712 on d864697601dcb9221a2482f859aa3de0328fc464; current main at d27d06d809d59b1ca17e81a29019fc44be700b90 passed post-merge run 39903649228. Real GSMTC behavior remains a manual release test."
+    },
+    {
+      "id": "AUD-BROWSER-002",
+      "title": "Revoke in-flight custom-site observations before browser cleanup",
+      "severity": "P2",
+      "status": "open_pr",
+      "issue": 82,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/82",
+      "fixPR": 84,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/84",
+      "evidence": [
+        "browser-extension/src/service-worker.ts",
+        "browser-extension/src/custom-site-authorization.ts",
+        "scripts/test-browser-security.mjs"
+      ],
+      "validation": "PR #84 exact-head Windows CI run 41154351961 passed on head 2703a69cd252bb1f82cbcd70d6895ac0ee68aec9. PR remains open and unmerged."
+    },
+    {
+      "id": "AUD-BROWSER-003",
+      "title": "Serialize custom-site mutations and recover safely from storage/browser cleanup failures",
+      "severity": "P2",
+      "status": "in_progress",
+      "issue": 87,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/87",
+      "fixPR": 90,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/90",
+      "evidence": [
+        "browser-extension/src/service-worker.ts",
+        "browser-extension/src/popup.ts",
+        "scripts/test-browser-security.mjs",
+        "Scrobblix-Docs/09_BrowserExtension/PERMISSIONS.md",
+        "Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md"
+      ],
+      "validation": "Draft PR #90 current head 67dfc09640dffa739b76a173c0f9a5f3605efc8f is undergoing Windows CI in run 41156473471 (pending at checkpoint). Tests cover storage read/write failures, per-site session tombstones, concurrent removals, simulated browser-session expiry and storage.session-unavailable fallback. PR is temporarily based on main for integrated validation; restore base to PR #84 branch after checks. No pass or merge is claimed."
+    },
+    {
+      "id": "AUD-BROWSER-004",
+      "title": "Align generic YouTube support with browser manifest and sender authorization",
+      "severity": "P2",
+      "status": "open_pr",
+      "issue": 73,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/73",
+      "fixPR": 81,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/81",
+      "evidence": [
+        "browser-extension/manifest.json",
+        "browser-extension/src/message-validation.ts",
+        "browser-extension/src/service-worker.ts",
+        "Scrobblix-Docs/09_BrowserExtension/PERMISSIONS.md"
+      ],
+      "validation": "PR #81 head be0e0519b2e9fcda1d79b22ef798db8472a55095 is stacked on PR #84. Both review threads are resolved; no integrated Windows build-and-test result is present on its current stacked base."
+    },
+    {
+      "id": "AUD-CI-001",
+      "title": "Pin third-party GitHub Actions to reviewed commit SHAs",
+      "severity": "P2",
+      "status": "open_pr",
+      "issue": 79,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/79",
+      "fixPR": 80,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/80",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "scripts/test-release-workflow.mjs"
+      ],
+      "validation": "PR #80 exact-head CI run 40984305515 passed on head 7e74ddc934fe7abdaf44127c429e40de958b48ae. PR remains open and unmerged."
+    },
+    {
+      "id": "AUD-CI-002",
+      "title": "Preserve reusable release workflow concurrency compatibility",
+      "severity": "P3",
+      "status": "open_pr",
+      "issue": 85,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/85",
+      "fixPR": 86,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/86",
+      "evidence": [
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+        "scripts/test-release-workflow.mjs"
+      ],
+      "validation": "PR #86 exact-head CI run 41155240404 passed on head ffdc98c9efc0aa3e1537a0c7f5567eb265dc072d. PR remains open and unmerged."
+    },
+    {
+      "id": "AUD-GOV-001",
+      "title": "Document and verify effective default-branch protection state",
+      "severity": null,
+      "status": "needs_validation",
+      "issue": 88,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/88",
+      "fixPR": 89,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/89",
+      "evidence": [
+        "Scrobblix-Docs/12_Testing/REPOSITORY_AUDIT_CHECKPOINT.md",
+        ".github/workflows/ci.yml"
+      ],
+      "validation": "PR #89 exact-head CI run 41154607171 passed on head 0d732db5dd9ac82a987378cce70f120b6ae25621. Main branch metadata reports protected=false and rulesets query is empty; direct protection endpoint returned HTTP 403, so effective policy remains unverified. No settings changed."
+    },
+    {
+      "id": "AUD-IPC-001",
+      "title": "Validate Windows named-pipe caller identity and ACL enforcement",
+      "severity": null,
+      "status": "needs_validation",
+      "issue": 74,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/74",
+      "fixPR": 91,
+      "fixPRUrl": "https://github.com/frpboy/Scrobblix/pull/91",
+      "evidence": [
+        "src/Scrobblix.Desktop/NamedPipePeerVerifier.cs",
+        "src/Scrobblix.Desktop/App.xaml.cs",
+        "src/Scrobblix.NativeHost/NativeHostCallerValidator.cs",
+        "src/Scrobblix.NativeHost/Program.cs"
+      ],
+      "validation": "PR #91 exact-head CI run 41154745247 passed on head 0336532743ccbe7f395d7ae9ae085eff2109c665 and aligns the configurable pipe-name environment variable. Windows pipe ACL, peer-identity and installed-host qualification remain outstanding."
+    },
+    {
+      "id": "AUD-PRIV-002",
+      "title": "Prove credential redaction across logs, backups, support bundles and packages",
+      "severity": null,
+      "status": "needs_validation",
+      "issue": 75,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/75",
+      "evidence": [
+        "src/Scrobblix.Desktop/ScrobblixFileLogger.cs",
+        "src/Scrobblix.Infrastructure/Diagnostics/DiagnosticMessageSanitizer.cs",
+        "Scrobblix-Docs/11_SecurityPrivacy/THREAT_MODEL.md"
+      ],
+      "validation": "No synthetic credential-canary test was run in this environment. Existing sanitizer code is not proof that every log, backup, support bundle and package path is redacted."
+    },
+    {
+      "id": "AUD-DEP-001",
+      "title": "Run exact-commit dependency, license, SBOM and Git-history secret scans",
+      "severity": null,
+      "status": "needs_validation",
+      "issue": 76,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/76",
+      "evidence": [
+        "browser-extension/package-lock.json",
+        ".github/workflows/ci.yml",
+        "Scrobblix.slnx"
+      ],
+      "validation": "No exact-commit dependency/license/SBOM/Git-history secret scan was run. No clean checkout or official validator toolchain was available."
+    },
+    {
+      "id": "AUD-SEC-003",
+      "title": "Complete the official security-audit report bundle and validator run",
+      "severity": null,
+      "status": "blocked",
+      "issue": 78,
+      "issueUrl": "https://github.com/frpboy/Scrobblix/issues/78",
+      "evidence": [
+        "docs/security/SECURITY_AUDIT_FOLLOW_UP_2026-10-28.md",
+        "Scrobblix-Docs/12_Testing/REPOSITORY_AUDIT_CHECKPOINT.md"
+      ],
+      "validation": "The installed skill catalog does not include the requested Cloudflare security-audit skill/official validators. The requested FINDINGS-DETAIL, NEEDS-VALIDATION, PHASE-STATUS, coverage-ledger, findings, run-metadata and artifact-manifest files are absent from the current main tree. No validator result is claimed."
     }
   ],
   "releaseGates": {
@@ -184,5 +340,43 @@
   "baselineCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39812019297",
   "currentMainCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39903649228",
   "auditStartSha": "0436ed83762971ef75dae5be1ffd15bab7e1eae5",
-  "currentMainCiConclusion": "success"
+  "currentMainCiConclusion": "success",
+  "currentMain": {
+    "sha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
+    "ciRun": 40640792254,
+    "ciConclusion": "success",
+    "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/40640792254",
+    "recursiveTree": {
+      "truncated": false,
+      "fileBlobs": 412,
+      "treeEntries": 481
+    },
+    "openIssues": 11,
+    "openPullRequests": 7,
+    "defaultBranch": "main",
+    "mainProtected": false,
+    "rulesets": []
+  },
+  "executionEnvironment": {
+    "container": "isolated Linux container",
+    "node": "v22.16.0",
+    "npm": "10.9.2",
+    "typescript": "5.8.3",
+    "chromium": "available",
+    "dotnet": "unavailable",
+    "powershell": "unavailable",
+    "repositoryCheckout": "not created; git clone failed due github.com DNS resolution",
+    "localRepositoryScripts": "not run",
+    "windowsDesktop": "unavailable",
+    "installedBrowserProfile": "unavailable",
+    "officialCloudflareSecurityAuditSkill": "not installed",
+    "officialSecurityValidators": "unavailable"
+  },
+  "coverageLimits": [
+    "Selective source review and GitHub metadata inventory; not a line-by-line audit of all 412 tracked file blobs.",
+    "No local repository checkout; no local .NET, PowerShell, or installed-browser qualification.",
+    "GitHub-hosted Windows CI results are recorded per exact head SHA; they do not replace Windows named-pipe ACL tests or real-browser qualification.",
+    "Branch metadata reports protected=false and the rulesets query is empty, but the direct branch-protection endpoint returned HTTP 403; effective policy remains unverified.",
+    "The requested Cloudflare security-audit skill/official validators are not installed; the requested report bundle, findings-detail, coverage ledger, run metadata and artifact manifest are absent from the current main tree."
+  ]
 }
