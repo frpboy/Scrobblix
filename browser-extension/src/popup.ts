@@ -1,4 +1,4 @@
-popup importconst popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
+const popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
 
