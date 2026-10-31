@@ -18,6 +18,10 @@ Review the workflow YAML itself when changing these steps. This document is expl
 
 CI runs on pushes to main and feat/private-beta-readiness, pull requests targeting main, manual dispatch, and reusable workflow calls.
 
+## Runtime and concurrency controls
+
+The CI workflow groups pull-request runs by canonical numeric PR number and cancels superseded validation for the same PR. Push runs use the ref only for the two exact, case-sensitive branches allowed by the workflow trigger (`main` and `feat/private-beta-readiness`), so newer pushes to either branch cancel older validation for that same branch. Manual dispatch uses its unique GitHub run ID. Reusable-workflow calls may supply the optional `concurrency_key` input. A single call can omit it and falls back to the caller's run ID for backwards compatibility; callers that invoke this workflow multiple times in one caller run must pass a distinct value for each call/job because `github.run_id` is shared across those calls. Both paths avoid arbitrary branch/tag refs because GitHub compares concurrency group names case-insensitively, so direct grouping by arbitrary refs could make distinct case-sensitive refs cancel one another and suppress a required preview release. The Windows `build-and-test` job has an explicit 45-minute timeout. These controls bound stalled validation without changing validation steps or artifact outputs. The tag-triggered preview-release publisher remains a separate workflow/job and retains its isolated write permission.
+
 The current Windows job performs:
 
 1. Restore and Release build of Scrobblix.slnx using the .NET 10 SDK.
@@ -55,3 +59,8 @@ The current CI/release YAML does not establish a signed production package, code
 ## Permissions
 
 The current workflow declares read-only contents permissions for CI. The release-publishing job elevates contents permission to write only for the job that creates the prerelease. Recheck permissions and third-party action versions during workflow changes.
+
+
+### Reusable-workflow caller contract
+
+When invoking this workflow with `uses:`, existing single-call callers may omit `concurrency_key`; the workflow falls back to the caller run ID. If one caller workflow invokes this workflow from multiple jobs, each call must pass `with: concurrency_key: <unique-value>` (for example, include the caller job identifier). Multiple reusable-workflow calls share the caller's `github.run_id`, so omitting the key for fan-out calls can place them in the same cancellation group. The in-repository Preview Release workflow passes a run-scoped key; external callers that fan out across multiple jobs must provide distinct keys.

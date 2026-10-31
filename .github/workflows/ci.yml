@@ -7,6 +7,18 @@ on:
     branches: [main]
   workflow_dispatch:
   workflow_call:
+    inputs:
+      concurrency_key:
+        description: "Optional key for reusable-workflow fan-out; callers invoking this workflow more than once in one run must provide a distinct value per call."
+        required: false
+        type: string
+
+concurrency:
+  # GitHub group names are case-insensitive. PR numbers are canonical;
+  # push refs are limited to the exact case-sensitive branch filters below.
+  # Dispatch uses run IDs; reusable calls use a caller-supplied unique key.
+  group: ${{ github.workflow }}-${{ inputs.concurrency_key || github.event.pull_request.number || ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/private-beta-readiness')) && github.ref) || github.run_id }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -14,6 +26,7 @@ permissions:
 jobs:
   build-and-test:
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
@@ -26,6 +39,9 @@ jobs:
           node-version: 22.x
           cache: npm
           cache-dependency-path: browser-extension/package-lock.json
+
+      - name: Validate CI concurrency contract
+        run: node scripts/test-ci-concurrency.mjs
 
       - name: Restore .NET solution
         run: dotnet restore Scrobblix.slnx
