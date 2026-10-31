@@ -1,6 +1,4 @@
-import { cleanupCustomSiteBrowserAccess } from "./custom-site-cleanup.js";
-
-const popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
+popup importconst popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
 
@@ -120,13 +118,18 @@ async function trackCurrentSite(): Promise<void> {
     return;
   }
 
-  const sites = await getCustomSites();
   const site: CustomSite = { id: `site_${crypto.randomUUID().replaceAll("-", "")}`, ...currentSite };
-  await popupApi.scripting.registerContentScripts([{ id: site.id, matches: [site.pattern], js: ["dist/media-observer.js"], runAt: "document_idle", persistAcrossSessions: true }]);
-  const nextSites = [...sites, site];
-  await popupApi.storage.local.set({ customSites: nextSites });
-  await refreshTrackAction(nextSites);
-  renderCustomSites(nextSites);
+  const result = await popupApi.runtime.sendMessage({
+    type: "companion.add-custom-site",
+    site,
+  }) as { added?: boolean; cleanupSucceeded?: boolean; detail?: string } | undefined;
+  const sites = await getCustomSites();
+  await refreshTrackAction(sites);
+  renderCustomSites(sites);
+  if (!result?.added) {
+    statusText.textContent = result?.detail ?? "The site could not be registered. Reload the extension and try again.";
+    return;
+  }
   statusText.textContent = "This site is ready. Reload its tab once.";
 }
 
@@ -148,25 +151,18 @@ async function removeSite(site: CustomSite): Promise<void> {
   const result = await popupApi.runtime.sendMessage({
     type: "companion.remove-custom-site",
     siteId: site.id,
-  }) as { removed?: boolean } | undefined;
-  if (!result?.removed) {
-    statusText.textContent = "This site is already removed or could not be revoked. Reload the extension and try again.";
-    return;
-  }
-
-  const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
-    unregisterContentScripts: (details) => popupApi.scripting.unregisterContentScripts(details),
-    containsContentScript: async (details) => (await popupApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
-    removePermissions: (details) => popupApi.permissions.remove(details),
-    containsPermissions: (details) => popupApi.permissions.contains(details),
-  });
+  }) as { removed?: boolean; cleanupSucceeded?: boolean; detail?: string } | undefined;
   const sites = await getCustomSites();
   renderCustomSites(sites);
   await refreshTrackAction(sites);
 
-  if (!cleanupSucceeded) {
-    statusText.textContent = "Forwarding has been revoked, but browser cleanup was incomplete. Open extension settings and remove any remaining Scrobblix site access.";
+  if (!result?.removed) {
+    statusText.textContent = result?.detail ?? "This site could not be removed. Reload the extension and try again.";
+    return;
   }
+  statusText.textContent = result.cleanupSucceeded
+    ? "Site removed from Scrobblix and browser access cleaned up."
+    : result.detail ?? "The Scrobblix registration was removed, but browser cleanup is incomplete. Review this site's extension permissions.";
 }
 
 async function testConnection(): Promise<void> {
