@@ -1,3 +1,5 @@
+import { cleanupCustomSiteBrowserAccess } from "./custom-site-cleanup.js";
+
 const popupApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
 
 export {};
@@ -143,12 +145,28 @@ function renderCustomSites(sites: CustomSite[]): void {
 }
 
 async function removeSite(site: CustomSite): Promise<void> {
-  await popupApi.scripting.unregisterContentScripts({ ids: [site.id] });
-  await popupApi.permissions.remove({ origins: [site.pattern] });
-  const sites = (await getCustomSites()).filter((entry) => entry.id !== site.id);
-  await popupApi.storage.local.set({ customSites: sites });
+  const result = await popupApi.runtime.sendMessage({
+    type: "companion.remove-custom-site",
+    siteId: site.id,
+  }) as { removed?: boolean } | undefined;
+  if (!result?.removed) {
+    statusText.textContent = "This site is already removed or could not be revoked. Reload the extension and try again.";
+    return;
+  }
+
+  const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
+    unregisterContentScripts: (details) => popupApi.scripting.unregisterContentScripts(details),
+    containsContentScript: async (details) => (await popupApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
+    removePermissions: (details) => popupApi.permissions.remove(details),
+    containsPermissions: (details) => popupApi.permissions.contains(details),
+  });
+  const sites = await getCustomSites();
   renderCustomSites(sites);
   await refreshTrackAction(sites);
+
+  if (!cleanupSucceeded) {
+    statusText.textContent = "Forwarding has been revoked, but browser cleanup was incomplete. Open extension settings and remove any remaining Scrobblix site access.";
+  }
 }
 
 async function testConnection(): Promise<void> {
