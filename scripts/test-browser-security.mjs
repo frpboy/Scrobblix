@@ -464,13 +464,13 @@ const readFailureSite = {
 };
 workerSettings = { paused: false, customSites: [readFailureSite] };
 storageGetBehavior = async () => { throw new Error("synthetic storage read failure"); };
+permissionRemoveCalls = 0;
 const addReadFailure = await addToWorker(readFailureSite);
 assert.equal(addReadFailure.added, false, "A failed registration-state read must not report a successful add.");
 assert.match(addReadFailure.detail, /custom site could not be registered/i,
   "The popup must receive a registration-specific error when storage cannot be read.");
 permissionRemoveResult = false;
 removedPermissionOrigin = undefined;
-permissionRemoveCalls = 0;
 const removeReadFailure = await removeFromWorker(readFailureSite);
 assert.equal(removeReadFailure.removed, false, "A failed registration-state read must not report a successful removal.");
 assert.equal(removeReadFailure.cleanupSucceeded, false, "The failed permission cleanup must be reported.");
