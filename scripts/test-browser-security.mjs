@@ -193,7 +193,7 @@ let permissionCalls = 0;
 let permissionRemoveCalls = 0;
 let permissionRemoveResult = true;
 let removedPermissionOrigin;
-let sessionRevokedSiteIds = [];
+const sessionRevokedSiteIds = new Set();
 let connectNativeCalls = 0;
 const forwardedPlaybackMessages = [];
 
@@ -228,9 +228,19 @@ const workerApi = {
       set: async (update) => storageSetBehavior(update),
     },
     session: {
-      get: async (defaults) => ({ ...defaults, revokedCustomSiteIds: sessionRevokedSiteIds }),
+      get: async (key) => {
+        const keys = typeof key === "string" ? [key] : Array.isArray(key) ? key : Object.keys(key ?? {});
+        return Object.fromEntries(keys.filter((entry) => sessionRevokedSiteIds.has(entry)).map((entry) => [entry, true]));
+      },
       set: async (update) => {
-        if (Array.isArray(update.revokedCustomSiteIds)) sessionRevokedSiteIds = update.revokedCustomSiteIds;
+        for (const [key, value] of Object.entries(update)) {
+          if (value === true) sessionRevokedSiteIds.add(key);
+          else sessionRevokedSiteIds.delete(key);
+        }
+      },
+      remove: async (key) => {
+        const keys = typeof key === "string" ? [key] : key;
+        for (const entry of keys) sessionRevokedSiteIds.delete(entry);
       },
     },
   },
@@ -441,7 +451,7 @@ assert.deepEqual(workerSettings.customSites, [storageFailureSite], "A failed sto
 assert.equal(permissionRemoveCalls, 1, "Browser permission removal must be attempted even when persistence fails.");
 assert.equal(await workerApi.permissions.contains({ origins: [storageFailureSite.pattern] }), true,
   "The test must retain the browser grant to exercise the session tombstone rather than permission cleanup.");
-assert.ok(sessionRevokedSiteIds.includes(storageFailureSite.id),
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${storageFailureSite.id}`),
   "The failed removal must persist a session tombstone before the worker can restart.");
 const beforeRestartPosts = forwardedPlaybackMessages.length;
 const beforeRestartConnections = connectNativeCalls;
@@ -477,7 +487,7 @@ assert.equal(removeReadFailure.cleanupSucceeded, false, "The failed permission c
 assert.match(removeReadFailure.detail, /blocked for this extension session/i,
   "The popup must receive a removal-specific session-revocation result rather than a connection diagnostic.");
 assert.equal(permissionRemoveCalls, 2, "Both failed add and failed remove storage reads must attempt exact-origin permission cleanup.");
-assert.ok(sessionRevokedSiteIds.includes(readFailureSite.id),
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${readFailureSite.id}`),
   "A removal whose storage read fails must persist a session tombstone.");
 const beforeReadRestartPosts = forwardedPlaybackMessages.length;
 const beforeReadRestartConnections = connectNativeCalls;
@@ -492,6 +502,45 @@ assert.equal(forwardedPlaybackMessages.length, beforeReadRestartPosts,
   "A worker restart must not post from a stale registration after a storage-read failure.");
 permissionRemoveResult = true;
 storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+
+// Concurrent failed removals must not overwrite one another's session revocation tombstones.
+const concurrentRevocationSiteOne = {
+  id: "site_99999999999999999999999999999999",
+  origin: "https://session-one.example",
+  pattern: "https://session-one.example/*",
+};
+const concurrentRevocationSiteTwo = {
+  id: "site_dddddddddddddddddddddddddddddddd",
+  origin: "https://session-two.example",
+  pattern: "https://session-two.example/*",
+};
+workerSettings = { paused: false, customSites: [concurrentRevocationSiteOne, concurrentRevocationSiteTwo] };
+storageSetBehavior = async () => { throw new Error("synthetic concurrent storage write failure"); };
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+const concurrentRemovalResults = await Promise.all([
+  removeFromWorker(concurrentRevocationSiteOne),
+  removeFromWorker(concurrentRevocationSiteTwo),
+]);
+assert.deepEqual(concurrentRemovalResults.map((result) => result.removed), [false, false],
+  "Neither failed persistence operation may be reported as a completed removal.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${concurrentRevocationSiteOne.id}`),
+  "The first concurrent removal must retain its own session tombstone.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${concurrentRevocationSiteTwo.id}`),
+  "The second concurrent removal must retain its own session tombstone.");
+const beforeConcurrentRestartPosts = forwardedPlaybackMessages.length;
+const beforeConcurrentRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?concurrent-session-revocation-restart");
+assert.equal(workerListeners.length, 4, "A concurrent-removal worker restart must register a fresh listener.");
+workerListeners[3](observation, { tab: { id: 10 }, url: `${concurrentRevocationSiteOne.origin}/player` });
+workerListeners[3](observation, { tab: { id: 11 }, url: `${concurrentRevocationSiteTwo.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeConcurrentRestartConnections,
+  "Neither concurrent stale registration may open a native port after restart.");
+assert.equal(forwardedPlaybackMessages.length, beforeConcurrentRestartPosts,
+  "Neither concurrent stale registration may post after restart.");
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+permissionRemoveResult = true;
 
 // Positive control: a still-registered site with granted browser permission must forward.
 
