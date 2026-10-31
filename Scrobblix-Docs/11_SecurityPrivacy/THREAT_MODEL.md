@@ -27,7 +27,7 @@ This is a source-based threat review, not an external penetration test, code-sig
 
 | Threat | Current controls | Remaining limitation |
 |---|---|---|
-| Malicious page sends malformed metadata or races site revocation/registration changes | Browser payload validation, bounded field handling, browser-supplied sender identity, allow-listed adapters/origins; custom-site add/remove storage mutations are serialized in the service worker, removal revokes the authorization gate before queued cleanup, and pending forwards re-check permission plus current registration before native-host delivery | Requires real-browser qualification and continued regression tests; deterministic concurrent-mutation and revocation tests do not replace installed-browser qualification |
+| Malicious page sends malformed metadata or races site revocation/registration changes | Browser payload validation, bounded field handling, browser-supplied sender identity, allow-listed adapters/origins; custom-site add/remove mutations are serialized in the service worker; removal records a per-site `storage.session` tombstone before queueing and forwarding checks it across worker restarts; storage read/write failures still attempt exact-origin cleanup using validated popup identity | `storage.session` is temporary and clears on extension reload/disable or browser restart; if both session-tombstone persistence and browser permission cleanup fail, the popup requires manual revocation. Requires real-browser qualification and continued regression tests |
 | Untrusted extension calls native host | Registered Chromium/Firefox extension ID allow-lists; identity checked before handling message types, including ping; fixed protocol message types | Registry/file tampering by the same user and extension-store supply chain still matter |
 | Untrusted process writes browser pipe | Current-user-only named pipe; desktop checks native-host image path and parent process basename against supported browsers | Defense-in-depth, not cryptographic executable identity or publisher-signature proof |
 | Oversized or malformed Native Messaging frames | Four-byte length prefix, maximum frame size 256 KiB, envelope/version/message checks | Test against actual browser behavior and malformed inputs on Windows |
@@ -52,6 +52,7 @@ Do not widen the allow-list to include track/artist, full URLs, usernames, arbit
 - Replay or flood browser messages to create duplicate history or queue work.
 - Race a custom-site observation against user removal; the service-worker revocation gate must reject pending forwards before native-host delivery.
 - Overlap custom-site additions and removals; the service-worker mutation queue must preserve unrelated successful changes and never restore a removed registration.
+- Force custom-site local-storage reads/writes and permission removal to fail together; a `storage.session` tombstone must block stale forwarding after a service-worker restart, and the UI must warn that manual permission revocation is required before extension reload/browser restart if temporary session protection is the only remaining safeguard.
 - Spoof source identity or artist/title to pollute local history.
 - Use the native host as a generic command bridge.
 - Attempt to bypass extension allow-list using ping or malformed identities.
