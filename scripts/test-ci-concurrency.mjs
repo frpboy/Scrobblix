@@ -9,8 +9,8 @@ assert.match(
 );
 assert.match(
   workflow,
-  /\(github\.event_name == 'workflow_call' && inputs\.concurrency_key\)\s*\|\|\s*github\.run_id/,
-  "Reusable-workflow fan-out may use a caller-supplied key, while existing single-call callers fall back to the caller run ID.",
+  /github\.event\.pull_request\.number\s*\|\|\s*inputs\.concurrency_key\s*\|\|[\s\S]*\|\|\s*github\.run_id/,
+  "PRs use their canonical number, reusable-workflow fan-out can use a caller key, and single/manual runs fall back to run ID.",
 );
 assert.match(
   workflow,
