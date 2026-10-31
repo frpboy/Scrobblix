@@ -304,7 +304,9 @@ permissionBehavior = async () => {
 };
 workerListener(observation, customSender);
 await initialPermissionStarted.promise;
-assert.deepEqual(await removeFromWorker(raceBeforeConnect), { removed: true, cleanupSucceeded: true });
+const removedBeforeConnect = await removeFromWorker(raceBeforeConnect);
+assert.equal(removedBeforeConnect.removed, true);
+assert.equal(removedBeforeConnect.cleanupSucceeded, true);
 initialPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, 0, "A site revoked during initial authorization must not open a native port.");
@@ -331,7 +333,9 @@ permissionBehavior = async (_details, callNumber) => {
 workerListener(observation, customSender);
 await finalPermissionStarted.promise;
 assert.equal(connectNativeCalls, 1, "The final authorization race should occur after the native port is opened.");
-assert.deepEqual(await removeFromWorker(raceBeforePost), { removed: true, cleanupSucceeded: true });
+const removedBeforePost = await removeFromWorker(raceBeforePost);
+assert.equal(removedBeforePost.removed, true);
+assert.equal(removedBeforePost.cleanupSucceeded, true);
 finalPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during final authorization must not post playback data.");
@@ -559,4 +563,4 @@ assert.equal(forwardedPlaybackMessages[0].type, "playback.observation.v1");
 assert.equal(forwardedPlaybackMessages[0].payload.siteOrigin, activeSite.origin);
 assert.equal(forwardedPlaybackMessages[0].payload.tabId, customSender.tab.id);
 
-console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork and in-flight custom-site revocation).");
+console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork, serialized mutations, storage failures and in-flight custom-site revocation).");
