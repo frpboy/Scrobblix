@@ -56,16 +56,29 @@ const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomS
 const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
 assert.ok(connectAt >= 0 && finalAuthorizationAt > connectAt && nativePostAt > finalAuthorizationAt, "Permission, registration and revocation must be revalidated after opening the native port and before posting.");
 assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke site removal.");
-const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
-assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0
-  && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "The popup must revoke forwarding before browser cleanup.");
-
-assert.ok(removeSiteSource.includes("cleanupCustomSiteBrowserAccess("),
-  "The popup must use the independently-failing browser cleanup helper.");
-assert.ok(removeSiteSource.indexOf("cleanupCustomSiteBrowserAccess(") < removeSiteSource.indexOf("getCustomSites()"),
-  "The popup must refresh the custom-site list after both browser cleanup attempts.");
-assert.ok(removeSiteSource.includes("browser cleanup was incomplete"),
-  "The popup must surface incomplete browser cleanup to the user.");
+const trackSiteSource = popupSource.slice(
+  popupSource.indexOf("async function trackCurrentSite"),
+  popupSource.indexOf("function renderCustomSites"),
+);
+assert.ok(trackSiteSource.includes("companion.add-custom-site"),
+  "The popup must send custom-site additions to the service worker.");
+assert.ok(!trackSiteSource.includes("storage.local.set") && !trackSiteSource.includes("registerContentScripts"),
+  "The popup must not persist registrations or register scripts outside the serialized mutation boundary.");
+const removeSiteSource = popupSource.slice(
+  popupSource.indexOf("async function removeSite"),
+  popupSource.indexOf("async function testConnection"),
+);
+assert.ok(removeSiteSource.includes("companion.remove-custom-site"),
+  "The popup must route removal through the service worker.");
+assert.ok(!removeSiteSource.includes("storage.local.set")
+  && !removeSiteSource.includes("unregisterContentScripts")
+  && !removeSiteSource.includes("permissions.remove"),
+  "The popup must not mutate registration storage or browser access directly.");
+const workerRemovalAt = serviceWorkerSource.indexOf('if (message.type === "companion.remove-custom-site")');
+const workerPersistAt = serviceWorkerSource.indexOf("storage.local.set", workerRemovalAt);
+const workerCleanupAt = serviceWorkerSource.indexOf("cleanupCustomSiteBrowserAccess", workerPersistAt);
+assert.ok(workerRemovalAt >= 0 && workerPersistAt > workerRemovalAt && workerCleanupAt > workerPersistAt,
+  "The worker must persist removal before attempting independent browser cleanup.");
 
 const cleanupOrder = [];
 const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(
