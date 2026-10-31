@@ -9,8 +9,8 @@ assert.match(
 );
 assert.match(
   workflow,
-  /inputs\\.concurrency_key\\s*\\|\\|\\s*github\\.event\\.pull_request\\.number\\s*\\|\\|[\s\S]*\|\|\s*github\.run_id/,
-  "PRs use their canonical number, reusable-workflow fan-out can use a caller key, and single/manual runs fall back to run ID.",
+  /inputs\.concurrency_key\s*\|\|\s*github\.event\.pull_request\.number\s*\|\|[\s\S]*\|\|\s*github\.run_id/,
+  "Caller-supplied reusable keys take precedence over PR grouping; single/manual runs fall back to run ID.",
 );
 assert.match(
   workflow,
