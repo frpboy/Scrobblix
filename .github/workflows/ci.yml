@@ -9,8 +9,8 @@ on:
   workflow_call:
     inputs:
       concurrency_key:
-        description: "Unique key for this reusable-workflow invocation; callers must provide a distinct value per job call."
-        required: true
+        description: "Optional key for reusable-workflow fan-out; callers invoking this workflow more than once in one run must provide a distinct value per call."
+        required: false
         type: string
 
 concurrency:
