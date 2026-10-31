@@ -434,7 +434,7 @@ const beforeRestartPosts = forwardedPlaybackMessages.length;
 const beforeRestartConnections = connectNativeCalls;
 await import("../browser-extension/dist/service-worker.js?storage-failure-worker-restart");
 assert.equal(workerListeners.length, 2, "The restarted production service worker must register a fresh listener.");
-workerListeners[1](observation, customSender);
+workerListeners[1](observation, { tab: { id: 8 }, url: `${storageFailureSite.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, beforeRestartConnections,
   "A worker restart must not restore forwarding for a registration whose browser permission was revoked.");
