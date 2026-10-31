@@ -8,7 +8,7 @@ export {};
 
 type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" }
   | { type: "companion.add-custom-site"; site: CustomSiteRegistration }
-  | { type: "companion.remove-custom-site"; siteId: string };
+  | { type: "companion.remove-custom-site"; site: CustomSiteRegistration };
 type CustomSiteMutationResult = { added: boolean; removed?: never; cleanupSucceeded?: boolean; detail?: string }
   | { removed: boolean; added?: never; cleanupSucceeded?: boolean; detail?: string };
 type CompanionSettings = { paused: boolean; customSites: CustomSiteRegistration[] };
@@ -89,14 +89,17 @@ async function forwardObservation(observation: PlaybackObservation, sender: chro
   if (settings.paused || (!builtInOrigin && !customSite)
       || !isAuthorizedObservationSender(sender, settings.customSites)) return;
 
-  const authorizeCustomSite = () => customSite !== undefined && customSiteAuthorization.authorize(
-    customSite.id,
-    () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
-    async () => {
-      const latestSettings = await readSettings();
-      return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
-    },
-  );
+  const authorizeCustomSite = async (): Promise<boolean> => {
+    if (!customSite || await isCustomSiteSessionRevoked(customSite.id)) return false;
+    return customSiteAuthorization.authorize(
+      customSite.id,
+      () => scrobblixWorkerApi.permissions.contains({ origins: [`${sourceUrl.origin}/*`] }),
+      async () => {
+        const latestSettings = await readSettings();
+        return !latestSettings.paused && isAuthorizedObservationSender(sender, latestSettings.customSites);
+      },
+    );
+  };
   const hasGrantedOrigin = builtInOrigin || await authorizeCustomSite();
   if (!hasGrantedOrigin) return;
 
@@ -199,8 +202,7 @@ function isPopupMessage(message: unknown): message is PopupMessage {
   if (candidate.type === "companion.get-state" || candidate.type === "companion.test-native-host") return true;
   if (candidate.type === "companion.add-custom-site") return isCustomSiteRegistration(candidate.site);
   return candidate.type === "companion.remove-custom-site"
-    && typeof candidate.siteId === "string"
-    && /^site_[a-f0-9]{32}$/u.test(candidate.siteId);
+    && isCustomSiteRegistration(candidate.site);
 }
 
 function serializeCustomSiteMutation<T>(mutation: () => Promise<T>): Promise<T> {
@@ -209,12 +211,78 @@ function serializeCustomSiteMutation<T>(mutation: () => Promise<T>): Promise<T> 
   return result;
 }
 
+async function getSessionRevokedSiteIds(): Promise<string[]> {
+  const stored = await scrobblixWorkerApi.storage.session.get({ revokedCustomSiteIds: [] as string[] });
+  const value = (stored as unknown as Record<string, unknown>).revokedCustomSiteIds;
+  return Array.isArray(value)
+    ? value.filter((siteId): siteId is string => typeof siteId === "string" && /^site_[a-f0-9]{32}$/u.test(siteId))
+    : [];
+}
+
+async function isCustomSiteSessionRevoked(siteId: string): Promise<boolean> {
+  try {
+    return (await getSessionRevokedSiteIds()).includes(siteId);
+  } catch {
+    // If the session revocation store cannot be read, custom-site forwarding fails closed.
+    return true;
+  }
+}
+
+async function persistCustomSiteSessionRevocation(siteId: string): Promise<boolean> {
+  try {
+    const siteIds = await getSessionRevokedSiteIds();
+    if (!siteIds.includes(siteId)) {
+      await scrobblixWorkerApi.storage.session.set({ revokedCustomSiteIds: [...siteIds, siteId] });
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function clearCustomSiteSessionRevocation(siteId: string): Promise<void> {
+  try {
+    const siteIds = await getSessionRevokedSiteIds();
+    if (siteIds.includes(siteId)) {
+      await scrobblixWorkerApi.storage.session.set({
+        revokedCustomSiteIds: siteIds.filter((entry) => entry !== siteId),
+      });
+    }
+  } catch {
+    // A stale session tombstone is safe: it only keeps the removed ID blocked.
+  }
+}
+
+function cleanupCustomSite(site: CustomSiteRegistration): Promise<boolean> {
+  return cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
+    unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
+    containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
+    removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
+    containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
+  });
+}
+
 async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | CustomSiteMutationResult> {
   if (message.type === "companion.add-custom-site") {
     return serializeCustomSiteMutation(async () => {
-      const settings = await readSettings();
+      let settings: CompanionSettings;
+      try {
+        settings = await readSettings();
+      } catch {
+        const cleanupSucceeded = await cleanupCustomSite(message.site);
+        return {
+          added: false,
+          cleanupSucceeded,
+          detail: cleanupSucceeded
+            ? "The custom site could not be registered because stored state could not be read. Browser access was cleaned up."
+            : "The custom site could not be registered because stored state could not be read and browser cleanup is incomplete. Review extension permissions.",
+        };
+      }
       if (settings.customSites.some((site) => site.id === message.site.id || site.origin === message.site.origin)) {
         return { added: false, detail: "This site is already registered." };
+      }
+      if (await isCustomSiteSessionRevoked(message.site.id)) {
+        return { added: false, detail: "This registration ID has been revoked. Refresh the popup and try again." };
       }
 
       const permissionGranted = await scrobblixWorkerApi.permissions.contains({ origins: [message.site.pattern] });
@@ -230,12 +298,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
         }]);
         await scrobblixWorkerApi.storage.local.set({ customSites: [...settings.customSites, message.site] });
       } catch {
-        const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(message.site.id, message.site.pattern, {
-          unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
-          containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === message.site.id),
-          removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
-          containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
-        });
+        const cleanupSucceeded = await cleanupCustomSite(message.site);
         return {
           added: false,
           cleanupSucceeded,
@@ -250,40 +313,62 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
   }
 
   if (message.type === "companion.remove-custom-site") {
-    // Invalidate pending observations synchronously, before waiting behind another mutation.
-    customSiteAuthorization.revoke(message.siteId);
+    const site = message.site;
+    // Revoke in memory and in session storage before waiting behind another mutation.
+    customSiteAuthorization.revoke(site.id);
+    const sessionRevocationPromise = persistCustomSiteSessionRevocation(site.id);
     return serializeCustomSiteMutation(async () => {
-      const settings = await readSettings();
-      const site = settings.customSites.find((entry) => entry.id === message.siteId);
-      if (!site) return { removed: false, cleanupSucceeded: true, detail: "This site is already removed." };
-
-      // Persist revocation before browser cleanup so a worker restart cannot restore authorization.
+      const sessionRevocationPersisted = await sessionRevocationPromise;
+      let settings: CompanionSettings;
       try {
-        await scrobblixWorkerApi.storage.local.set({
-          customSites: settings.customSites.filter((entry) => entry.id !== message.siteId),
-        });
+        settings = await readSettings();
       } catch {
-        // Storage failure must not leave browser access active after in-memory revocation.
-        const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
-          unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
-          containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
-          removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
-          containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
-        });
+        const cleanupSucceeded = await cleanupCustomSite(site);
+        return {
+          removed: false,
+          cleanupSucceeded,
+          detail: sessionRevocationPersisted
+            ? "Stored registrations could not be read. This site is blocked for the current browser session; retry removal."
+            : cleanupSucceeded
+              ? "Stored registrations could not be read, but browser access was revoked. Retry removal."
+              : "Stored registrations could not be read and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
+        };
+      }
+
+      const storedSite = settings.customSites.find((entry) => entry.id === site.id);
+      if (!storedSite) {
+        const cleanupSucceeded = await cleanupCustomSite(site);
         return {
           removed: false,
           cleanupSucceeded,
           detail: cleanupSucceeded
-            ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
-            : "The registration could not be removed from storage and browser cleanup is incomplete. Review extension permissions and retry.",
+            ? "This site is already absent from Scrobblix; browser access was cleaned up."
+            : "This site is absent from Scrobblix, but browser cleanup is incomplete. Review extension permissions.",
         };
       }
-      const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
-        unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
-        containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
-        removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
-        containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
-      });
+      if (storedSite.origin !== site.origin || storedSite.pattern !== site.pattern) {
+        return { removed: false, cleanupSucceeded: false, detail: "The stored site identity changed. Refresh the popup and retry removal." };
+      }
+
+      try {
+        await scrobblixWorkerApi.storage.local.set({
+          customSites: settings.customSites.filter((entry) => entry.id !== site.id),
+        });
+      } catch {
+        const cleanupSucceeded = await cleanupCustomSite(site);
+        return {
+          removed: false,
+          cleanupSucceeded,
+          detail: sessionRevocationPersisted
+            ? "The registration could not be removed from storage, but this site remains blocked for the current browser session. Retry removal."
+            : cleanupSucceeded
+              ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
+              : "The registration could not be removed from storage and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
+        };
+      }
+
+      await clearCustomSiteSessionRevocation(site.id);
+      const cleanupSucceeded = await cleanupCustomSite(site);
       return cleanupSucceeded
         ? { removed: true, cleanupSucceeded: true }
         : {
