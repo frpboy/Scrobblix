@@ -40,6 +40,9 @@ jobs:
           cache: npm
           cache-dependency-path: browser-extension/package-lock.json
 
+      - name: Validate CI concurrency contract
+        run: node scripts/test-ci-concurrency.mjs
+
       - name: Restore .NET solution
         run: dotnet restore Scrobblix.slnx
 
