@@ -1000,8 +1000,9 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         {
             try
             {
+                await using var pipe = var pipeName = Environment.GetEnvironmentVariable("SCROBBLIX_BROWSER_PIPE") ?? "scrobblix.browser.v1";
                 await using var pipe = new NamedPipeServerStream(
-                    "scrobblix.browser.v1",
+                    pipeName,
                     PipeDirection.In,
                     1,
                     PipeTransmissionMode.Byte,
