@@ -40,14 +40,32 @@ let customSiteMutationQueue: Promise<void> = Promise.resolve();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab) {
-    void handlePopupMessage(message).then(sendResponse).catch(() => sendResponse({
-      state: "unavailable",
-      code: "UNKNOWN_CONNECTION_ERROR",
-      detail: "The connection diagnostic could not complete.",
-      recovery: "Reload the extension and run Test connection again.",
-      restartRequired: false,
-      diagnosticId: createDiagnosticId(),
-    } satisfies NativeHostStatus));
+    void handlePopupMessage(message).then(sendResponse).catch(() => {
+      if (message.type === "companion.add-custom-site") {
+        sendResponse({
+          added: false,
+          cleanupSucceeded: false,
+          detail: "The custom site could not be registered because its stored state or browser permission could not be verified. Retry the operation.",
+        });
+        return;
+      }
+      if (message.type === "companion.remove-custom-site") {
+        sendResponse({
+          removed: false,
+          cleanupSucceeded: false,
+          detail: "The custom site could not be removed because its stored state could not be read. Removal is not confirmed; retry and review browser permissions.",
+        });
+        return;
+      }
+      sendResponse({
+        state: "unavailable",
+        code: "UNKNOWN_CONNECTION_ERROR",
+        detail: "The connection diagnostic could not complete.",
+        recovery: "Reload the extension and run Test connection again.",
+        restartRequired: false,
+        diagnosticId: createDiagnosticId(),
+      } satisfies NativeHostStatus);
+    });
     return true;
   }
 
