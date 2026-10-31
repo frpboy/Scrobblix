@@ -187,8 +187,10 @@ assert.equal(await finalReadAuthorization.authorize(
 const workerListeners = [];
 let workerSettings = { paused: false, customSites: [] };
 let storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+let storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 let permissionBehavior = async () => true;
 let permissionCalls = 0;
+let permissionRemoveCalls = 0;
 let connectNativeCalls = 0;
 const forwardedPlaybackMessages = [];
 
@@ -220,7 +222,7 @@ const workerApi = {
   storage: {
     local: {
       get: async (defaults) => storageGetBehavior(defaults),
-      set: async (update) => { workerSettings = { ...workerSettings, ...update }; },
+      set: async (update) => storageSetBehavior(update),
     },
   },
   scripting: {
@@ -233,7 +235,7 @@ const workerApi = {
       permissionCalls += 1;
       return permissionBehavior(details, permissionCalls);
     },
-    remove: async () => true,
+    remove: async () => { permissionRemoveCalls += 1; return true; },
   },
 };
 
@@ -403,6 +405,23 @@ assert.equal(removeExistingResult.removed, true);
 assert.equal(addNewResult.added, true);
 assert.deepEqual(workerSettings.customSites.map((site) => site.id), [newlyAddedSite.id],
   "An add queued after a removal must remain stored without restoring the removed ID.");
+
+// If persistence fails during removal, browser access must still be revoked so a worker restart cannot resume forwarding.
+const storageFailureSite = {
+  id: "site_77777777777777777777777777777777",
+  origin: "https://storage-failure.example",
+  pattern: "https://storage-failure.example/*",
+};
+workerSettings = { paused: false, customSites: [storageFailureSite] };
+permissionRemoveCalls = 0;
+storageSetBehavior = async () => { throw new Error("synthetic storage write failure"); };
+const storageFailureResult = await removeFromWorker(storageFailureSite.id);
+assert.equal(storageFailureResult.removed, false, "A failed storage write must not be reported as a completed removal.");
+assert.equal(storageFailureResult.cleanupSucceeded, true, "Browser cleanup must still be attempted after storage persistence fails.");
+assert.match(storageFailureResult.detail, /browser access was revoked/i, "The popup must receive an actionable fail-closed storage error.");
+assert.deepEqual(workerSettings.customSites, [storageFailureSite], "A failed storage write must not pretend the persisted registration was removed.");
+assert.equal(permissionRemoveCalls, 1, "Browser permission removal must run even when persistence fails.");
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 
 storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
 
