@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { CustomSiteAuthorization } from "../browser-extension/dist/custom-site-authorization.js";
+import { cleanupCustomSiteBrowserAccess } from "../browser-extension/dist/custom-site-cleanup.js";
 import { isAuthorizedObservationSender, isPlaybackObservation, isSupportedSender } from "../browser-extension/dist/message-validation.js";
 
 const serviceWorkerSource = readFileSync("browser-extension/src/service-worker.ts", "utf8");
@@ -55,6 +56,54 @@ assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id ===
 const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
 assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0
   && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "The popup must revoke forwarding before browser cleanup.");
+
+assert.ok(removeSiteSource.includes("cleanupCustomSiteBrowserAccess("),
+  "The popup must use the independently-failing browser cleanup helper.");
+assert.ok(removeSiteSource.indexOf("cleanupCustomSiteBrowserAccess(") < removeSiteSource.indexOf("getCustomSites()"),
+  "The popup must refresh the custom-site list after both browser cleanup attempts.");
+assert.ok(removeSiteSource.includes("browser cleanup was incomplete"),
+  "The popup must surface incomplete browser cleanup to the user.");
+
+const cleanupOrder = [];
+const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(
+  "site_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "https://radio.example/*",
+  {
+    unregisterContentScripts: async ({ ids }) => {
+      cleanupOrder.push(`unregister:${ids[0]}`);
+      throw new Error("synthetic unregister failure");
+    },
+    removePermissions: async ({ origins }) => {
+      cleanupOrder.push(`remove-permission:${origins[0]}`);
+      return true;
+    },
+  },
+);
+assert.equal(cleanupSucceeded, false, "A failed content-script cleanup must be reported.");
+assert.deepEqual(cleanupOrder, [
+  "unregister:site_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+  "remove-permission:https://radio.example/*",
+], "Permission removal must still run after content-script cleanup rejects, in the required order.");
+
+const permissionFailure = await cleanupCustomSiteBrowserAccess(
+  "site_ffffffffffffffffffffffffffffffff",
+  "https://radio.example/*",
+  {
+    unregisterContentScripts: async () => undefined,
+    removePermissions: async () => false,
+  },
+);
+assert.equal(permissionFailure, false, "A browser permission removal refusal must be reported.");
+
+const cleanupSuccess = await cleanupCustomSiteBrowserAccess(
+  "site_11111111111111111111111111111111",
+  "https://radio.example/*",
+  {
+    unregisterContentScripts: async () => undefined,
+    removePermissions: async () => true,
+  },
+);
+assert.equal(cleanupSuccess, true, "Both successful browser cleanup operations must report success.");
 
 const deferred = () => {
   let resolve;
