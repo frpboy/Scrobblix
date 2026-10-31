@@ -588,9 +588,41 @@ assert.equal(activeForward.type, "playback.observation.v1");
 assert.equal(activeForward.payload.siteOrigin, activeSite.origin);
 assert.equal(activeForward.payload.tabId, customSender.tab.id);
 
+// If storage.session exists but its tombstone write fails, local persistence and browser
+// cleanup can both fail. The popup must require immediate manual revocation before worker restart.
+const originalSessionStorage = workerApi.storage.session;
+const originalSessionSet = workerApi.storage.session.set;
+const sessionWriteFailureSite = {
+  id: "site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  origin: "https://session-write-failure.example",
+  pattern: "https://session-write-failure.example/*",
+};
+workerSettings = { paused: false, customSites: [sessionWriteFailureSite] };
+storageSetBehavior = async () => { throw new Error("synthetic local storage write failure"); };
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+workerApi.storage.session.set = async () => { throw new Error("synthetic session tombstone write failure"); };
+const sessionWriteFailure = await removeFromWorker(sessionWriteFailureSite);
+assert.equal(sessionWriteFailure.removed, false);
+assert.equal(sessionWriteFailure.cleanupSucceeded, false);
+assert.match(sessionWriteFailure.detail, /manually revoke this site's browser permission immediately.*service-worker restart/i,
+  "A failed session-tombstone write plus failed browser cleanup must require immediate manual revocation.");
+workerApi.storage.session.set = originalSessionSet;
+const beforeSessionWriteRestartPosts = forwardedPlaybackMessages.length;
+const beforeSessionWriteRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?session-write-failure-worker-restart");
+assert.equal(workerListeners.length, 6, "A fresh worker must be registered for the failed session-tombstone write case.");
+workerListeners[5](observation, { id: workerApi.runtime.id, tab: { id: 14 }, url: `${sessionWriteFailureSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeSessionWriteRestartConnections + 1,
+  "Without a persisted tombstone or browser permission removal, a fresh worker can reauthorize the stale registration; the immediate manual warning is required.");
+assert.equal(forwardedPlaybackMessages.length, beforeSessionWriteRestartPosts + 1);
+permissionRemoveResult = true;
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+
 // Older Chromium builds may not expose storage.session. Custom-site add/forward must
 // remain available, while incomplete removal explicitly requires manual permission cleanup.
-const originalSessionStorage = workerApi.storage.session;
+
 delete workerApi.storage.session;
 const noSessionSite = {
   id: "site_13579bdf13579bdf13579bdf13579bdf",
@@ -614,10 +646,19 @@ removedPermissionOrigin = undefined;
 const noSessionRemoval = await removeFromWorker(noSessionSite);
 assert.equal(noSessionRemoval.removed, false);
 assert.equal(noSessionRemoval.cleanupSucceeded, false);
-assert.match(noSessionRemoval.detail, /manually revoke this site's browser permission before closing\/restarting the browser/i,
+assert.match(noSessionRemoval.detail, /manually revoke this site's browser permission immediately.*service-worker restart/i,
   "Without storage.session, failed persistence and permission cleanup must explicitly require manual revocation.");
+const beforeNoSessionRestartPosts = forwardedPlaybackMessages.length;
+const beforeNoSessionRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?no-session-worker-restart");
+assert.equal(workerListeners.length, 7, "A fresh worker must be registered when storage.session is unavailable.");
+workerListeners[6](observation, { id: workerApi.runtime.id, tab: { id: 15 }, url: `${noSessionSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeNoSessionRestartConnections + 1,
+  "Without storage.session and with both cleanup paths failing, a fresh worker can reauthorize the stale registration; manual revocation is mandatory.");
+assert.equal(forwardedPlaybackMessages.length, beforeNoSessionRestartPosts + 1);
 workerApi.storage.session = originalSessionStorage;
 storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 permissionRemoveResult = true;
 
-console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork, serialized mutations, session tombstones, browser restart fallback and legacy compatibility).");
+console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork, serialized mutations, session tombstones, expiry, unavailable-session fallback and worker-restart warnings).");
