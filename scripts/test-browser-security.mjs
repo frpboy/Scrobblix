@@ -141,19 +141,14 @@ const deferred = () => {
 };
 const authorization = new CustomSiteAuthorization();
 const permissionCheck = deferred();
-let nativeHostPosts = 0;
-const pendingForward = authorization.authorize(
+const pendingAuthorization = authorization.authorize(
   "site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   () => permissionCheck.promise,
   async () => true,
-).then((allowed) => {
-  if (allowed) nativeHostPosts += 1;
-  return allowed;
-});
+);
 authorization.revoke("site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
 permissionCheck.resolve(true);
-assert.equal(await pendingForward, false, "A pending authorization must fail when its site is revoked.");
-assert.equal(nativeHostPosts, 0, "A removed site must not post its in-flight observation.");
+assert.equal(await pendingAuthorization, false, "The authorization gate must reject a pending site after revocation.");
 const postAuthorizationGate = new CustomSiteAuthorization();
 assert.equal(await postAuthorizationGate.authorize("site_dddddddddddddddddddddddddddddddd", async () => true, async () => true), true);
 postAuthorizationGate.revoke("site_dddddddddddddddddddddddddddddddd");
@@ -171,5 +166,131 @@ assert.equal(await finalReadAuthorization.authorize(
   async () => true,
   async () => { finalReadAuthorization.revoke("site_cccccccccccccccccccccccccccccccc"); return true; },
 ), false, "Revocation during the final registration read must prevent forwarding.");
+
+
+const workerListeners = [];
+let workerSettings = { paused: false, customSites: [] };
+let permissionBehavior = async () => true;
+let permissionCalls = 0;
+let connectNativeCalls = 0;
+const forwardedPlaybackMessages = [];
+
+const workerApi = {
+  runtime: {
+    id: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    onMessage: { addListener: (listener) => workerListeners.push(listener) },
+    connectNative: () => {
+      connectNativeCalls += 1;
+      let responseListener;
+      const disconnectListeners = [];
+      return {
+        onMessage: { addListener: (listener) => { responseListener = listener; } },
+        onDisconnect: { addListener: (listener) => disconnectListeners.push(listener) },
+        postMessage: (message) => {
+          forwardedPlaybackMessages.push(message);
+          if (message.type === "playback.observation.v1") {
+            responseListener?.({
+              protocolVersion: 1,
+              type: "accepted.v1",
+              messageId: message.messageId,
+            });
+          }
+        },
+        disconnect: () => disconnectListeners.forEach((listener) => listener()),
+      };
+    },
+  },
+  storage: {
+    local: {
+      get: async (defaults) => ({ ...defaults, ...workerSettings }),
+      set: async (update) => { workerSettings = { ...workerSettings, ...update }; },
+    },
+  },
+  permissions: {
+    contains: async (details) => {
+      permissionCalls += 1;
+      return permissionBehavior(details, permissionCalls);
+    },
+  },
+};
+
+globalThis.browser = workerApi;
+await import("../browser-extension/dist/service-worker.js?custom-site-forwarding-integration");
+
+assert.equal(workerListeners.length, 1, "The production service worker must register its message listener.");
+const workerListener = workerListeners[0];
+const customSender = { tab: { id: 7 }, url: "https://radio.example/player" };
+const observation = { state: "playing", artist: "Artist", title: "Track" };
+const raceBeforeConnect = {
+  id: "site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  origin: "https://radio.example",
+  pattern: "https://radio.example/*",
+};
+const removeFromWorker = (siteId) => new Promise((resolve) => {
+  const keepAlive = workerListener(
+    { type: "companion.remove-custom-site", siteId },
+    { id: workerApi.runtime.id },
+    resolve,
+  );
+  assert.equal(keepAlive, true, "The service worker must keep the popup removal response channel open.");
+});
+
+// Exercise the actual forwarding listener while its first permission check is pending.
+workerSettings = { paused: false, customSites: [raceBeforeConnect] };
+permissionCalls = 0;
+const initialPermissionStarted = deferred();
+const initialPermission = deferred();
+permissionBehavior = async () => {
+  initialPermissionStarted.resolve();
+  return initialPermission.promise;
+};
+workerListener(observation, customSender);
+await initialPermissionStarted.promise;
+assert.deepEqual(await removeFromWorker(raceBeforeConnect.id), { removed: true });
+initialPermission.resolve(true);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, 0, "A site revoked during initial authorization must not open a native port.");
+assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during initial authorization must not post playback data.");
+
+// Exercise the final pre-delivery check after a native port has already been opened.
+const raceBeforePost = {
+  id: "site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  origin: "https://radio.example",
+  pattern: "https://radio.example/*",
+};
+workerSettings = { paused: false, customSites: [raceBeforePost] };
+permissionCalls = 0;
+const finalPermissionStarted = deferred();
+const finalPermission = deferred();
+permissionBehavior = async (_details, callNumber) => {
+  if (callNumber === 2) {
+    finalPermissionStarted.resolve();
+    return finalPermission.promise;
+  }
+  return true;
+};
+workerListener(observation, customSender);
+await finalPermissionStarted.promise;
+assert.equal(connectNativeCalls, 1, "The final authorization race should occur after the native port is opened.");
+assert.deepEqual(await removeFromWorker(raceBeforePost.id), { removed: true });
+finalPermission.resolve(true);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during final authorization must not post playback data.");
+
+// Positive control: a still-registered site with granted browser permission must forward.
+const activeSite = {
+  id: "site_cccccccccccccccccccccccccccccccc",
+  origin: "https://radio.example",
+  pattern: "https://radio.example/*",
+};
+workerSettings = { paused: false, customSites: [activeSite] };
+permissionCalls = 0;
+permissionBehavior = async () => true;
+workerListener(observation, customSender);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(forwardedPlaybackMessages.length, 1, "An active, granted custom site must still forward.");
+assert.equal(forwardedPlaybackMessages[0].type, "playback.observation.v1");
+assert.equal(forwardedPlaybackMessages[0].payload.siteOrigin, activeSite.origin);
+assert.equal(forwardedPlaybackMessages[0].payload.tabId, customSender.tab.id);
 
 console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork and in-flight custom-site revocation).");
