@@ -1,5 +1,6 @@
 export type CustomSiteBrowserCleanup = {
   unregisterContentScripts: (details: { ids: string[] }) => Promise<void>;
+  containsContentScript: (details: { ids: string[] }) => Promise<boolean>;
   removePermissions: (details: { origins: string[] }) => Promise<boolean>;
   containsPermissions: (details: { origins: string[] }) => Promise<boolean>;
 };
@@ -19,7 +20,11 @@ export async function cleanupCustomSiteBrowserAccess(
   try {
     await cleanup.unregisterContentScripts({ ids: [siteId] });
   } catch {
-    failed = true;
+    try {
+      if (await cleanup.containsContentScript({ ids: [siteId] })) failed = true;
+    } catch {
+      failed = true;
+    }
   }
 
   try {
