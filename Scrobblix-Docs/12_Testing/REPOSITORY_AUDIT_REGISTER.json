@@ -319,7 +319,9 @@
         "docs/security/SECURITY_AUDIT_FOLLOW_UP_2026-10-28.md",
         "Scrobblix-Docs/12_Testing/REPOSITORY_AUDIT_CHECKPOINT.md"
       ],
-      "validation": "The installed skill catalog does not include the requested Cloudflare security-audit skill/official validators. The requested FINDINGS-DETAIL, NEEDS-VALIDATION, PHASE-STATUS, coverage-ledger, findings, run-metadata and artifact-manifest files are absent from the current main tree. No validator result is claimed."
+      "validation": "The installed skill catalog does not include the requested Cloudflare security-audit skill/official validators. The requested FINDINGS-DETAIL, NEEDS-VALIDATION, PHASE-STATUS, coverage-ledger, findings, run-metadata and artifact-manifest files are absent from the current main tree. No validator result is claimed.",
+      "trackingPR": 93,
+      "trackingPRUrl": "https://github.com/frpboy/Scrobblix/pull/93"
     }
   ],
   "releaseGates": {
@@ -352,10 +354,61 @@
       "treeEntries": 481
     },
     "openIssues": 11,
-    "openPullRequests": 7,
+    "openPullRequests": 8,
     "defaultBranch": "main",
     "mainProtected": false,
-    "rulesets": []
+    "rulesets": [],
+    "openPRs": [
+      {
+        "number": 80,
+        "head": "7e74ddc934fe7abdaf44127c429e40de958b48ae",
+        "ci": "passed",
+        "run": 40984305515
+      },
+      {
+        "number": 81,
+        "head": "be0e0519b2e9fcda1d79b22ef798db8472a55095",
+        "base": "fix/82-cancel-custom-site-inflight-observations-main",
+        "ci": "not_run_on_stacked_base"
+      },
+      {
+        "number": 84,
+        "head": "2703a69cd252bb1f82cbcd70d6895ac0ee68aec9",
+        "ci": "passed",
+        "run": 41154351961
+      },
+      {
+        "number": 86,
+        "head": "ffdc98c9efc0aa3e1537a0c7f5567eb265dc072d",
+        "ci": "passed",
+        "run": 41155240404
+      },
+      {
+        "number": 89,
+        "head": "0d732db5dd9ac82a987378cce70f120b6ae25621",
+        "ci": "passed",
+        "run": 41154607171
+      },
+      {
+        "number": 90,
+        "head": "67dfc09640dffa739b76a173c0f9a5f3605efc8f",
+        "base": "main (temporary integrated validation)",
+        "ci": "in_progress",
+        "run": 41156473471
+      },
+      {
+        "number": 91,
+        "head": "0336532743ccbe7f395d7ae9ae085eff2109c665",
+        "ci": "passed",
+        "run": 41154745247
+      },
+      {
+        "number": 93,
+        "head": "c041bba3d36038d73cf8b761fec28225a74f4474",
+        "ci": "pending",
+        "refsIssue": 78
+      }
+    ]
   },
   "executionEnvironment": {
     "container": "isolated Linux container",
