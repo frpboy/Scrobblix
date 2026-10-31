@@ -404,8 +404,7 @@
       },
       {
         "number": 93,
-        "head": "c041bba3d36038d73cf8b761fec28225a74f4474",
-        "ci": "pending",
+        "ci": "pending_after_latest_docs_update",
         "refsIssue": 78
       }
     ]
