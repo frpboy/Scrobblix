@@ -332,7 +332,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
             ? "Stored registrations could not be read, but browser access was revoked. Retry removal."
             : sessionRevocationPersisted
               ? "Stored registrations could not be read. This site is blocked only for this extension session, and browser cleanup is incomplete. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal."
-              : "Stored registrations could not be read and no session/browser revocation could be confirmed. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal.",
+              : "Stored registrations could not be read and no session/browser revocation could be confirmed. Manually revoke this site's browser permission immediately; a service-worker restart may otherwise reauthorize the stale registration. Then retry removal.",
         };
       }
 
@@ -364,7 +364,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
             ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
             : sessionRevocationPersisted
               ? "The registration could not be removed from storage. This site is blocked only for this extension session, and browser cleanup is incomplete. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal."
-              : "The registration could not be removed from storage and no session/browser revocation could be confirmed. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal.",
+              : "The registration could not be removed from storage and no session/browser revocation could be confirmed. Manually revoke this site's browser permission immediately; a service-worker restart may otherwise reauthorize the stale registration. Then retry removal.",
         };
       }
 
