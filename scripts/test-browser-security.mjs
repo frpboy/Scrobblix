@@ -100,6 +100,7 @@ const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(
       cleanupOrder.push(`remove-permission:${origins[0]}`);
       return true;
     },
+    containsPermissions: async () => false,
   },
 );
 assert.equal(cleanupSucceeded, false, "A failed content-script cleanup must be reported.");
@@ -114,9 +115,21 @@ const permissionFailure = await cleanupCustomSiteBrowserAccess(
   {
     unregisterContentScripts: async () => undefined,
     removePermissions: async () => false,
+    containsPermissions: async () => true,
   },
 );
-assert.equal(permissionFailure, false, "A browser permission removal refusal must be reported.");
+assert.equal(permissionFailure, false, "A permission that remains granted after removal must be reported.");
+
+const permissionAlreadyAbsent = await cleanupCustomSiteBrowserAccess(
+  "site_22222222222222222222222222222222",
+  "https://radio.example/*",
+  {
+    unregisterContentScripts: async () => undefined,
+    removePermissions: async () => false,
+    containsPermissions: async () => false,
+  },
+);
+assert.equal(permissionAlreadyAbsent, true, "An already-absent browser permission is a successful final state.");
 
 const cleanupSuccess = await cleanupCustomSiteBrowserAccess(
   "site_11111111111111111111111111111111",
@@ -124,6 +137,7 @@ const cleanupSuccess = await cleanupCustomSiteBrowserAccess(
   {
     unregisterContentScripts: async () => undefined,
     removePermissions: async () => true,
+    containsPermissions: async () => false,
   },
 );
 assert.equal(cleanupSuccess, true, "Both successful browser cleanup operations must report success.");
