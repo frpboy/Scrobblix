@@ -328,7 +328,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
           removed: false,
           cleanupSucceeded,
           detail: sessionRevocationPersisted
-            ? "Stored registrations could not be read. This site is blocked for the current browser session; retry removal."
+            ? "Stored registrations could not be read. This site is blocked for this extension session; retry removal before reloading the extension."
             : cleanupSucceeded
               ? "Stored registrations could not be read, but browser access was revoked. Retry removal."
               : "Stored registrations could not be read and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
@@ -360,7 +360,7 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
           removed: false,
           cleanupSucceeded,
           detail: sessionRevocationPersisted
-            ? "The registration could not be removed from storage, but this site remains blocked for the current browser session. Retry removal."
+            ? "The registration could not be removed from storage, but this site remains blocked for this extension session. Retry removal before reloading the extension."
             : cleanupSucceeded
               ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
               : "The registration could not be removed from storage and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
