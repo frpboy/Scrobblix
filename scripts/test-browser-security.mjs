@@ -471,7 +471,7 @@ const beforeRestartPosts = forwardedPlaybackMessages.length;
 const beforeRestartConnections = connectNativeCalls;
 await import("../browser-extension/dist/service-worker.js?storage-failure-worker-restart");
 assert.equal(workerListeners.length, 2, "The restarted production service worker must register a fresh listener.");
-workerListeners[1](observation, { tab: { id: 8 }, url: `${storageFailureSite.origin}/player` });
+workerListeners[1](observation, { id: workerApi.runtime.id, tab: { id: 8 }, url: `${storageFailureSite.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, beforeRestartConnections,
   "A worker restart must not restore forwarding when the browser grant remains but a session tombstone exists.");
@@ -484,7 +484,7 @@ const beforeBrowserRestartPosts = forwardedPlaybackMessages.length;
 const beforeBrowserRestartConnections = connectNativeCalls;
 await import("../browser-extension/dist/service-worker.js?browser-session-cleared");
 assert.equal(workerListeners.length, 3, "A simulated browser restart must create a fresh worker after session storage is cleared.");
-workerListeners[2](observation, { tab: { id: 12 }, url: `${storageFailureSite.origin}/player` });
+workerListeners[2](observation, { id: workerApi.runtime.id, tab: { id: 12 }, url: `${storageFailureSite.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, beforeBrowserRestartConnections + 1,
   "After session storage is cleared, a stale registration and still-granted permission can authorize again; the manual-revocation warning is therefore required.");
@@ -521,7 +521,7 @@ const beforeReadRestartConnections = connectNativeCalls;
 storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
 await import("../browser-extension/dist/service-worker.js?storage-read-failure-worker-restart");
 assert.equal(workerListeners.length, 4, "A storage-read-failure worker restart must register a fresh listener.");
-workerListeners[3](observation, { tab: { id: 9 }, url: `${readFailureSite.origin}/player` });
+workerListeners[3](observation, { id: workerApi.runtime.id, tab: { id: 9 }, url: `${readFailureSite.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, beforeReadRestartConnections,
   "A worker restart must not restore forwarding after a storage-read failure when the browser grant remains.");
@@ -559,8 +559,8 @@ const beforeConcurrentRestartPosts = forwardedPlaybackMessages.length;
 const beforeConcurrentRestartConnections = connectNativeCalls;
 await import("../browser-extension/dist/service-worker.js?concurrent-session-revocation-restart");
 assert.equal(workerListeners.length, 5, "A concurrent-removal worker restart must register a fresh listener.");
-workerListeners[4](observation, { tab: { id: 10 }, url: `${concurrentRevocationSiteOne.origin}/player` });
-workerListeners[4](observation, { tab: { id: 11 }, url: `${concurrentRevocationSiteTwo.origin}/player` });
+workerListeners[4](observation, { id: workerApi.runtime.id, tab: { id: 10 }, url: `${concurrentRevocationSiteOne.origin}/player` });
+workerListeners[4](observation, { id: workerApi.runtime.id, tab: { id: 11 }, url: `${concurrentRevocationSiteTwo.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, beforeConcurrentRestartConnections,
   "Neither concurrent stale registration may open a native port after restart.");
@@ -604,7 +604,7 @@ removedPermissionOrigin = undefined;
 const noSessionAdd = await addToWorker(noSessionSite);
 assert.equal(noSessionAdd.added, true, "Custom-site registration must remain functional when storage.session is unavailable.");
 const beforeNoSessionForward = forwardedPlaybackMessages.length;
-workerListener(observation, { tab: { id: 13 }, url: `${noSessionSite.origin}/player` });
+workerListener(observation, { id: workerApi.runtime.id, tab: { id: 13 }, url: `${noSessionSite.origin}/player` });
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forwardedPlaybackMessages.length, beforeNoSessionForward + 1,
   "Custom-site forwarding must remain functional without storage.session.");
