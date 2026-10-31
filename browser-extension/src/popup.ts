@@ -123,9 +123,15 @@ async function trackCurrentSite(): Promise<void> {
     type: "companion.add-custom-site",
     site,
   }) as { added?: boolean; cleanupSucceeded?: boolean; detail?: string } | undefined;
-  const sites = await getCustomSites();
-  await refreshTrackAction(sites);
-  renderCustomSites(sites);
+  let sites: CustomSite[];
+  try {
+    sites = await getCustomSites();
+    await refreshTrackAction(sites);
+    renderCustomSites(sites);
+  } catch {
+    statusText.textContent = result?.detail ?? "The custom-site list could not be refreshed. Retry the operation.";
+    return;
+  }
   if (!result?.added) {
     statusText.textContent = result?.detail ?? "The site could not be registered. Reload the extension and try again.";
     return;
@@ -150,11 +156,16 @@ function renderCustomSites(sites: CustomSite[]): void {
 async function removeSite(site: CustomSite): Promise<void> {
   const result = await popupApi.runtime.sendMessage({
     type: "companion.remove-custom-site",
-    siteId: site.id,
+    site,
   }) as { removed?: boolean; cleanupSucceeded?: boolean; detail?: string } | undefined;
-  const sites = await getCustomSites();
-  renderCustomSites(sites);
-  await refreshTrackAction(sites);
+  try {
+    const sites = await getCustomSites();
+    renderCustomSites(sites);
+    await refreshTrackAction(sites);
+  } catch {
+    statusText.textContent = result?.detail ?? "The custom-site list could not be refreshed. Review browser permissions and retry removal.";
+    return;
+  }
 
   if (!result?.removed) {
     statusText.textContent = result?.detail ?? "This site could not be removed. Reload the extension and try again.";
