@@ -215,18 +215,27 @@ function customSiteSessionRevocationKey(siteId: string): string {
   return `revokedCustomSite:${siteId}`;
 }
 
+function hasCustomSiteSessionStorage(): boolean {
+  const sessionStorage = scrobblixWorkerApi.storage.session;
+  return typeof sessionStorage?.get === "function"
+    && typeof sessionStorage?.set === "function"
+    && typeof sessionStorage?.remove === "function";
+}
+
 async function isCustomSiteSessionRevoked(siteId: string): Promise<boolean> {
+  if (!hasCustomSiteSessionStorage()) return false;
   try {
     const key = customSiteSessionRevocationKey(siteId);
     const stored = await scrobblixWorkerApi.storage.session.get(key);
     return (stored as unknown as Record<string, unknown>)[key] === true;
   } catch {
-    // If the session revocation store cannot be read, custom-site forwarding fails closed.
+    // If a supported session store fails, custom-site forwarding fails closed.
     return true;
   }
 }
 
 async function persistCustomSiteSessionRevocation(siteId: string): Promise<boolean> {
+  if (!hasCustomSiteSessionStorage()) return false;
   try {
     // One key per registration avoids read/modify/write races between concurrent removals.
     await scrobblixWorkerApi.storage.session.set({ [customSiteSessionRevocationKey(siteId)]: true });
@@ -237,6 +246,7 @@ async function persistCustomSiteSessionRevocation(siteId: string): Promise<boole
 }
 
 async function clearCustomSiteSessionRevocation(siteId: string): Promise<void> {
+  if (!hasCustomSiteSessionStorage()) return;
   try {
     await scrobblixWorkerApi.storage.session.remove(customSiteSessionRevocationKey(siteId));
   } catch {
@@ -318,11 +328,11 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
         return {
           removed: false,
           cleanupSucceeded,
-          detail: sessionRevocationPersisted
-            ? "Stored registrations could not be read. This site is blocked for this extension session; retry removal before reloading the extension."
-            : cleanupSucceeded
-              ? "Stored registrations could not be read, but browser access was revoked. Retry removal."
-              : "Stored registrations could not be read and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
+          detail: cleanupSucceeded
+            ? "Stored registrations could not be read, but browser access was revoked. Retry removal."
+            : sessionRevocationPersisted
+              ? "Stored registrations could not be read. This site is blocked only for this extension session, and browser cleanup is incomplete. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal."
+              : "Stored registrations could not be read and no session/browser revocation could be confirmed. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal.",
         };
       }
 
@@ -350,11 +360,11 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
         return {
           removed: false,
           cleanupSucceeded,
-          detail: sessionRevocationPersisted
-            ? "The registration could not be removed from storage, but this site remains blocked for this extension session. Retry removal before reloading the extension."
-            : cleanupSucceeded
-              ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
-              : "The registration could not be removed from storage and session/browser revocation could not be confirmed. Manually revoke this site's browser permission and retry.",
+          detail: cleanupSucceeded
+            ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
+            : sessionRevocationPersisted
+              ? "The registration could not be removed from storage. This site is blocked only for this extension session, and browser cleanup is incomplete. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal."
+              : "The registration could not be removed from storage and no session/browser revocation could be confirmed. Manually revoke this site's browser permission before closing/restarting the browser or reloading the extension, then retry removal.",
         };
       }
 
