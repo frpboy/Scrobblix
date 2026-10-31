@@ -1,4 +1,5 @@
 import { CustomSiteAuthorization } from "./custom-site-authorization.js";
+import { cleanupCustomSiteBrowserAccess } from "./custom-site-cleanup.js";
 import { isAuthorizedObservationSender, isPlaybackObservation, type CustomSiteRegistration, type PlaybackObservation } from "./message-validation.js";
 
 const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome }).browser ?? chrome);
@@ -6,7 +7,10 @@ const scrobblixWorkerApi = ((globalThis as unknown as { browser?: typeof chrome 
 export {};
 
 type PopupMessage = { type: "companion.get-state" | "companion.test-native-host" }
+  | { type: "companion.add-custom-site"; site: CustomSiteRegistration }
   | { type: "companion.remove-custom-site"; siteId: string };
+type CustomSiteMutationResult = { added: boolean; removed?: never; cleanupSucceeded?: boolean; detail?: string }
+  | { removed: boolean; added?: never; cleanupSucceeded?: boolean; detail?: string };
 type CompanionSettings = { paused: boolean; customSites: CustomSiteRegistration[] };
 type NativeHostDiagnosticCode =
   | "HOST_NOT_REGISTERED"
@@ -32,6 +36,7 @@ const hostName = "com.frpboy.scrobblix";
 const connectionTimeoutMs = 3_000;
 let sequence = 0;
 const customSiteAuthorization = new CustomSiteAuthorization();
+let customSiteMutationQueue: Promise<void> = Promise.resolve();
 
 scrobblixWorkerApi.runtime.onMessage.addListener((message: unknown, sender, sendResponse) => {
   if (isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab) {
@@ -172,23 +177,84 @@ function isSupportedPlaybackOrigin(origin: string): boolean {
 
 function isPopupMessage(message: unknown): message is PopupMessage {
   if (typeof message !== "object" || message === null || !("type" in message)) return false;
-  const candidate = message as { type?: unknown; siteId?: unknown };
+  const candidate = message as { type?: unknown; siteId?: unknown; site?: unknown };
   if (candidate.type === "companion.get-state" || candidate.type === "companion.test-native-host") return true;
+  if (candidate.type === "companion.add-custom-site") return isCustomSiteRegistration(candidate.site);
   return candidate.type === "companion.remove-custom-site"
     && typeof candidate.siteId === "string"
     && /^site_[a-f0-9]{32}$/u.test(candidate.siteId);
 }
 
-async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | { removed: boolean }> {
-  if (message.type === "companion.remove-custom-site") {
-    // Revoke synchronously before storage cleanup yields to the browser.
-    customSiteAuthorization.revoke(message.siteId);
-    const settings = await readSettings();
-    if (!settings.customSites.some((site) => site.id === message.siteId)) return { removed: false };
-    await scrobblixWorkerApi.storage.local.set({
-      customSites: settings.customSites.filter((site) => site.id !== message.siteId),
+function serializeCustomSiteMutation<T>(mutation: () => Promise<T>): Promise<T> {
+  const result = customSiteMutationQueue.then(mutation, mutation);
+  customSiteMutationQueue = result.then(() => undefined, () => undefined);
+  return result;
+}
+
+async function handlePopupMessage(message: PopupMessage): Promise<CompanionSettings | NativeHostStatus | CustomSiteMutationResult> {
+  if (message.type === "companion.add-custom-site") {
+    return serializeCustomSiteMutation(async () => {
+      const settings = await readSettings();
+      if (settings.customSites.some((site) => site.id === message.site.id || site.origin === message.site.origin)) {
+        return { added: false, detail: "This site is already registered." };
+      }
+
+      const permissionGranted = await scrobblixWorkerApi.permissions.contains({ origins: [message.site.pattern] });
+      if (!permissionGranted) return { added: false, detail: "The browser permission is no longer granted. Grant access and try again." };
+
+      try {
+        await scrobblixWorkerApi.scripting.registerContentScripts([{
+          id: message.site.id,
+          matches: [message.site.pattern],
+          js: ["dist/media-observer.js"],
+          runAt: "document_idle",
+          persistAcrossSessions: true,
+        }]);
+        await scrobblixWorkerApi.storage.local.set({ customSites: [...settings.customSites, message.site] });
+      } catch {
+        const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(message.site.id, message.site.pattern, {
+          unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
+          containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === message.site.id),
+          removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
+          containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
+        });
+        return {
+          added: false,
+          cleanupSucceeded,
+          detail: cleanupSucceeded
+            ? "The site could not be registered. Browser access was cleaned up."
+            : "The site could not be registered and browser cleanup is incomplete. Review this site's extension permissions.",
+        };
+      }
+
+      return { added: true };
     });
-    return { removed: true };
+  }
+
+  if (message.type === "companion.remove-custom-site") {
+    // Invalidate pending observations synchronously, before waiting behind another mutation.
+    customSiteAuthorization.revoke(message.siteId);
+    return serializeCustomSiteMutation(async () => {
+      const settings = await readSettings();
+      const site = settings.customSites.find((entry) => entry.id === message.siteId);
+      if (!site) return { removed: false, cleanupSucceeded: true, detail: "This site is already removed." };
+
+      // Persist revocation before browser cleanup so a worker restart cannot restore authorization.
+      await scrobblixWorkerApi.storage.local.set({
+        customSites: settings.customSites.filter((entry) => entry.id !== message.siteId),
+      });
+      const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
+        unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
+        containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
+        removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
+        containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
+      });
+      return {
+        removed: true,
+        cleanupSucceeded,
+        detail: cleanupSucceeded ? undefined : "The Scrobblix registration was removed, but browser cleanup is incomplete.",
+      };
+    });
   }
 
   if (message.type === "companion.get-state") return readSettings();
