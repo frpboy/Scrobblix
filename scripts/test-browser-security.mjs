@@ -593,7 +593,7 @@ assert.equal(activeForward.payload.tabId, customSender.tab.id);
 const originalSessionStorage = workerApi.storage.session;
 delete workerApi.storage.session;
 const noSessionSite = {
-  id: "site_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  id: "site_13579bdf13579bdf13579bdf13579bdf",
   origin: "https://no-session.example",
   pattern: "https://no-session.example/*",
 };
