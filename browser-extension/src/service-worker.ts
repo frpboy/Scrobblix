@@ -211,17 +211,15 @@ function serializeCustomSiteMutation<T>(mutation: () => Promise<T>): Promise<T> 
   return result;
 }
 
-async function getSessionRevokedSiteIds(): Promise<string[]> {
-  const stored = await scrobblixWorkerApi.storage.session.get({ revokedCustomSiteIds: [] as string[] });
-  const value = (stored as unknown as Record<string, unknown>).revokedCustomSiteIds;
-  return Array.isArray(value)
-    ? value.filter((siteId): siteId is string => typeof siteId === "string" && /^site_[a-f0-9]{32}$/u.test(siteId))
-    : [];
+function customSiteSessionRevocationKey(siteId: string): string {
+  return `revokedCustomSite:${siteId}`;
 }
 
 async function isCustomSiteSessionRevoked(siteId: string): Promise<boolean> {
   try {
-    return (await getSessionRevokedSiteIds()).includes(siteId);
+    const key = customSiteSessionRevocationKey(siteId);
+    const stored = await scrobblixWorkerApi.storage.session.get(key);
+    return (stored as unknown as Record<string, unknown>)[key] === true;
   } catch {
     // If the session revocation store cannot be read, custom-site forwarding fails closed.
     return true;
@@ -230,10 +228,8 @@ async function isCustomSiteSessionRevoked(siteId: string): Promise<boolean> {
 
 async function persistCustomSiteSessionRevocation(siteId: string): Promise<boolean> {
   try {
-    const siteIds = await getSessionRevokedSiteIds();
-    if (!siteIds.includes(siteId)) {
-      await scrobblixWorkerApi.storage.session.set({ revokedCustomSiteIds: [...siteIds, siteId] });
-    }
+    // One key per registration avoids read/modify/write races between concurrent removals.
+    await scrobblixWorkerApi.storage.session.set({ [customSiteSessionRevocationKey(siteId)]: true });
     return true;
   } catch {
     return false;
@@ -242,12 +238,7 @@ async function persistCustomSiteSessionRevocation(siteId: string): Promise<boole
 
 async function clearCustomSiteSessionRevocation(siteId: string): Promise<void> {
   try {
-    const siteIds = await getSessionRevokedSiteIds();
-    if (siteIds.includes(siteId)) {
-      await scrobblixWorkerApi.storage.session.set({
-        revokedCustomSiteIds: siteIds.filter((entry) => entry !== siteId),
-      });
-    }
+    await scrobblixWorkerApi.storage.session.remove(customSiteSessionRevocationKey(siteId));
   } catch {
     // A stale session tombstone is safe: it only keeps the removed ID blocked.
   }
