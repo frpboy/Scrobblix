@@ -17,7 +17,7 @@
 | Area | Current disposition |
 |---|---|
 | #17 real-world release qualification | **BLOCKED / NOT RUN** — installed-browser and end-to-end evidence still required. |
-| #73 YouTube origin alignment | PR [#81](https://github.com/frpboy/Scrobblix/pull/81) is stacked on PR #84; current head has no integrated Windows build-and-test result on its target branch, and review follow-up remains. |
+| #73 YouTube origin alignment | PR [#81](https://github.com/frpboy/Scrobblix/pull/81) is stacked on PR #84; both review threads are resolved against the current base, but the current head has no integrated Windows build-and-test result on its target branch. |
 | #74 Windows named-pipe caller/ACL authorization | PR [#91](https://github.com/frpboy/Scrobblix/pull/91) aligns environment-variable naming and has passing CI; Windows pipe ACL/peer-identity qualification remains **NEEDS VALIDATION**. |
 | #75 credential redaction | **NEEDS VALIDATION** — synthetic canary coverage across logs, backups, support bundles and packages has not been run here. |
 | #76 dependency/lockfile/SBOM/history scans | **NEEDS VALIDATION** — exact-commit dependency, license, SBOM and Git-history secret scans remain outstanding. |
@@ -34,7 +34,7 @@ Additional open PRs are tracked in the live GitHub inventory. PR #92 was closed 
 
 - Repository tree and GitHub issue/PR/branch/commit/check-run inventories were read through the GitHub integration. The recursive tree was not truncated.
 - Repository guidance, CI/release workflow wiring, browser-extension authorization and mutation code, related regression tests, permissions/threat-model docs, and the named-pipe verifier were inspected selectively. This is not a line-by-line audit of every tracked file.
-- No local repository checkout, Node/.NET/PowerShell runtime, Windows desktop, installed browser profile, or independent OS-enforced test sandbox was available in this execution context. CI runs on GitHub-hosted Windows runners are the available execution evidence.
+- The isolated Linux container has Node 22.16.0, npm 10.9.2, TypeScript 5.8.3 and Chromium; .NET and PowerShell are absent. A public Git clone failed because the container could not resolve github.com, so no repository checkout was created and no local repository scripts were run. The container is isolated, but it is not a Windows environment and has no installed extension profile. GitHub-hosted Windows CI is the available execution evidence for Windows builds/tests.
 - The branch-protection endpoint returned HTTP 403; only branch metadata and the rulesets listing were readable. An authorized repository owner must verify the effective rules in GitHub settings.
 - The official Cloudflare security-audit skill/validators requested by the audit follow-up are not installed in this environment. The corresponding validator bundle is not present in the current main tree. No substitute or invented validator result is reported.
 - The current main commit passed integrated Windows CI, and several open PR heads have passing CI. Those results do not replace the missing Windows pipe-ACL, credential-canary, dependency/SBOM/history, browser-installation, or official security-audit validations.
