@@ -191,6 +191,7 @@ let storageSetBehavior = async (update) => { workerSettings = { ...workerSetting
 let permissionBehavior = async () => true;
 let permissionCalls = 0;
 let permissionRemoveCalls = 0;
+let removedPermissionOrigin;
 let connectNativeCalls = 0;
 const forwardedPlaybackMessages = [];
 
@@ -233,9 +234,14 @@ const workerApi = {
   permissions: {
     contains: async (details) => {
       permissionCalls += 1;
+      if (details.origins?.includes(removedPermissionOrigin)) return false;
       return permissionBehavior(details, permissionCalls);
     },
-    remove: async () => { permissionRemoveCalls += 1; return true; },
+    remove: async (details) => {
+      permissionRemoveCalls += 1;
+      removedPermissionOrigin = details.origins[0];
+      return true;
+    },
   },
 };
 
@@ -285,6 +291,7 @@ initialPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, 0, "A site revoked during initial authorization must not open a native port.");
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during initial authorization must not post playback data.");
+removedPermissionOrigin = undefined;
 
 // Exercise the final pre-delivery check after a native port has already been opened.
 const raceBeforePost = {
@@ -421,6 +428,18 @@ assert.equal(storageFailureResult.cleanupSucceeded, true, "Browser cleanup must 
 assert.match(storageFailureResult.detail, /browser access was revoked/i, "The popup must receive an actionable fail-closed storage error.");
 assert.deepEqual(workerSettings.customSites, [storageFailureSite], "A failed storage write must not pretend the persisted registration was removed.");
 assert.equal(permissionRemoveCalls, 1, "Browser permission removal must run even when persistence fails.");
+assert.equal(await workerApi.permissions.contains({ origins: [storageFailureSite.pattern] }), false,
+  "A persisted registration left behind by storage failure must not be authorized after browser permission revocation.");
+const beforeRestartPosts = forwardedPlaybackMessages.length;
+const beforeRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?storage-failure-worker-restart");
+assert.equal(workerListeners.length, 2, "The restarted production service worker must register a fresh listener.");
+workerListeners[1](observation, customSender);
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeRestartConnections,
+  "A worker restart must not restore forwarding for a registration whose browser permission was revoked.");
+assert.equal(forwardedPlaybackMessages.length, beforeRestartPosts,
+  "A worker restart must not post an observation for a stale registration after failed persistence.");
 storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 
 storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
