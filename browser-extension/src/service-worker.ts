@@ -284,11 +284,13 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
         removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
         containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
       });
-      return {
-        removed: true,
-        cleanupSucceeded,
-        detail: cleanupSucceeded ? undefined : "The Scrobblix registration was removed, but browser cleanup is incomplete.",
-      };
+      return cleanupSucceeded
+        ? { removed: true, cleanupSucceeded: true }
+        : {
+          removed: true,
+          cleanupSucceeded: false,
+          detail: "The Scrobblix registration was removed, but browser cleanup is incomplete.",
+        };
     });
   }
 
