@@ -5,7 +5,7 @@ const workflow = readFileSync(".github/workflows/ci.yml", "utf8");
 assert.match(
   workflow,
   /workflow_call:\s*\n\s+inputs:\s*\n\s+concurrency_key:\s*\n\s+description:.*\n\s+required:\s*true\s*\n\s+type:\s*string/m,
-  "Every reusable workflow caller must provide a unique concurrency_key.",
+  "Reusable workflow callers may omit the key for a single call; fan-out callers must provide a unique key per invocation.",
 );
 assert.match(
   workflow,
