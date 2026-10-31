@@ -73,6 +73,7 @@ const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(
       cleanupOrder.push(`unregister:${ids[0]}`);
       throw new Error("synthetic unregister failure");
     },
+    containsContentScript: async () => true,
     removePermissions: async ({ origins }) => {
       cleanupOrder.push(`remove-permission:${origins[0]}`);
       return true;
@@ -86,11 +87,24 @@ assert.deepEqual(cleanupOrder, [
   "remove-permission:https://radio.example/*",
 ], "Permission removal must still run after content-script cleanup rejects, in the required order.");
 
+const scriptAlreadyAbsent = await cleanupCustomSiteBrowserAccess(
+  "site_33333333333333333333333333333333",
+  "https://radio.example/*",
+  {
+    unregisterContentScripts: async () => { throw new Error("already absent"); },
+    containsContentScript: async () => false,
+    removePermissions: async () => true,
+    containsPermissions: async () => false,
+  },
+);
+assert.equal(scriptAlreadyAbsent, true, "An already-unregistered content script is a successful final state.");
+
 const permissionFailure = await cleanupCustomSiteBrowserAccess(
   "site_ffffffffffffffffffffffffffffffff",
   "https://radio.example/*",
   {
     unregisterContentScripts: async () => undefined,
+    containsContentScript: async () => false,
     removePermissions: async () => false,
     containsPermissions: async () => true,
   },
@@ -113,6 +127,7 @@ const cleanupSuccess = await cleanupCustomSiteBrowserAccess(
   "https://radio.example/*",
   {
     unregisterContentScripts: async () => undefined,
+    containsContentScript: async () => false,
     removePermissions: async () => true,
     containsPermissions: async () => false,
   },
