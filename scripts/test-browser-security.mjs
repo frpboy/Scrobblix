@@ -46,23 +46,49 @@ assert.equal(isAuthorizedObservationSender(
   { tab: { id: 2 }, url: "https://radio.example/player" },
   [{ ...customSite, id: "not-a-site-id" }]), false);
 
-assert.ok(serviceWorkerSource.includes("customSiteAuthorization.revoke(message.siteId)"), "Removal must invalidate pending custom-site forwards before storage awaits.");
+const popupHandlerAt = serviceWorkerSource.indexOf("async function handlePopupMessage");
+const removeHandlerAt = serviceWorkerSource.indexOf('if (message.type === "companion.remove-custom-site")', popupHandlerAt);
+const revokeAt = serviceWorkerSource.indexOf("customSiteAuthorization.revoke(site.id)", removeHandlerAt);
+const persistRevocationAt = serviceWorkerSource.indexOf("persistCustomSiteSessionRevocation(site.id)", removeHandlerAt);
+const queuedMutationAt = serviceWorkerSource.indexOf("return serializeCustomSiteMutation", removeHandlerAt);
+const awaitSessionRevocationAt = serviceWorkerSource.indexOf("await sessionRevocationPromise", queuedMutationAt);
+assert.ok(popupHandlerAt >= 0 && removeHandlerAt > popupHandlerAt && revokeAt > removeHandlerAt
+  && persistRevocationAt > revokeAt && queuedMutationAt > persistRevocationAt && awaitSessionRevocationAt > queuedMutationAt,
+  "Removal must revoke in-memory authorization and persist its tombstone before the serialized mutation awaits local storage.");
+assert.ok(persistRevocationAt >= 0,
+  "Removal must persist a per-site session tombstone before local storage mutation.");
+assert.ok(serviceWorkerSource.includes("serializeCustomSiteMutation"), "Custom-site adds and removals must share one serialized service-worker mutation boundary.");
+assert.ok(serviceWorkerSource.includes("companion.add-custom-site"), "The service worker must own custom-site registration writes.");
+assert.ok(!popupSource.includes("storage.local.set({ customSites"), "The popup must not write custom-site arrays directly.");
 assert.ok(serviceWorkerSource.includes("customSiteAuthorization.authorize("), "Custom-site forwards must use the revocation-aware authorization gate.");
 const connectAt = serviceWorkerSource.indexOf("scrobblixWorkerApi.runtime.connectNative(hostName)");
 const finalAuthorizationAt = serviceWorkerSource.indexOf("await authorizeCustomSite()", connectAt);
 const nativePostAt = serviceWorkerSource.indexOf("port.postMessage({", connectAt);
 assert.ok(connectAt >= 0 && finalAuthorizationAt > connectAt && nativePostAt > finalAuthorizationAt, "Permission, registration and revocation must be revalidated after opening the native port and before posting.");
 assert.ok(serviceWorkerSource.includes("isPopupMessage(message) && sender.id === scrobblixWorkerApi.runtime.id && !sender.tab"), "Only this extension's popup page may invoke site removal.");
-const removeSiteSource = popupSource.slice(popupSource.indexOf("async function removeSite"));
-assert.ok(removeSiteSource.indexOf("companion.remove-custom-site") >= 0
-  && removeSiteSource.indexOf("companion.remove-custom-site") < removeSiteSource.indexOf("unregisterContentScripts"), "The popup must revoke forwarding before browser cleanup.");
-
-assert.ok(removeSiteSource.includes("cleanupCustomSiteBrowserAccess("),
-  "The popup must use the independently-failing browser cleanup helper.");
-assert.ok(removeSiteSource.indexOf("cleanupCustomSiteBrowserAccess(") < removeSiteSource.indexOf("getCustomSites()"),
-  "The popup must refresh the custom-site list after both browser cleanup attempts.");
-assert.ok(removeSiteSource.includes("browser cleanup was incomplete"),
-  "The popup must surface incomplete browser cleanup to the user.");
+const trackSiteSource = popupSource.slice(
+  popupSource.indexOf("async function trackCurrentSite"),
+  popupSource.indexOf("function renderCustomSites"),
+);
+assert.ok(trackSiteSource.includes("companion.add-custom-site"),
+  "The popup must send custom-site additions to the service worker.");
+assert.ok(!trackSiteSource.includes("storage.local.set") && !trackSiteSource.includes("registerContentScripts"),
+  "The popup must not persist registrations or register scripts outside the serialized mutation boundary.");
+const removeSiteSource = popupSource.slice(
+  popupSource.indexOf("async function removeSite"),
+  popupSource.indexOf("async function testConnection"),
+);
+assert.ok(removeSiteSource.includes("companion.remove-custom-site"),
+  "The popup must route removal through the service worker.");
+assert.ok(!removeSiteSource.includes("storage.local.set")
+  && !removeSiteSource.includes("unregisterContentScripts")
+  && !removeSiteSource.includes("permissions.remove"),
+  "The popup must not mutate registration storage or browser access directly.");
+const workerRemovalAt = serviceWorkerSource.indexOf('if (message.type === "companion.remove-custom-site")');
+const workerPersistAt = serviceWorkerSource.indexOf("storage.local.set", workerRemovalAt);
+const workerCleanupAt = serviceWorkerSource.indexOf("cleanupCustomSite(site)", workerPersistAt);
+assert.ok(workerRemovalAt >= 0 && workerPersistAt > workerRemovalAt && workerCleanupAt > workerPersistAt,
+  "The worker must persist removal before attempting independent browser cleanup.");
 
 const cleanupOrder = [];
 const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(
@@ -170,8 +196,14 @@ assert.equal(await finalReadAuthorization.authorize(
 
 const workerListeners = [];
 let workerSettings = { paused: false, customSites: [] };
+let storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+let storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
 let permissionBehavior = async () => true;
 let permissionCalls = 0;
+let permissionRemoveCalls = 0;
+let permissionRemoveResult = true;
+let removedPermissionOrigin;
+const sessionRevokedSiteIds = new Set();
 let connectNativeCalls = 0;
 const forwardedPlaybackMessages = [];
 
@@ -202,14 +234,41 @@ const workerApi = {
   },
   storage: {
     local: {
-      get: async (defaults) => ({ ...defaults, ...workerSettings }),
-      set: async (update) => { workerSettings = { ...workerSettings, ...update }; },
+      get: async (defaults) => storageGetBehavior(defaults),
+      set: async (update) => storageSetBehavior(update),
     },
+    session: {
+      get: async (key) => {
+        const keys = typeof key === "string" ? [key] : Array.isArray(key) ? key : Object.keys(key ?? {});
+        return Object.fromEntries(keys.filter((entry) => sessionRevokedSiteIds.has(entry)).map((entry) => [entry, true]));
+      },
+      set: async (update) => {
+        for (const [key, value] of Object.entries(update)) {
+          if (value === true) sessionRevokedSiteIds.add(key);
+          else sessionRevokedSiteIds.delete(key);
+        }
+      },
+      remove: async (key) => {
+        const keys = typeof key === "string" ? [key] : key;
+        for (const entry of keys) sessionRevokedSiteIds.delete(entry);
+      },
+    },
+  },
+  scripting: {
+    registerContentScripts: async () => undefined,
+    unregisterContentScripts: async () => undefined,
+    getRegisteredContentScripts: async () => [],
   },
   permissions: {
     contains: async (details) => {
       permissionCalls += 1;
+      if (details.origins?.includes(removedPermissionOrigin)) return false;
       return permissionBehavior(details, permissionCalls);
+    },
+    remove: async (details) => {
+      permissionRemoveCalls += 1;
+      if (permissionRemoveResult) removedPermissionOrigin = details.origins[0];
+      return permissionRemoveResult;
     },
   },
 };
@@ -226,14 +285,23 @@ const raceBeforeConnect = {
   origin: "https://radio.example",
   pattern: "https://radio.example/*",
 };
-const removeFromWorker = (siteId) => new Promise((resolve) => {
+const removeFromWorker = (site) => new Promise((resolve) => {
   const keepAlive = workerListener(
-    { type: "companion.remove-custom-site", siteId },
+    { type: "companion.remove-custom-site", site },
     { id: workerApi.runtime.id },
     resolve,
   );
   assert.equal(keepAlive, true, "The service worker must keep the popup removal response channel open.");
 });
+const addToWorker = (site) => new Promise((resolve) => {
+  const keepAlive = workerListener(
+    { type: "companion.add-custom-site", site },
+    { id: workerApi.runtime.id },
+    resolve,
+  );
+  assert.equal(keepAlive, true, "The service worker must keep the popup add response channel open.");
+});
+
 
 // Exercise the actual forwarding listener while its first permission check is pending.
 workerSettings = { paused: false, customSites: [raceBeforeConnect] };
@@ -246,11 +314,14 @@ permissionBehavior = async () => {
 };
 workerListener(observation, customSender);
 await initialPermissionStarted.promise;
-assert.deepEqual(await removeFromWorker(raceBeforeConnect.id), { removed: true });
+const removedBeforeConnect = await removeFromWorker(raceBeforeConnect);
+assert.equal(removedBeforeConnect.removed, true);
+assert.equal(removedBeforeConnect.cleanupSucceeded, true);
 initialPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(connectNativeCalls, 0, "A site revoked during initial authorization must not open a native port.");
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during initial authorization must not post playback data.");
+removedPermissionOrigin = undefined;
 
 // Exercise the final pre-delivery check after a native port has already been opened.
 const raceBeforePost = {
@@ -272,12 +343,234 @@ permissionBehavior = async (_details, callNumber) => {
 workerListener(observation, customSender);
 await finalPermissionStarted.promise;
 assert.equal(connectNativeCalls, 1, "The final authorization race should occur after the native port is opened.");
-assert.deepEqual(await removeFromWorker(raceBeforePost.id), { removed: true });
+const removedBeforePost = await removeFromWorker(raceBeforePost);
+assert.equal(removedBeforePost.removed, true);
+assert.equal(removedBeforePost.cleanupSucceeded, true);
 finalPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during final authorization must not post playback data.");
 
+// Overlapping adds must serialize at the service-worker storage boundary.
+const addSiteOne = {
+  id: "site_11111111111111111111111111111111",
+  origin: "https://one.example",
+  pattern: "https://one.example/*",
+};
+const addSiteTwo = {
+  id: "site_22222222222222222222222222222222",
+  origin: "https://two.example",
+  pattern: "https://two.example/*",
+};
+workerSettings = { paused: false, customSites: [] };
+permissionCalls = 0;
+permissionBehavior = async () => true;
+let storageReads = 0;
+const addReadStarted = deferred();
+const releaseAddRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    addReadStarted.resolve();
+    await releaseAddRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const addOnePending = addToWorker(addSiteOne);
+await addReadStarted.promise;
+const addTwoPending = addToWorker(addSiteTwo);
+await Promise.resolve();
+assert.equal(storageReads, 1, "A second add must wait instead of reading a stale registration snapshot.");
+releaseAddRead.resolve();
+const addResults = await Promise.all([addOnePending, addTwoPending]);
+assert.deepEqual(addResults.map((result) => result.added), [true, true]);
+assert.deepEqual(
+  workerSettings.customSites.map((site) => site.id).sort(),
+  [addSiteOne.id, addSiteTwo.id].sort(),
+  "Concurrent adds must preserve both successful registrations.",
+);
+
+// Overlapping removals must not reintroduce a registration removed by the first operation.
+const removeSiteOne = { ...addSiteOne, id: "site_33333333333333333333333333333333" };
+const removeSiteTwo = { ...addSiteTwo, id: "site_44444444444444444444444444444444" };
+workerSettings = { paused: false, customSites: [removeSiteOne, removeSiteTwo] };
+storageReads = 0;
+const removeReadStarted = deferred();
+const releaseRemoveRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    removeReadStarted.resolve();
+    await releaseRemoveRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const removeOnePending = removeFromWorker(removeSiteOne);
+await removeReadStarted.promise;
+const removeTwoPending = removeFromWorker(removeSiteTwo);
+await Promise.resolve();
+assert.equal(storageReads, 1, "A second removal must wait for the first persisted mutation.");
+releaseRemoveRead.resolve();
+const removeResults = await Promise.all([removeOnePending, removeTwoPending]);
+assert.deepEqual(removeResults.map((result) => result.removed), [true, true]);
+assert.deepEqual(workerSettings.customSites, [], "Concurrent removals must leave both removed IDs absent.");
+
+// An add queued behind a removal must preserve the new, unrelated registration.
+const existingSite = { ...removeSiteOne, id: "site_55555555555555555555555555555555" };
+const newlyAddedSite = {
+  id: "site_66666666666666666666666666666666",
+  origin: "https://three.example",
+  pattern: "https://three.example/*",
+};
+workerSettings = { paused: false, customSites: [existingSite] };
+storageReads = 0;
+const interleaveReadStarted = deferred();
+const releaseInterleaveRead = deferred();
+storageGetBehavior = async (defaults) => {
+  storageReads += 1;
+  if (storageReads === 1) {
+    interleaveReadStarted.resolve();
+    await releaseInterleaveRead.promise;
+  }
+  return { ...defaults, ...workerSettings };
+};
+const removeExistingPending = removeFromWorker(existingSite);
+await interleaveReadStarted.promise;
+const addNewPending = addToWorker(newlyAddedSite);
+await Promise.resolve();
+assert.equal(storageReads, 1, "The add must wait behind the in-flight removal.");
+releaseInterleaveRead.resolve();
+const [removeExistingResult, addNewResult] = await Promise.all([removeExistingPending, addNewPending]);
+assert.equal(removeExistingResult.removed, true);
+assert.equal(addNewResult.added, true);
+assert.deepEqual(workerSettings.customSites.map((site) => site.id), [newlyAddedSite.id],
+  "An add queued after a removal must remain stored without restoring the removed ID.");
+
+// If persistence fails during removal, browser access must still be revoked so a worker restart cannot resume forwarding.
+const storageFailureSite = {
+  id: "site_77777777777777777777777777777777",
+  origin: "https://storage-failure.example",
+  pattern: "https://storage-failure.example/*",
+};
+workerSettings = { paused: false, customSites: [storageFailureSite] };
+permissionRemoveCalls = 0;
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+storageSetBehavior = async () => { throw new Error("synthetic storage write failure"); };
+const storageFailureResult = await removeFromWorker(storageFailureSite);
+assert.equal(storageFailureResult.removed, false, "A failed storage write must not be reported as a completed removal.");
+assert.equal(storageFailureResult.cleanupSucceeded, false, "A failed browser permission removal must be reported.");
+assert.match(storageFailureResult.detail, /blocked only for this extension session/i,
+  "The popup must explain that a session tombstone is blocking the stale registration.");
+assert.deepEqual(workerSettings.customSites, [storageFailureSite], "A failed storage write must not pretend the persisted registration was removed.");
+assert.equal(permissionRemoveCalls, 1, "Browser permission removal must be attempted even when persistence fails.");
+assert.equal(await workerApi.permissions.contains({ origins: [storageFailureSite.pattern] }), true,
+  "The test must retain the browser grant to exercise the session tombstone rather than permission cleanup.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${storageFailureSite.id}`),
+  "The failed removal must persist a session tombstone before the worker can restart.");
+const beforeRestartPosts = forwardedPlaybackMessages.length;
+const beforeRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?storage-failure-worker-restart");
+assert.equal(workerListeners.length, 2, "The restarted production service worker must register a fresh listener.");
+workerListeners[1](observation, { id: workerApi.runtime.id, tab: { id: 8 }, url: `${storageFailureSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeRestartConnections,
+  "A worker restart must not restore forwarding when the browser grant remains but a session tombstone exists.");
+assert.equal(forwardedPlaybackMessages.length, beforeRestartPosts,
+  "A worker restart must not post an observation for a stale registration with a session tombstone.");
+assert.match(storageFailureResult.detail, /manually revoke this site's browser permission before closing\/restarting the browser/i,
+  "The incomplete-cleanup response must require manual permission revocation before the session tombstone is cleared.");
+sessionRevokedSiteIds.delete(`revokedCustomSite:${storageFailureSite.id}`);
+const beforeBrowserRestartPosts = forwardedPlaybackMessages.length;
+const beforeBrowserRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?browser-session-cleared");
+assert.equal(workerListeners.length, 3, "A simulated browser restart must create a fresh worker after session storage is cleared.");
+workerListeners[2](observation, { id: workerApi.runtime.id, tab: { id: 12 }, url: `${storageFailureSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeBrowserRestartConnections + 1,
+  "After session storage is cleared, a stale registration and still-granted permission can authorize again; the manual-revocation warning is therefore required.");
+assert.equal(forwardedPlaybackMessages.length, beforeBrowserRestartPosts + 1,
+  "The browser-restart simulation must demonstrate the stale-grant fallback risk.");
+permissionRemoveResult = true;
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+
+// Storage-read failures must still use validated popup site data to revoke browser access.
+const readFailureSite = {
+  id: "site_88888888888888888888888888888888",
+  origin: "https://read-failure.example",
+  pattern: "https://read-failure.example/*",
+};
+workerSettings = { paused: false, customSites: [readFailureSite] };
+storageGetBehavior = async () => { throw new Error("synthetic storage read failure"); };
+permissionRemoveCalls = 0;
+const addReadFailure = await addToWorker(readFailureSite);
+assert.equal(addReadFailure.added, false, "A failed registration-state read must not report a successful add.");
+assert.match(addReadFailure.detail, /custom site could not be registered/i,
+  "The popup must receive a registration-specific error when storage cannot be read.");
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+const removeReadFailure = await removeFromWorker(readFailureSite);
+assert.equal(removeReadFailure.removed, false, "A failed registration-state read must not report a successful removal.");
+assert.equal(removeReadFailure.cleanupSucceeded, false, "The failed permission cleanup must be reported.");
+assert.match(removeReadFailure.detail, /blocked only for this extension session/i,
+  "The popup must receive a removal-specific session-revocation result rather than a connection diagnostic.");
+assert.equal(permissionRemoveCalls, 2, "Both failed add and failed remove storage reads must attempt exact-origin permission cleanup.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${readFailureSite.id}`),
+  "A removal whose storage read fails must persist a session tombstone.");
+const beforeReadRestartPosts = forwardedPlaybackMessages.length;
+const beforeReadRestartConnections = connectNativeCalls;
+storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+await import("../browser-extension/dist/service-worker.js?storage-read-failure-worker-restart");
+assert.equal(workerListeners.length, 4, "A storage-read-failure worker restart must register a fresh listener.");
+workerListeners[3](observation, { id: workerApi.runtime.id, tab: { id: 9 }, url: `${readFailureSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeReadRestartConnections,
+  "A worker restart must not restore forwarding after a storage-read failure when the browser grant remains.");
+assert.equal(forwardedPlaybackMessages.length, beforeReadRestartPosts,
+  "A worker restart must not post from a stale registration after a storage-read failure.");
+permissionRemoveResult = true;
+storageGetBehavior = async (defaults) => ({ ...defaults, ...workerSettings });
+
+// Concurrent failed removals must not overwrite one another's session revocation tombstones.
+const concurrentRevocationSiteOne = {
+  id: "site_99999999999999999999999999999999",
+  origin: "https://session-one.example",
+  pattern: "https://session-one.example/*",
+};
+const concurrentRevocationSiteTwo = {
+  id: "site_dddddddddddddddddddddddddddddddd",
+  origin: "https://session-two.example",
+  pattern: "https://session-two.example/*",
+};
+workerSettings = { paused: false, customSites: [concurrentRevocationSiteOne, concurrentRevocationSiteTwo] };
+storageSetBehavior = async () => { throw new Error("synthetic concurrent storage write failure"); };
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+const concurrentRemovalResults = await Promise.all([
+  removeFromWorker(concurrentRevocationSiteOne),
+  removeFromWorker(concurrentRevocationSiteTwo),
+]);
+assert.deepEqual(concurrentRemovalResults.map((result) => result.removed), [false, false],
+  "Neither failed persistence operation may be reported as a completed removal.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${concurrentRevocationSiteOne.id}`),
+  "The first concurrent removal must retain its own session tombstone.");
+assert.ok(sessionRevokedSiteIds.has(`revokedCustomSite:${concurrentRevocationSiteTwo.id}`),
+  "The second concurrent removal must retain its own session tombstone.");
+const beforeConcurrentRestartPosts = forwardedPlaybackMessages.length;
+const beforeConcurrentRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?concurrent-session-revocation-restart");
+assert.equal(workerListeners.length, 5, "A concurrent-removal worker restart must register a fresh listener.");
+workerListeners[4](observation, { id: workerApi.runtime.id, tab: { id: 10 }, url: `${concurrentRevocationSiteOne.origin}/player` });
+workerListeners[4](observation, { id: workerApi.runtime.id, tab: { id: 11 }, url: `${concurrentRevocationSiteTwo.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeConcurrentRestartConnections,
+  "Neither concurrent stale registration may open a native port after restart.");
+assert.equal(forwardedPlaybackMessages.length, beforeConcurrentRestartPosts,
+  "Neither concurrent stale registration may post after restart.");
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+permissionRemoveResult = true;
+
 // Positive control: a still-registered site with granted browser permission must forward.
+
 const activeSite = {
   id: "site_cccccccccccccccccccccccccccccccc",
   origin: "https://radio.example",
@@ -286,11 +579,86 @@ const activeSite = {
 workerSettings = { paused: false, customSites: [activeSite] };
 permissionCalls = 0;
 permissionBehavior = async () => true;
+const beforeActiveForward = forwardedPlaybackMessages.length;
 workerListener(observation, customSender);
 await new Promise((resolve) => setTimeout(resolve, 0));
-assert.equal(forwardedPlaybackMessages.length, 1, "An active, granted custom site must still forward.");
-assert.equal(forwardedPlaybackMessages[0].type, "playback.observation.v1");
-assert.equal(forwardedPlaybackMessages[0].payload.siteOrigin, activeSite.origin);
-assert.equal(forwardedPlaybackMessages[0].payload.tabId, customSender.tab.id);
+assert.equal(forwardedPlaybackMessages.length, beforeActiveForward + 1, "An active, granted custom site must still forward.");
+const activeForward = forwardedPlaybackMessages.at(-1);
+assert.equal(activeForward.type, "playback.observation.v1");
+assert.equal(activeForward.payload.siteOrigin, activeSite.origin);
+assert.equal(activeForward.payload.tabId, customSender.tab.id);
 
-console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork and in-flight custom-site revocation).");
+// If storage.session exists but its tombstone write fails, local persistence and browser
+// cleanup can both fail. The popup must require immediate manual revocation before worker restart.
+const originalSessionStorage = workerApi.storage.session;
+const originalSessionSet = workerApi.storage.session.set;
+const sessionWriteFailureSite = {
+  id: "site_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+  origin: "https://session-write-failure.example",
+  pattern: "https://session-write-failure.example/*",
+};
+workerSettings = { paused: false, customSites: [sessionWriteFailureSite] };
+storageSetBehavior = async () => { throw new Error("synthetic local storage write failure"); };
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+workerApi.storage.session.set = async () => { throw new Error("synthetic session tombstone write failure"); };
+const sessionWriteFailure = await removeFromWorker(sessionWriteFailureSite);
+assert.equal(sessionWriteFailure.removed, false);
+assert.equal(sessionWriteFailure.cleanupSucceeded, false);
+assert.match(sessionWriteFailure.detail, /manually revoke this site's browser permission immediately.*service-worker restart/i,
+  "A failed session-tombstone write plus failed browser cleanup must require immediate manual revocation.");
+workerApi.storage.session.set = originalSessionSet;
+const beforeSessionWriteRestartPosts = forwardedPlaybackMessages.length;
+const beforeSessionWriteRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?session-write-failure-worker-restart");
+assert.equal(workerListeners.length, 6, "A fresh worker must be registered for the failed session-tombstone write case.");
+workerListeners[5](observation, { id: workerApi.runtime.id, tab: { id: 14 }, url: `${sessionWriteFailureSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeSessionWriteRestartConnections + 1,
+  "Without a persisted tombstone or browser permission removal, a fresh worker can reauthorize the stale registration; the immediate manual warning is required.");
+assert.equal(forwardedPlaybackMessages.length, beforeSessionWriteRestartPosts + 1);
+permissionRemoveResult = true;
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+
+// Older Chromium builds may not expose storage.session. Custom-site add/forward must
+// remain available, while incomplete removal explicitly requires manual permission cleanup.
+
+delete workerApi.storage.session;
+const noSessionSite = {
+  id: "site_13579bdf13579bdf13579bdf13579bdf",
+  origin: "https://no-session.example",
+  pattern: "https://no-session.example/*",
+};
+workerSettings = { paused: false, customSites: [] };
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+permissionRemoveResult = true;
+removedPermissionOrigin = undefined;
+const noSessionAdd = await addToWorker(noSessionSite);
+assert.equal(noSessionAdd.added, true, "Custom-site registration must remain functional when storage.session is unavailable.");
+const beforeNoSessionForward = forwardedPlaybackMessages.length;
+workerListener(observation, { id: workerApi.runtime.id, tab: { id: 13 }, url: `${noSessionSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(forwardedPlaybackMessages.length, beforeNoSessionForward + 1,
+  "Custom-site forwarding must remain functional without storage.session.");
+storageSetBehavior = async () => { throw new Error("synthetic storage write failure without session storage"); };
+permissionRemoveResult = false;
+removedPermissionOrigin = undefined;
+const noSessionRemoval = await removeFromWorker(noSessionSite);
+assert.equal(noSessionRemoval.removed, false);
+assert.equal(noSessionRemoval.cleanupSucceeded, false);
+assert.match(noSessionRemoval.detail, /manually revoke this site's browser permission immediately.*service-worker restart/i,
+  "Without storage.session, failed persistence and permission cleanup must explicitly require manual revocation.");
+const beforeNoSessionRestartPosts = forwardedPlaybackMessages.length;
+const beforeNoSessionRestartConnections = connectNativeCalls;
+await import("../browser-extension/dist/service-worker.js?no-session-worker-restart");
+assert.equal(workerListeners.length, 7, "A fresh worker must be registered when storage.session is unavailable.");
+workerListeners[6](observation, { id: workerApi.runtime.id, tab: { id: 15 }, url: `${noSessionSite.origin}/player` });
+await new Promise((resolve) => setTimeout(resolve, 0));
+assert.equal(connectNativeCalls, beforeNoSessionRestartConnections + 1,
+  "Without storage.session and with both cleanup paths failing, a fresh worker can reauthorize the stale registration; manual revocation is mandatory.");
+assert.equal(forwardedPlaybackMessages.length, beforeNoSessionRestartPosts + 1);
+workerApi.storage.session = originalSessionStorage;
+storageSetBehavior = async (update) => { workerSettings = { ...workerSettings, ...update }; };
+permissionRemoveResult = true;
+
+console.log("Browser security assertions passed (origin authorization, payload shape, bounds, HTTPS artwork, serialized mutations, session tombstones, expiry, unavailable-session fallback and worker-restart warnings).");
