@@ -240,9 +240,26 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
       if (!site) return { removed: false, cleanupSucceeded: true, detail: "This site is already removed." };
 
       // Persist revocation before browser cleanup so a worker restart cannot restore authorization.
-      await scrobblixWorkerApi.storage.local.set({
-        customSites: settings.customSites.filter((entry) => entry.id !== message.siteId),
-      });
+      try {
+        await scrobblixWorkerApi.storage.local.set({
+          customSites: settings.customSites.filter((entry) => entry.id !== message.siteId),
+        });
+      } catch {
+        // Storage failure must not leave browser access active after in-memory revocation.
+        const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
+          unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
+          containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
+          removePermissions: (details) => scrobblixWorkerApi.permissions.remove(details),
+          containsPermissions: (details) => scrobblixWorkerApi.permissions.contains(details),
+        });
+        return {
+          removed: false,
+          cleanupSucceeded,
+          detail: cleanupSucceeded
+            ? "The registration could not be removed from storage, but browser access was revoked. Retry removal."
+            : "The registration could not be removed from storage and browser cleanup is incomplete. Review extension permissions and retry.",
+        };
+      }
       const cleanupSucceeded = await cleanupCustomSiteBrowserAccess(site.id, site.pattern, {
         unregisterContentScripts: (details) => scrobblixWorkerApi.scripting.unregisterContentScripts(details),
         containsContentScript: async (details) => (await scrobblixWorkerApi.scripting.getRegisteredContentScripts(details)).some((script) => script.id === site.id),
