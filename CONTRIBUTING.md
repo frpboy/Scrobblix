@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Current contribution guidance  
-> **Last reviewed:** 2026-10-28
+> **Last reviewed:** 2026-10-31
 
 
 Scrobblix accepts bug reports, documentation improvements, test cases, source adapters, browser-site adapters, accessibility fixes, translations, and implementation changes that follow the documented architecture.
@@ -57,10 +57,12 @@ test(gsmtc): cover paused-to-stopped transition
 
 ## Development branches
 
-- `main`: protected and releasable.
+- `main`: release-intended default branch. GitHub reported branch protection disabled on 2026-10-31; required reviews and status checks must not be assumed to be platform-enforced. See [Governance](GOVERNANCE.md) and [issue #88](https://github.com/frpboy/Scrobblix/issues/88).
 - `feature/<issue>-<slug>`: ordinary work.
 - `fix/<issue>-<slug>`: bug fixes.
 - `release/<version>`: only when release stabilization requires it.
+
+Contributors must still use focused pull requests. Until branch protection is enabled and verified, the maintainer must manually inspect the latest PR head, required CI results, review feedback, and merge prerequisites before merging.
 
 ## Validation and merge discipline
 
