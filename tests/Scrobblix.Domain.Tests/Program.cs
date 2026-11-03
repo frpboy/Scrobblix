@@ -69,6 +69,28 @@ catch (HttpRequestException)
 Assert(privateDnsResolverCalled && privateDnsResolutionRejected,
     "A hostname resolving to loopback is rejected before any socket connection, preventing artwork DNS-rebinding bypass.");
 
+var boundedCache = new BoundedCache<string, int>(2, StringComparer.Ordinal);
+boundedCache.Set("first", 1);
+boundedCache.Set("second", 2);
+boundedCache.Set("first", 3);
+Assert(boundedCache.Count == 2
+    && boundedCache.TryGetValue("first", out var updatedCacheValue)
+    && updatedCacheValue == 3,
+    "Updating an existing metadata-cache entry preserves its value without consuming another slot.");
+boundedCache.Set("third", 4);
+Assert(boundedCache.Count == 2
+    && !boundedCache.TryGetValue("first", out _)
+    && boundedCache.TryGetValue("second", out _)
+    && boundedCache.TryGetValue("third", out _),
+    "The metadata cache evicts its oldest inserted entry when capacity is exceeded.");
+boundedCache.Clear();
+Assert(boundedCache.Count == 0 && !boundedCache.TryGetValue("second", out _),
+    "Clearing metadata cache state removes all entries and eviction history.");
+var concurrentBoundedCache = new BoundedCache<int, int>(64);
+Parallel.For(0, 5000, value => concurrentBoundedCache.Set(value, value));
+Assert(concurrentBoundedCache.Count <= 64,
+    "Concurrent metadata-cache writes never exceed the configured capacity.");
+
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
 var trayConnected = new TrayMenuStatus(
