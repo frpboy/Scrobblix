@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -24,7 +23,8 @@ public sealed class TrackMetadataEnricher
     private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
     private readonly Action<string>? _log;
-    private readonly ConcurrentDictionary<string, PlayMetadataEnrichment> _cache = new(StringComparer.Ordinal);
+    private const int MetadataCacheCapacity = 512;
+    private readonly BoundedCache<string, PlayMetadataEnrichment> _cache = new(MetadataCacheCapacity, StringComparer.Ordinal);
     private long _configurationVersion;
 
     public long ConfigurationVersion => Interlocked.Read(ref _configurationVersion);
@@ -132,7 +132,7 @@ public sealed class TrackMetadataEnricher
             }
         }
 
-        _cache[key] = result;
+        _cache.Set(key, result);
         _log?.Invoke($"Metadata lookup finished; artist={observation.Artist}; title={observation.Title}; release_year={result.ReleaseYear?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; artwork_source={result.ArtworkSource ?? "(missing)"}; artwork_file={(result.ArtworkPath is null ? "(missing)" : "cached")}.");
         return result;
     }
