@@ -21,3 +21,10 @@ Measure idle and active CPU, private working set, wakeups/timers, disk writes, s
 ## Reference hardware
 
 Define at least a low/mid Windows 11 reference device and CI/VM caveats. Record OS/build/runtime/app versions. Regressions above agreed thresholds block release or require documented waiver.
+
+
+## Cache resource bounds
+
+- The process-local metadata enrichment cache must remain at or below its configured capacity under concurrent writes.
+- Updating an existing key must not consume another slot; insertion beyond capacity must evict the oldest entry deterministically.
+- The cache bound is a correctness/resource guard, not a measured memory improvement. Capture process private working set during the real 8–24 hour Windows soak before claiming a runtime reduction.
