@@ -4,6 +4,11 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ## [Unreleased]
 
+### Fixed
+
+- Bound the process-local metadata enrichment cache to 512 entries with thread-safe FIFO eviction, preventing unique-track lookups from accumulating indefinitely during long listening sessions. Existing metadata results, cache clearing on Last.fm configuration changes, and persisted history/artwork remain unchanged.
+
+
 ### Documentation and validation
 
 - Added a repository-wide Markdown path/structure validator and wired it into Windows CI.
