@@ -129,6 +129,14 @@ async function trackCurrentSite(): Promise<void> {
 }
 
 function renderCustomSites(sites: CustomSite[]): void {
+  if (sites.length === 0) {
+    const emptyItem = document.createElement("li");
+    emptyItem.className = "empty-state";
+    emptyItem.textContent = "No custom sites added yet. Use 'Track this site' above to add one.";
+    customSites.replaceChildren(emptyItem);
+    return;
+  }
+
   customSites.replaceChildren(...sites.map((site) => {
     const item = document.createElement("li");
     const label = document.createElement("span");
@@ -136,6 +144,8 @@ function renderCustomSites(sites: CustomSite[]): void {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Remove";
+    remove.title = `Remove ${site.origin}`;
+    remove.setAttribute("aria-label", `Remove ${site.origin} from added sites`);
     remove.addEventListener("click", () => void removeSite(site));
     item.append(label, remove);
     return item;

@@ -23,4 +23,5 @@ ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
 li { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
 li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 li button { background: transparent; color: #655789; min-height: 28px; padding: 0; }
+li.empty-state { color: #625c71; font-style: italic; font-size: 12px; }
 footer { border-top: 1px solid #d6d0db; font-size: 12px; padding-top: 12px; }
