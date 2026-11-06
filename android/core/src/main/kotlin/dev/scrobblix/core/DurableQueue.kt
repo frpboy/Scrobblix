@@ -8,7 +8,7 @@ interface QueueSqlDriver {
 }
 
 data class ActionLease(val id: String, val provider: String, val account: String,
-    val type: ActionType, val owner: String, val attempts: Int)
+    val type: ActionType, val owner: String, val attempts: Int, val playId: String? = null)
 
 /** Local durable queue only. Does not contact Last.fm or persist credentials. */
 class DurableQueue(private val db: QueueSqlDriver) {
@@ -17,13 +17,13 @@ class DurableQueue(private val db: QueueSqlDriver) {
             id TEXT PRIMARY KEY, provider TEXT NOT NULL, account TEXT NOT NULL, type TEXT NOT NULL,
             state TEXT NOT NULL, created_ms INTEGER NOT NULL, due_ms INTEGER NOT NULL,
             lease_owner TEXT, lease_expires_ms INTEGER, attempts INTEGER NOT NULL DEFAULT 0,
-            reason TEXT, completed_ms INTEGER,
+            reason TEXT, completed_ms INTEGER, play_id TEXT,
             UNIQUE(provider, account, type, id))""")
     }
-    fun enqueue(id: String, provider: String, account: String, type: ActionType, now: Long): Boolean {
+    fun enqueue(id: String, provider: String, account: String, type: ActionType, now: Long, playId: String? = null): Boolean {
         require(id.isNotBlank() && provider.isNotBlank() && account.isNotBlank())
-        return db.execute("INSERT OR IGNORE INTO android_actions(id,provider,account,type,state,created_ms,due_ms) VALUES(?,?,?,?,?,?,?)",
-            listOf(id, provider, account, type.name, ActionState.Pending.name, now, now)) == 1
+        return db.execute("INSERT OR IGNORE INTO android_actions(id,provider,account,type,state,created_ms,due_ms,play_id) VALUES(?,?,?,?,?,?,?,?)",
+            listOf(id, provider, account, type.name, ActionState.Pending.name, now, now, playId)) == 1
     }
     fun claim(provider: String, account: String, owner: String, now: Long, leaseMs: Long): ActionLease? {
         require(provider.isNotBlank() && account.isNotBlank() && owner.isNotBlank() && leaseMs > 0)
@@ -32,7 +32,7 @@ class DurableQueue(private val db: QueueSqlDriver) {
                 completed_ms=?,lease_owner=NULL,lease_expires_ms=NULL WHERE provider=? AND account=?
                 AND type='NowPlaying' AND state IN ('Pending','RetryScheduled','AuthBlocked','RetryExhausted','SubmissionOutcomeUnknown')
                 AND created_ms <= ?""", listOf(now, provider, account, now-300000))
-            val row = db.query("""SELECT id,type,attempts FROM android_actions WHERE provider=? AND account=?
+            val row = db.query("""SELECT id,type,attempts,play_id FROM android_actions WHERE provider=? AND account=?
                 AND state IN ('Pending','RetryScheduled') AND due_ms<=? ORDER BY due_ms,created_ms,id LIMIT 1""",
                 listOf(provider,account,now)).firstOrNull()
             if (row == null) null else {
@@ -41,7 +41,7 @@ class DurableQueue(private val db: QueueSqlDriver) {
                     attempts=attempts+1,reason=NULL WHERE id=? AND state IN ('Pending','RetryScheduled')""",
                     listOf(owner, Math.addExact(now,leaseMs), id))
                 check(changed == 1)
-                ActionLease(id, provider, account, ActionType.valueOf(row.getValue("type")!!),owner,row.getValue("attempts")!!.toInt()+1)
+                ActionLease(id, provider, account, ActionType.valueOf(row.getValue("type")!!),owner,row.getValue("attempts")!!.toInt()+1,row["play_id"])
             }
         }
     }
