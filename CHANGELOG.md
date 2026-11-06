@@ -4,6 +4,10 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ## [Unreleased]
 
+### Added
+
+- Raw playback observation retention: raw diagnostic observations are now automatically pruned after 30 days (owner-approved policy, issue #98). Cleanup runs in bounded cancellation-safe batches off the UI thread, logs only row counts, and never touches canonical listening history, scrobbles or provider actions.
+
 ### Fixed
 
 - Bound the process-local metadata enrichment cache to 512 entries with thread-safe FIFO eviction, preventing unique-track lookups from accumulating indefinitely during long listening sessions. Existing metadata results, cache clearing on Last.fm configuration changes, and persisted history/artwork remain unchanged.

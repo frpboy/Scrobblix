@@ -28,6 +28,7 @@ public sealed class ScrobblixBackupService
         "0003_local_history_artwork",
         "0004_richer_metadata",
         "0005_loved_tracks",
+        "0006_observation_retention",
     ];
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
