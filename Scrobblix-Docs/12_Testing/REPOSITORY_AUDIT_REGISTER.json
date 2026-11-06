@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "auditDate": "2026-10-31",
+  "auditDate": "2026-11-06",
   "repository": "frpboy/Scrobblix",
   "baseBranch": "main",
-  "baseSha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
-  "auditBranch": "docs/78-refresh-audit-checkpoint-2026-10-31",
+  "baseSha": "fa7adbcd81ccb0a3e16a729abbc3d58a030bd457",
+  "auditBranch": "docs/audit-checkpoint-2026-11-06",
   "findings": [
     {
       "id": "AUD-PRIV-001",
@@ -169,7 +169,7 @@
       "id": "AUD-BROWSER-002",
       "title": "Revoke in-flight custom-site observations before browser cleanup",
       "severity": "P2",
-      "status": "open_pr",
+      "status": "fixed_merged",
       "issue": 82,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/82",
       "fixPR": 84,
@@ -179,13 +179,13 @@
         "browser-extension/src/custom-site-authorization.ts",
         "scripts/test-browser-security.mjs"
       ],
-      "validation": "PR #84 exact-head Windows CI run 41154351961 passed on head 2703a69cd252bb1f82cbcd70d6895ac0ee68aec9. PR remains open and unmerged."
+      "validation": "PR #84 squash-merged 2026-11-06 as 5e31044; exact-head Windows CI passed in run 42161560927. Issue #82 closed."
     },
     {
       "id": "AUD-BROWSER-003",
       "title": "Serialize custom-site mutations and recover safely from storage/browser cleanup failures",
       "severity": "P2",
-      "status": "in_progress",
+      "status": "fixed_merged",
       "issue": 87,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/87",
       "fixPR": 90,
@@ -197,13 +197,13 @@
         "Scrobblix-Docs/09_BrowserExtension/PERMISSIONS.md",
         "Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md"
       ],
-      "validation": "Draft PR #90 exact-head Windows CI run 41156914390 passed on head 7ef909376741c09e3f108374451427937d1e95ac. Base restored to fix/82-cancel-custom-site-inflight-observations-main at 2703a69cd252bb1f82cbcd70d6895ac0ee68aec9. Tests cover storage read/write failures, per-site tombstones, concurrent removals, session expiry, failed tombstone writes, missing storage.session and worker-restart fallback. PR remains draft and unmerged; re-run CI after #84 merges."
+      "validation": "PR #90 rebased onto post-#84 main, base retargeted to main, and squash-merged 2026-11-06 as cfb62d3; exact-head Windows CI passed in run 42162719905. Issue #87 closed."
     },
     {
       "id": "AUD-BROWSER-004",
       "title": "Align generic YouTube support with browser manifest and sender authorization",
       "severity": "P2",
-      "status": "open_pr",
+      "status": "fixed_merged",
       "issue": 73,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/73",
       "fixPR": 81,
@@ -214,13 +214,13 @@
         "browser-extension/src/service-worker.ts",
         "Scrobblix-Docs/09_BrowserExtension/PERMISSIONS.md"
       ],
-      "validation": "PR #81 head be0e0519b2e9fcda1d79b22ef798db8472a55095 is stacked on PR #84. Both review threads are resolved; no integrated Windows build-and-test result is present on its current stacked base."
+      "validation": "PR #81 reconstructed as a single commit preserving original authorship, rebased onto current main, and squash-merged 2026-11-06 as b0cad79; exact-head Windows CI passed in run 42163260317. Issue #73 closed."
     },
     {
       "id": "AUD-CI-001",
       "title": "Pin third-party GitHub Actions to reviewed commit SHAs",
       "severity": "P2",
-      "status": "open_pr",
+      "status": "fixed_merged",
       "issue": 79,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/79",
       "fixPR": 80,
@@ -230,13 +230,13 @@
         ".github/workflows/release.yml",
         "scripts/test-release-workflow.mjs"
       ],
-      "validation": "PR #80 exact-head CI run 40984305515 passed on head 7e74ddc934fe7abdaf44127c429e40de958b48ae. PR remains open and unmerged."
+      "validation": "PR #80 merged 2026-11-01; third-party actions are SHA-pinned (8 references) and the release workflow contract test passes."
     },
     {
       "id": "AUD-CI-002",
       "title": "Preserve reusable release workflow concurrency compatibility",
       "severity": "P3",
-      "status": "open_pr",
+      "status": "fixed_merged",
       "issue": 85,
       "issueUrl": "https://github.com/frpboy/Scrobblix/issues/85",
       "fixPR": 86,
@@ -246,7 +246,7 @@
         ".github/workflows/release.yml",
         "scripts/test-release-workflow.mjs"
       ],
-      "validation": "PR #86 exact-head CI run 41155240404 passed on head ffdc98c9efc0aa3e1537a0c7f5567eb265dc072d. PR remains open and unmerged."
+      "validation": "PR #86 squash-merged 2026-11-06 as 372294c; exact-head Windows CI passed in run 42163602270. Issue #85 closed."
     },
     {
       "id": "AUD-GOV-001",
