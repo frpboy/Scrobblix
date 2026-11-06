@@ -42,6 +42,7 @@ assert.ok(code.includes("var displayedObservation = MergeTrackMetadataForSamePla
 assert.ok(code.includes("state.LoadedPath == artworkPath") && code.includes("generation != state.Generation"), "Artwork loading must reuse displayed validated bytes and fence stale asynchronous selections.");
 const artworkLoad = code.slice(code.indexOf("private async void SetArtwork("), code.indexOf("private void ArtworkFallbackImageFailed"));
 assert.ok(artworkLoad.includes("ArtworkContent.ReadBoundedAsync") && artworkLoad.includes("_artworkValidator.IsSafeAsync(content") && artworkLoad.includes("await bitmap.SetSourceAsync(stream)"), "Old/new cache display must validate bounded bytes and decode the same snapshot.");
+assert.ok(artworkLoad.includes("state.Pending is not null && state.RequestedPath == artworkPath") && artworkLoad.includes("state.Pending?.Cancel()") && artworkLoad.includes("pending.Token"), "Identical pending polls must not starve loads and newer requests must cancel prior bounded reads/metadata work.");
 assert.ok(!artworkLoad.includes("UriSource ="), "Artwork display must not validate a path then reopen it through a mutable URI.");
 assert.ok(artworkLoad.indexOf("await bitmap.SetSourceAsync(stream)") < artworkLoad.indexOf("image.Source = bitmap"), "The fallback must remain until successful decode completes.");
 assert.ok(registry.includes("Uri.UriSchemeHttps") && registry.includes("File.Exists(path)"), "Provider logos must be HTTPS/exact/local-only and optional.");

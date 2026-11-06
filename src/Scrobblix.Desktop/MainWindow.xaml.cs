@@ -469,7 +469,13 @@ public sealed partial class MainWindow : Window
         return string.Join(Environment.NewLine, lines);
     }
 
-    private sealed class ArtworkLoadState { public long Generation; public string? LoadedPath; }
+    private sealed class ArtworkLoadState
+    {
+        public long Generation;
+        public string? LoadedPath;
+        public string? RequestedPath;
+        public CancellationTokenSource? Pending;
+    }
     private readonly ConditionalWeakTable<Image, ArtworkLoadState> _artworkLoads = new();
     private readonly WindowsArtworkContentValidator _artworkValidator = new();
 
@@ -477,6 +483,9 @@ public sealed partial class MainWindow : Window
     {
         image.Tag = fallback;
         var state = _artworkLoads.GetOrCreateValue(image);
+        // Polling the same pending artwork must not starve a slow valid load by restarting it.
+        if (state.Pending is not null && state.RequestedPath == artworkPath) return;
+        state.Pending?.Cancel();
         var generation = ++state.Generation;
         // Already displayed pixels were validated; never reopen this path in BitmapImage.
         if (artworkPath is not null && state.LoadedPath == artworkPath && image.Source is not null
@@ -484,12 +493,14 @@ public sealed partial class MainWindow : Window
         state.LoadedPath = null;
         image.Source = null; image.Visibility = Visibility.Collapsed; fallback.Visibility = Visibility.Visible;
         if (string.IsNullOrWhiteSpace(artworkPath)) return;
+        using var pending = new CancellationTokenSource();
+        state.Pending = pending; state.RequestedPath = artworkPath;
         try
         {
             byte[]? content;
             await using (var input = File.OpenRead(Path.GetFullPath(artworkPath)))
-                content = await ArtworkContent.ReadBoundedAsync(input, CancellationToken.None);
-            if (content is null || !await _artworkValidator.IsSafeAsync(content, CancellationToken.None))
+                content = await ArtworkContent.ReadBoundedAsync(input, pending.Token);
+            if (content is null || !await _artworkValidator.IsSafeAsync(content, pending.Token))
             {
                 DiagnosticLogRequested?.Invoke("Artwork metadata rejected; placeholder retained.");
                 return;
@@ -511,6 +522,7 @@ public sealed partial class MainWindow : Window
             image.Source = bitmap; image.Visibility = Visibility.Visible; fallback.Visibility = Visibility.Collapsed;
             state.LoadedPath = artworkPath;
         }
+        catch (OperationCanceledException) { /* A newer image request owns the surface. */ }
         catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException
             or InvalidOperationException or System.Runtime.InteropServices.COMException or NotSupportedException)
         {
@@ -519,6 +531,10 @@ public sealed partial class MainWindow : Window
                 image.Source = null; image.Visibility = Visibility.Collapsed; fallback.Visibility = Visibility.Visible;
                 DiagnosticLogRequested?.Invoke($"Artwork unavailable: {exception.GetType().Name}");
             }
+        }
+        finally
+        {
+            if (generation == state.Generation) { state.Pending = null; state.RequestedPath = null; }
         }
     }
 

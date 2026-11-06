@@ -17,3 +17,5 @@ Sources checked:
 - https://learn.microsoft.com/en-us/uwp/api/windows.graphics.imaging.bitmapdecoder
 - https://learn.microsoft.com/en-us/uwp/api/windows.graphics.imaging.bitmapdecoder.createasync
 - https://learn.microsoft.com/en-us/uwp/api/windows.graphics.imaging.bitmapdecoder.pixelwidth
+
+Source review follow-up: identical pending same-path polls are coalesced rather than invalidating slow loads every2s. New selections cancel prior bounded read/metadata work; generation checks still fence an OS image decode that cannot be cancelled through this surface. These source checks are not runtime race or pixel qualification.
