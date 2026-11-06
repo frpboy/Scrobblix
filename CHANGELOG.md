@@ -7,6 +7,7 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 ### Fixed
 
 - Bound the process-local metadata enrichment cache to 512 entries with thread-safe FIFO eviction, preventing unique-track lookups from accumulating indefinitely during long listening sessions. Existing metadata results, cache clearing on Last.fm configuration changes, and persisted history/artwork remain unchanged.
+- Bounded metadata enrichment scheduling: pending enrichment jobs are capped at 8 (extra jobs are skipped and retried by later polls instead of queueing unbounded network work behind the serialized provider gate), and completed-job suppression is a 512-entry FIFO window instead of process-lifetime growth (issue #97).
 
 
 ### Documentation and validation

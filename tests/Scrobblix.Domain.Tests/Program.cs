@@ -90,6 +90,39 @@ var concurrentBoundedCache = new BoundedCache<int, int>(64);
 Parallel.For(0, 5000, value => concurrentBoundedCache.Set(value, value));
 Assert(concurrentBoundedCache.Count <= 64,
     "Concurrent metadata-cache writes never exceed the configured capacity.");
+var jobTracker = new MetadataEnrichmentJobTracker(maxPendingJobs: 2, completedCapacity: 2);
+Assert(jobTracker.TrySchedule("play:1:v1:source"), "The first metadata job key schedules.");
+Assert(jobTracker.TrySchedule("play:2:v1:source"), "A second distinct metadata job key schedules.");
+Assert(!jobTracker.TrySchedule("play:3:v1:source"),
+    "Metadata enrichment scheduling is bounded: extra pending jobs are skipped instead of queueing unbounded work.");
+Assert(!jobTracker.TrySchedule("play:1:v1:source"), "A duplicate pending metadata job is not scheduled twice.");
+jobTracker.Abandon("play:2:v1:source");
+Assert(jobTracker.TrySchedule("play:2:v1:source"),
+    "A failed or cancelled metadata job becomes schedulable again so polling can retry it.");
+jobTracker.Complete("play:1:v1:source");
+Assert(!jobTracker.TrySchedule("play:1:v1:source"),
+    "A completed metadata job stays suppressed while it remains inside the bounded completion window.");
+jobTracker.Complete("play:2:v1:source");
+Assert(jobTracker.CompletedCount == 2, "Completed metadata job tracking reports its bounded window size.");
+jobTracker.Abandon("play:1:v1:source");
+Assert(!jobTracker.TrySchedule("play:1:v1:source"),
+    "Abandoning a completed key does not weaken completed-job suppression.");
+jobTracker.Complete("play:4:v1:source");
+jobTracker.TrySchedule("play:5:v1:source");
+jobTracker.Complete("play:5:v1:source");
+Assert(jobTracker.CompletedCount == 2 && jobTracker.TrySchedule("play:1:v1:source"),
+    "The completed-job window evicts its oldest key at capacity, bounding suppression state for long sessions.");
+var concurrentJobTracker = new MetadataEnrichmentJobTracker(maxPendingJobs: 64, completedCapacity: 128);
+Parallel.For(0, 5000, value =>
+{
+    var key = $"play:{value}:v1:source";
+    if (concurrentJobTracker.TrySchedule(key) && value % 2 == 0)
+    {
+        concurrentJobTracker.Complete(key);
+    }
+});
+Assert(concurrentJobTracker.PendingCount <= 64 && concurrentJobTracker.CompletedCount <= 128,
+    "Concurrent metadata scheduling never exceeds the configured pending or completed bounds.");
 
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
