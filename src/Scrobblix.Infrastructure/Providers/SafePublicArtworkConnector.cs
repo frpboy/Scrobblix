@@ -127,6 +127,7 @@ public static class SafePublicArtworkConnector
             || address.IsIPv6Multicast
             || address.IsIPv6Teredo
             || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0x0D && ipv6[3] == 0xB8)
+            || (ipv6[0] == 0x3F && ipv6[1] == 0xFF && (ipv6[2] & 0xF0) == 0)
             || (ipv6[0] == 0x20 && ipv6[1] == 0x02)
             || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] == 0 && ipv6[3] == 0)
             || (ipv6[0] == 0x20 && ipv6[1] == 0x01 && ipv6[2] <= 0x01))
