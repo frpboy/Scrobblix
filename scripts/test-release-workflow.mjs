@@ -57,3 +57,6 @@ assert.match(ci, /inputs\.concurrency_key/, "Reusable CI concurrency must use th
 assert.match(release, /concurrency_key:\s*\$\{\{\s*github\.run_id\s*\}\}-validate-and-package/, "The release workflow must pass a unique key to its reusable CI invocation.");
 
 console.log(`Release workflow contract checks passed; ${checkedThirdPartyActions} third-party action references are pinned.`);
+
+assert.match(ci, /collect-third-party-notices\.mjs \$bundle/, "Windows ZIP must carry dependency licenses before compression.");
+assert.match(ci, /collect-third-party-notices\.mjs \$companion/, "Browser companion must carry dependency licenses before compression.");
