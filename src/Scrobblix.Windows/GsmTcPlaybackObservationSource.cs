@@ -1,3 +1,4 @@
+using Scrobblix.Application.Artwork;
 using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Text;
@@ -20,6 +21,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
     // Sequence numbers restart with this collector; a fresh instance ID prevents collisions with prior process runs.
     private readonly string _sourceInstanceId = Guid.NewGuid().ToString("N");
     private long _sequence;
+    private readonly WindowsArtworkContentValidator _artworkValidator = new();
 
     public async Task<PlayObservation?> GetCurrentAsync(CancellationToken cancellationToken)
     {
@@ -83,7 +85,8 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
 
         var identity = string.Join("\u001f", applicationId ?? string.Empty, artist ?? string.Empty, title ?? string.Empty);
         var cacheKey = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(identity)));
-        if (_artworkCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath))
+        if (_artworkCache.TryGetValue(cacheKey, out var cachedPath) && File.Exists(cachedPath)
+            && await IsSafeFileAsync(cachedPath, cancellationToken))
         {
             return cachedPath;
         }
@@ -108,6 +111,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             var path = Path.Combine(_artworkDirectory, cacheKey + extension);
             if (File.Exists(path))
             {
+                if (!await IsSafeFileAsync(path, cancellationToken)) return null;
                 _artworkCache[cacheKey] = path;
                 return path;
             }
@@ -117,9 +121,10 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             var bytes = new byte[checked((int)stream.Size)];
             dataReader.ReadBytes(bytes);
             cancellationToken.ThrowIfCancellationRequested();
+            if (!await _artworkValidator.IsSafeAsync(bytes, cancellationToken)) return null;
             var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
-            File.Move(temporaryPath, path, overwrite: true);
+            File.Move(temporaryPath, path, overwrite: false);
             _artworkCache[cacheKey] = path;
             return path;
         }
@@ -131,6 +136,17 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
         {
             return null;
         }
+    }
+
+    private async Task<bool> IsSafeFileAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await using var input = File.OpenRead(path);
+            var content = await ArtworkContent.ReadBoundedAsync(input, cancellationToken);
+            return content is not null && await _artworkValidator.IsSafeAsync(content, cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
     }
 
     private static PlayState MapState(GlobalSystemMediaTransportControlsSessionPlaybackStatus state) => state switch
