@@ -836,6 +836,24 @@ await accountIsolationActionStore.CompleteAsync(
 Assert(await accountIsolationActionStore.ClaimNextDueAsync(
     "worker-account-b", "lastfm", "account-b", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is null,
     "Account B cannot claim account A's completed queue records.");
+await using (var reconnectConnection = new SqliteConnection(accountIsolationConnectionString))
+{
+    await reconnectConnection.OpenAsync();
+    await using var command = reconnectConnection.CreateCommand();
+    command.CommandText = $"UPDATE provider_actions SET state={(int)ProviderActionState.AuthBlocked};";
+    await command.ExecuteNonQueryAsync();
+}
+Assert(await accountIsolationActionStore.ResumeAuthBlockedAsync("lastfm", "account-a", observation.ObservedAtUtc.AddMinutes(2), CancellationToken.None) == 1,
+    "Reconnection resumes only the authenticated account/provider's auth-blocked action.");
+Assert(await CountRowsAsync(accountIsolationConnectionString, $"SELECT COUNT(*) FROM provider_actions WHERE state={(int)ProviderActionState.AuthBlocked};") == 2,
+    "Reconnection cannot release another account or provider's auth-blocked actions.");
+Assert(await CountRowsAsync(accountIsolationConnectionString, $"SELECT COUNT(*) FROM provider_actions WHERE account_id='account-a' AND provider='lastfm' AND completed_utc IS NOT NULL;") == 0,
+    "Reconnection clears terminal completion metadata before resuming delivery.");
+var resumedAccountLease = await accountIsolationActionStore.ClaimNextDueAsync("reconnected", "lastfm", "account-a", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None);
+Assert(resumedAccountLease?.AccountId == "account-a", "The reconnected account's action becomes genuinely claimable.");
+await accountIsolationActionStore.CompleteAsync(resumedAccountLease!.ActionId, ProviderActionState.SubmissionOutcomeUnknown, ReasonCodes.Provider.SubmissionOutcomeUnknown, observation.ObservedAtUtc.AddMinutes(2), CancellationToken.None);
+Assert(await accountIsolationActionStore.ResumeAuthBlockedAsync("lastfm", "account-a", observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 0,
+    "Reconnection never releases ambiguous outcomes for blind retry.");
 File.Delete(accountIsolationDatabasePath);
 
 var actionStore = new SqliteProviderActionStore(connectionString);

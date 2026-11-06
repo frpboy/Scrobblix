@@ -557,6 +557,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                         true,
                         DateTimeOffset.UtcNow),
                     cancellationToken);
+                await new SqliteProviderActionStore(connectionString).ResumeAuthBlockedAsync(
+                    "lastfm", $"lastfm:{session.UserName.ToLowerInvariant()}", DateTimeOffset.UtcNow, cancellationToken);
                 authorization = null;
                 _window.SetLastFmConnected(session.UserName, $"lastfm:{session.UserName.ToLowerInvariant()}");
                 logger.Info("LASTFM", $"Account authorization completed; username={session.UserName}.");

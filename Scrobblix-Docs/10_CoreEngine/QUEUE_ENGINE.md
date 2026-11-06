@@ -44,3 +44,5 @@ The implementation supports retry-now for eligible queue states, a specific acti
 ## Verification boundary
 
 Automated tests cover selected lifecycle, state, lease and recovery rules. Real network/provider acceptance, multi-day listening correctness, account reconnect behavior and long-duration reliability require a real Windows/Last.fm test profile and remain manual release gates.
+
+Successful Last.fm reconnection requeues only `AuthBlocked` actions belonging to the newly authenticated provider/account. Other accounts/providers and ambiguous outcomes remain untouched. Now Playing age checks still apply before delivery.
