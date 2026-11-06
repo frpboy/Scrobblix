@@ -29,6 +29,21 @@ class LocalSchemaTest {
         assertEquals("original",db.query("SELECT id FROM preserve_me").single()["id"])
         assertTrue(db.query("SELECT name FROM sqlite_master WHERE name='android_actions'").isEmpty())
     }
+    @Test fun androidLocaleMetadataIsPreservedButForeignTablesStillFailClosed() = scenario { db ->
+        db.execute("CREATE TABLE android_metadata(locale TEXT)")
+        db.execute("INSERT INTO android_metadata VALUES('en_US')")
+        db.execute("CREATE TABLE foreign_data(id TEXT)")
+        assertThrows(IllegalStateException::class.java) { LocalSchema.initialize(db) }
+        db.execute("DROP TABLE foreign_data")
+        LocalSchema.initialize(db);LocalSchema.initialize(db)
+        assertEquals("en_US",db.query("SELECT locale FROM android_metadata").single()["locale"])
+        assertEquals("1",db.query("PRAGMA user_version").single().values.single())
+    }
+    @Test fun malformedAndroidMetadataFailsClosed() = scenario { db ->
+        db.execute("CREATE TABLE android_metadata(secret TEXT)")
+        assertThrows(IllegalStateException::class.java) { LocalSchema.initialize(db) }
+        assertEquals("0",db.query("PRAGMA user_version").single().values.single())
+    }
     @Test fun interruptedSchemaCreationRollsBackWithoutVersionMarker() = scenario { db ->
         val failing=object:QueueSqlDriver by db {
             override fun execute(sql:String,args:List<Any?>):Int {

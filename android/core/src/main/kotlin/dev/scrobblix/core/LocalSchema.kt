@@ -7,8 +7,17 @@ object LocalSchema {
         val version=db.query("PRAGMA user_version").single().values.single()!!.toInt()
         check(version <= VERSION) { "Database requires a newer Scrobblix version" }
         if(version == VERSION) return@transaction
-        // Reject unversioned prototype/foreign tables rather than guessing a destructive upgrade.
-        check(db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").isEmpty()) {
+        // Android SQLiteConnection creates this locale table before app schema initialization.
+        // Accept only its known shape; never treat arbitrary unversioned app tables as empty.
+        val tables=db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'")
+        if(tables.any { it["name"] == "android_metadata" }) {
+            val columns=db.query("PRAGMA table_info(android_metadata)")
+            check(columns.size == 1 && columns.single()["name"] == "locale" &&
+                columns.single()["type"].equals("TEXT", ignoreCase=true)) {
+                "Unrecognized Android locale metadata schema"
+            }
+        }
+        check(tables.all { it["name"] == "android_metadata" }) {
             "Unversioned database requires an explicit migration"
         }
         db.execute("""CREATE TABLE android_plays (
