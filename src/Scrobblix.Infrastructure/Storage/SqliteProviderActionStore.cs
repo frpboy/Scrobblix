@@ -33,6 +33,27 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         return await command.ExecuteNonQueryAsync(cancellationToken);
     }
 
+    public async Task<int> ResumeAuthBlockedAsync(string provider, string accountId, DateTimeOffset nowUtc, CancellationToken cancellationToken)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(provider);
+        ArgumentException.ThrowIfNullOrWhiteSpace(accountId);
+        await using var connection = new SqliteConnection(connectionString);
+        await connection.OpenAsync(cancellationToken);
+        await using var command = connection.CreateCommand();
+        command.CommandText = """
+            UPDATE provider_actions
+            SET state = $pending, due_utc = $now, updated_utc = $now,
+                last_reason_code = NULL, lease_owner = NULL, lease_expires_utc = NULL
+            WHERE provider = $provider AND account_id = $account AND state = $blocked;
+            """;
+        command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);
+        command.Parameters.AddWithValue("$blocked", (int)ProviderActionState.AuthBlocked);
+        command.Parameters.AddWithValue("$provider", provider);
+        command.Parameters.AddWithValue("$account", accountId);
+        command.Parameters.AddWithValue("$now", nowUtc.UtcDateTime.ToString("O", CultureInfo.InvariantCulture));
+        return await command.ExecuteNonQueryAsync(cancellationToken);
+    }
+
     public async Task<ProviderActionLease?> ClaimNextDueAsync(
         string workerId,
         string provider,
