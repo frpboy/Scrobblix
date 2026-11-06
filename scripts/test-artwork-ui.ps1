@@ -11,6 +11,7 @@ Get-ChildItem $appDirectory -Recurse -Filter *.xbf | ForEach-Object { Write-Outp
 $p = Start-Process -FilePath $app -WorkingDirectory $appDirectory -PassThru
 if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'Isolated fixture app timed out60s' }
 Write-Output "Exit=$($p.ExitCode)"
+if ($p.ExitCode -ne 0) { throw "Fixture app exited with $($p.ExitCode)" }
 $result = Join-Path $output 'result.txt'
 if (-not (Test-Path $result)) { throw 'App exited before producing qualification result' }
 $text = Get-Content $result -Raw

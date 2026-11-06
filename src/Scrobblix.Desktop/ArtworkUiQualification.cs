@@ -68,8 +68,10 @@ public sealed partial class MainWindow
         Assert(CurrentTrackArtwork.Source is not null, "Could not reload after null fallback");
         await Capture("recovered-valid");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
+        // Closing the last WinUI window can end the process before an awaited continuation.
+        // Persist completed assertions/captures first; process exit is checked by the runner.
+        File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI states and captures; close requested during pending load");
         Close();
-        await Task.Delay(250);
     }
 }
 #endif
