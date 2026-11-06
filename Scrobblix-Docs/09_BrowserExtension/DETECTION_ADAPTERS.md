@@ -26,6 +26,8 @@ Structured artist/title/album, duration, position, playback state, artwork URL/r
 
 YouTube Music, Spotify Web, SoundCloud, and Bandcamp are recommended required v1 adapters. Apple Music Web, Deezer, Tidal, Plex/Plexamp Web, Mixcloud, and others enter based on contributor fixtures and maintenance capacity.
 
+Standard YouTube video pages (`youtube.com` and `www.youtube.com`) are custom-site-only in v1. They are not a built-in YouTube adapter; users must add the exact origin and grant browser access before the companion forwards observations.
+
 ## Quality levels
 
 `Verified`, `Beta`, `Generic`, `Unsupported`. The UI does not imply the same reliability across levels.

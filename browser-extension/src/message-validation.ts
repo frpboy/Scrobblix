@@ -20,6 +20,10 @@ const supportedOrigins = new Set([
   "https://open.spotify.com",
 ]);
 
+export function isBuiltInSupportedOrigin(origin: string): boolean {
+  return supportedOrigins.has(origin);
+}
+
 function isOptionalString(value: unknown, maxLength: number): boolean {
   return value === undefined || (
     typeof value === "string" &&
@@ -54,7 +58,7 @@ export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean
 
   try {
     const url = new URL(sender.url);
-    return url.protocol === "https:" && supportedOrigins.has(url.origin);
+    return url.protocol === "https:" && isBuiltInSupportedOrigin(url.origin);
   } catch {
     return false;
   }
