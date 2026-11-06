@@ -19,11 +19,11 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         await using var command = connection.CreateCommand();
         command.CommandText = """
             UPDATE provider_actions
-            SET state = $retry, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
+            SET state = $unknown, due_utc = $now, lease_owner = NULL, lease_expires_utc = NULL,
                 last_reason_code = $reason, updated_utc = $now
             WHERE state = $inFlight AND lease_expires_utc IS NOT NULL AND lease_expires_utc <= $now;
             """;
-        command.Parameters.AddWithValue("$retry", (int)ProviderActionState.RetryScheduled);
+        command.Parameters.AddWithValue("$unknown", (int)ProviderActionState.SubmissionOutcomeUnknown);
         command.Parameters.AddWithValue("$inFlight", (int)ProviderActionState.InFlight);
         command.Parameters.AddWithValue("$reason", ReasonCodes.Provider.LeaseExpired);
         command.Parameters.AddWithValue("$now", now);
