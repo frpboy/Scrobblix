@@ -839,7 +839,39 @@ await actionStore.CompleteAsync(retryLease!.ActionId, ProviderActionState.RetryS
 Assert(await actionStore.ClaimNextDueAsync("worker-2", "lastfm", "account-1", observation.ObservedAtUtc.AddSeconds(30), TimeSpan.FromMinutes(1), CancellationToken.None) is null, "Transient provider failures observe a retry delay.");
 Assert(await actionStore.ClaimNextDueAsync("worker-2", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A retry-scheduled provider action becomes due after its retry delay.");
 Assert(await actionStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 1, "An expired in-flight action is recovered after a restart-safe lease timeout.");
-Assert(await actionStore.ClaimNextDueAsync("worker-3", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null, "A recovered action can be leased for a subsequent delivery attempt.");
+Assert(await actionStore.ClaimNextDueAsync("worker-3", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is null,
+    "An expired in-flight action may already be remotely accepted and must not be automatically leased again.");
+var crashedQueue = await new SqliteQueueReader(connectionString).GetRecentActionsAsync(50, CancellationToken.None);
+Assert(crashedQueue.Any(action => action.PlayId == "play-2" && action.State == ProviderActionState.SubmissionOutcomeUnknown),
+    "Crash-window recovery preserves the durable action as outcome-unknown for reconciliation.");
+Assert(await actionStore.RetryNowAsync(retryLease!.ActionId, observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None),
+    "A deliberate user retry can release an outcome-unknown action after reconciliation.");
+Assert(await actionStore.ClaimNextDueAsync("worker-user-confirmed", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null,
+    "Only an explicit retry makes the crash-ambiguous action deliverable again.");
+// State-setting operations do not append duplicate scrobbles and must not be
+// sent through the scrobble-specific uncertain-outcome reconciliation UI.
+var leaseTypeDatabase = Path.Combine(Path.GetTempPath(), $"scrobblix-lease-types-{Guid.NewGuid():N}.db");
+var leaseTypeConnection = $"Data Source={leaseTypeDatabase};Pooling=False";
+await new SqliteDatabase(leaseTypeConnection).InitializeAsync(CancellationToken.None);
+var leaseTypeLocalStore = new SqliteLocalPlayStore(leaseTypeConnection);
+var leaseTypeStore = new SqliteProviderActionStore(leaseTypeConnection);
+foreach (var actionType in new[] { ProviderActionType.NowPlaying, ProviderActionType.Love, ProviderActionType.Unlove })
+{
+    var typePlayId = $"lease-{actionType}";
+    await leaseTypeLocalStore.UpsertAsync(historyRecord with { PlayId = typePlayId }, CancellationToken.None);
+    if (actionType == ProviderActionType.NowPlaying)
+        Assert(await new SqliteNowPlayingActionWriter(leaseTypeConnection).TryQueueAsync(typePlayId, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "Fresh Now Playing fixture is queued by its production writer.");
+    else
+        Assert(await new SqliteLovedActionWriter(leaseTypeConnection).EnqueueAsync(typePlayId, "account-1", actionType, observation.ObservedAtUtc, CancellationToken.None), "Love/Unlove fixture is queued by its production writer.");
+    var typeLease = await leaseTypeStore.ClaimNextDueAsync("before-crash", "lastfm", "account-1", observation.ObservedAtUtc, TimeSpan.FromSeconds(30), CancellationToken.None);
+    Assert(typeLease?.ActionType == actionType, "The state-setting fixture is genuinely claimable before simulated interruption.");
+    Assert(await leaseTypeStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None) == 1, "The interrupted state-setting action is recovered.");
+    var recoveredTypeLease = await leaseTypeStore.ClaimNextDueAsync("after-crash", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromSeconds(30), CancellationToken.None);
+    Assert(recoveredTypeLease?.ActionType == actionType, "Now Playing, Love and Unlove can resume through the production claim path after recovery.");
+    await leaseTypeStore.CompleteAsync(recoveredTypeLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted, observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None);
+}
+File.Delete(leaseTypeDatabase);
+
 var historyReader = new SqliteHistoryReader(connectionString);
 var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
