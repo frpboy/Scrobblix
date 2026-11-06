@@ -415,3 +415,9 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 | [`OFFICIAL_SOURCES.md`](Scrobblix-Docs/references/OFFICIAL_SOURCES.md) | **Official Sources.** Accessed 2026-08-01. Recheck before implementation/release because APIs, platform support, and terms can change. |
 | [`README.md`](Scrobblix-Docs/references/README.md) | **References.** Documentation for references. |
 | [`SOURCE_REVIEW_CHECKLIST.md`](Scrobblix-Docs/references/SOURCE_REVIEW_CHECKLIST.md) | **External Source Review Checklist.** When an external fact influences requirements or implementation: |
+
+## Third-party license packaging
+
+- `scripts/collect-third-party-notices.mjs` collects license evidence from published NuGet dependencies.
+- `scripts/test-third-party-notices.mjs` tests collection and missing/unsafe license declarations.
+- `scripts/licenses/` contains MIT and Apache-2.0 reference license texts from the SPDX license-list-data project.

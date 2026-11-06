@@ -235,6 +235,10 @@ jobs:
               throw "Test bundle is missing required file: $requiredFile"
             }
           }
+          node scripts/test-third-party-notices.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Third-party notice tests failed.' }
+          node scripts/collect-third-party-notices.mjs $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package license collection failed.' }
           Compress-Archive -Path "$bundle/*" -DestinationPath 'artifacts/Scrobblix-Windows-TestBundle.zip' -Force
 
           # Publish the browser companion as a separate, smaller development artifact too.
@@ -292,6 +296,8 @@ jobs:
               throw "Browser companion artifact is missing required file: $requiredFile"
             }
           }
+          node scripts/collect-third-party-notices.mjs $companion
+          if ($LASTEXITCODE -ne 0) { throw 'Browser companion license collection failed.' }
           Compress-Archive -Path "$companion/*" -DestinationPath 'artifacts/Scrobblix-BrowserCompanion.zip' -Force
 
       - name: Upload Windows test bundle

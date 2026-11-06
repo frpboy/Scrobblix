@@ -1,0 +1,32 @@
+import assert from 'node:assert/strict';
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { collectNotices } from './collect-third-party-notices.mjs';
+const root = mkdtempSync(join(tmpdir(), 'scrobblix-notices-'));
+try {
+  const bundle = join(root, 'bundle'), cache = join(root, 'cache');
+  mkdirSync(bundle); mkdirSync(cache);
+  const license = join(root, 'LICENSE'); writeFileSync(license, 'app license fixture');
+  writeFileSync(join(bundle, 'app.deps.json'), JSON.stringify({ libraries: { 'Example/1.0.0': {type:'package'}, 'App/1':{type:'project'} } }));
+  const pkg = join(cache, 'example', '1.0.0'); mkdirSync(pkg, {recursive:true});
+  writeFileSync(join(pkg, 'example.nuspec'), '<package><metadata><license type="expression">MIT</license></metadata></package>');
+  writeFileSync(join(pkg, 'NOTICE.txt'), 'copyright fixture');
+  let result = collectNotices(bundle, cache, license);
+  assert.equal(result.length, 1);
+  assert.equal(readFileSync(join(bundle,'LICENSE'),'utf8'), 'app license fixture');
+  const target = join(bundle,'third-party-notices','Example-1.0.0');
+  assert.equal(readFileSync(join(target,'NOTICE.txt'),'utf8'), 'copyright fixture');
+  assert.ok(readFileSync(join(target,'SPDX-MIT.txt'),'utf8').includes('Permission is hereby granted'));
+  writeFileSync(join(pkg,'example.nuspec'), '<package><metadata><license type="file">LICENSE.txt</license></metadata></package>');
+  assert.throws(()=>collectNotices(bundle,cache,license), /Missing declared license file/);
+  writeFileSync(join(pkg,'LICENSE.txt'),'package license fixture');
+  result=collectNotices(bundle,cache,license);
+  assert.ok(existsSync(join(target,'LICENSE.txt')));
+  assert.equal(result[0].licenseType,'file');
+  writeFileSync(join(pkg,'example.nuspec'), '<license type="file">../secret.txt</license>');
+  assert.throws(()=>collectNotices(bundle,cache,license), /Unsafe license path/);
+  writeFileSync(join(pkg,'example.nuspec'), '<license type="expression">Unknown-1.0</license>');
+  assert.throws(()=>collectNotices(bundle,cache,license), /requires review/);
+  console.log('Third-party notice packaging fixtures passed.');
+} finally { rmSync(root,{recursive:true,force:true}); }
