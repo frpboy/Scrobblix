@@ -37,3 +37,7 @@ From `android/`: `./gradlew :core:test :platform:assembleDebug --no-daemon`, wit
 ## Runtime attempt
 
 Local API36 emulator/system image installed and AVD created. Acceleration check fails (no VMX/SVM/KVM), and bounded software-renderer startup fails compatibility checks: available1CPU versus emulator minimum2, memory request raised to2560MiB beyond available2GiB. A one-core command override did not bypass the documented runtime check. No guest boot, screenshot, installed APK or runtime test is claimed. A standard CI/emulator route or real device still needs qualification; no paid machine requested.
+
+## Android SQLite runtime qualification pending
+
+Two instrumentation tests now target the actual Android SQLite driver (reopen/history, unknown recovery/stale completion fencing, rollback/future-version rejection). Kotlin test source compiles locally; full instrumentation APK dex packaging exceeded two bounded local120s build attempts and is not claimed passed. A separate standard Ubuntu API36 KVM emulator job will build/install/run these tests, no public app identity or release key. Until its actual result is inspected, Android runtime qualification remains pending.

@@ -26,3 +26,31 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           android/gradlew -p android :core:test :platform:assembleDebug --no-daemon
+  android-sqlite-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Android API36 emulator and actual SQLite instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-36;default;x86_64'
+          echo no | avdmanager create avd -n scrobblix-test -k 'system-images;android-36;default;x86_64' --force
+          emulator -avd scrobblix-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          timeout 300 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-emulator.log; exit 1; fi
+          android/gradlew -p android :platform:connectedDebugAndroidTest --no-daemon
