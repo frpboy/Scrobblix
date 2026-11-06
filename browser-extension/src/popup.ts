@@ -28,6 +28,7 @@ const currentSiteText = document.querySelector<HTMLElement>("#current-site")!;
 const pauseButton = document.querySelector<HTMLButtonElement>("#pause")!;
 const trackButton = document.querySelector<HTMLButtonElement>("#track-site")!;
 const customSites = document.querySelector<HTMLUListElement>("#custom-sites")!;
+const noCustomSites = document.querySelector<HTMLElement>("#no-custom-sites")!;
 const connectionButton = document.querySelector<HTMLButtonElement>("#test-connection")!;
 const connectionRecovery = document.querySelector<HTMLElement>("#native-recovery")!;
 const connectionCode = document.querySelector<HTMLElement>("#native-diagnostic")!;
@@ -129,6 +130,9 @@ async function trackCurrentSite(): Promise<void> {
 }
 
 function renderCustomSites(sites: CustomSite[]): void {
+  if (noCustomSites) {
+    noCustomSites.style.display = sites.length === 0 ? "block" : "none";
+  }
   customSites.replaceChildren(...sites.map((site) => {
     const item = document.createElement("li");
     const label = document.createElement("span");
@@ -136,6 +140,7 @@ function renderCustomSites(sites: CustomSite[]): void {
     const remove = document.createElement("button");
     remove.type = "button";
     remove.textContent = "Remove";
+    remove.setAttribute("aria-label", `Remove ${site.origin}`);
     remove.addEventListener("click", () => void removeSite(site));
     item.append(label, remove);
     return item;
