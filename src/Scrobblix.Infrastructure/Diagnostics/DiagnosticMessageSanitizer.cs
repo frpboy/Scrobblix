@@ -20,6 +20,11 @@ public static class DiagnosticMessageSanitizer
         normalized = Regex.Replace(normalized,
             @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+",
             "[AUTHORIZATION_URL_REDACTED]");
+        // Consume quoted metadata before interpreting semicolons as field boundaries.
+        // Unterminated quoted values are redacted to the end rather than leaked.
+        normalized = Regex.Replace(normalized,
+            "(?i)\\b(artist|title|track|album|album_artist)\\s*[=:]\\s*\"(?:\\\\.|[^\"\\\\])*(?:\"|$)",
+            "$1=[REDACTED]");
         normalized = Regex.Replace(normalized,
             @"(?i)\b(artist|title|track|album|album_artist)\s*[=:]\s*.*?(?=;\s*[a-z][a-z0-9_]*\s*[=:]|$)",
             "$1=[REDACTED]");
