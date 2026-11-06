@@ -62,4 +62,9 @@ jobs:
             sleep 2
           done
           if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-emulator.log; exit 1; fi
-          android/gradlew -p android :platform:connectedDebugAndroidTest --no-daemon
+          if ! android/gradlew -p android :platform:connectedDebugAndroidTest --no-daemon; then
+            # Synthetic test data only. Preserve exact test/runner failures in job logs.
+            find android/platform/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \;
+            adb logcat -d -b crash
+            exit 1
+          fi
