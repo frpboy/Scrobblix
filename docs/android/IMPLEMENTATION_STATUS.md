@@ -16,7 +16,7 @@ Local-first Last.fm scrobbling from supported Android music players, local liste
 
 ## Evidence and limits
 
-The adapter library builds locally with .NET10 Android36.1.2, Android SDK36 and the installed JDK, zero warnings/errors. Shared mapping assertions and core tests run locally except the Windows-only locked-WAL restore block, temporarily omitted and restored. These tests do not exercise Android binder permissions, lifecycle, notifications, battery management, reboot recovery or actual music players. A scratch Android-target reference probe also compiles existing Infrastructure/SQLite/provider references; this is not SQLite runtime proof.
+The adapter library builds locally with .NET10 Android36.1.2, Android SDK36 and the installed JDK, zero warnings/errors. Shared mapping assertions and core tests run locally except the Windows-only locked-WAL restore block, temporarily omitted and restored. A dedicated standard Ubuntu CI job compiles the Android library; Windows CI still checks the shared mapper. Neither job exercises Android binder permissions, lifecycle, notifications, battery management, reboot recovery or actual music players. A scratch Android-target reference probe also compiles existing Infrastructure/SQLite/provider references; this is not SQLite runtime proof.
 
 ## Required before release
 

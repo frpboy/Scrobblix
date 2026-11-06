@@ -1,0 +1,48 @@
+name: Android platform validation
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/Scrobblix.Android/**'
+      - 'src/Scrobblix.Application/**'
+      - 'src/Scrobblix.Domain/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/android.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'src/Scrobblix.Android/**'
+      - 'src/Scrobblix.Application/**'
+      - 'src/Scrobblix.Domain/**'
+      - 'Directory.Build.props'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-platform-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compile-adapter:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Install Android workload
+        run: dotnet workload install android --skip-manifest-update
+      - name: Compile Android platform library (not an APK)
+        shell: bash
+        run: |
+          dotnet build src/Scrobblix.Android/Scrobblix.Android.csproj \
+            --configuration Release \
+            -p:AndroidSdkDirectory="$ANDROID_HOME" \
+            -p:JavaSdkDirectory="$JAVA_HOME_21_X64"
