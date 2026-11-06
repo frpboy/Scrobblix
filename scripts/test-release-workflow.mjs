@@ -52,4 +52,8 @@ for (const path of workflowFiles) {
 }
 assert.ok(checkedThirdPartyActions > 0, "The action pin policy must inspect at least one third-party action.");
 
+assert.match(ci, /workflow_call:\s*\n\s+inputs:\s*\n\s+concurrency_key:\s*\n\s+description:[^\n]*\n\s+required:\s*false\s*\n\s+type:\s*string/s, "Reusable CI calls must keep the caller key optional for single-call compatibility.");
+assert.match(ci, /inputs\.concurrency_key/, "Reusable CI concurrency must use the caller-supplied key regardless of the caller event name.");
+assert.match(release, /concurrency_key:\s*\$\{\{\s*github\.run_id\s*\}\}-validate-and-package/, "The release workflow must pass a unique key to its reusable CI invocation.");
+
 console.log(`Release workflow contract checks passed; ${checkedThirdPartyActions} third-party action references are pinned.`);
