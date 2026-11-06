@@ -1,5 +1,11 @@
 ## 2026-10-31 live addendum
 
+## Current-source reconciliation - 2026-11-07
+
+[Exact main 3f158e6 addendum](CURRENT_SOURCE_ADDENDUM_2026-11-07.md) supersedes older current-status language below for changed safety/startup coverage and open gates. Earlier SHA/scanner/environment statements remain historical, not re-dated current proof. Full audit/release status remains incomplete.
+
+---
+
 - **Current audited baseline:** `main` at `5227d5312f6a4fa358d517b0b0dd5c495a29bb96`; the non-truncated recursive tree contains 412 file blobs. [Main Windows CI run 40640792254](https://github.com/frpboy/Scrobblix/actions/runs/40640792254) passed on that exact SHA.
 - **Current source follow-up:** #74 remains open; PR #91 passes Windows CI for the configurable pipe-name environment variable, but does not establish server-side pipe ACL or peer-identity correctness. #75 credential-canary coverage and #76 dependency/license/SBOM/Git-history scans remain unrun.
 - **Additional browser authorization work:** #87 is being addressed in draft PR #90. Its current head `67dfc09640dffa739b76a173c0f9a5f3605efc8f` has Windows CI run [41156473471](https://github.com/frpboy/Scrobblix/actions/runs/41156473471) pending at this update. The branch adds serialized mutations, validated site identity for storage-read recovery, per-site session tombstones, and explicit manual-revocation warnings for incomplete cleanup. No pass or merge is claimed.
