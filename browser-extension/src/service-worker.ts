@@ -282,10 +282,20 @@ async function handlePopupMessage(message: PopupMessage): Promise<CompanionSetti
         return { added: false, detail: "This registration ID has been revoked. Refresh the popup and try again." };
       }
 
-      const permissionGranted = await scrobblixWorkerApi.permissions.contains({ origins: [message.site.pattern] });
-      if (!permissionGranted) return { added: false, detail: "The browser permission is no longer granted. Grant access and try again." };
-
       try {
+        const permissionGranted = await scrobblixWorkerApi.permissions.contains({ origins: [message.site.pattern] });
+        if (!permissionGranted) return { added: false, detail: "The browser permission is no longer granted. Grant access and try again." };
+
+        // A prior failed removal can leave an old script ID behind even after
+        // its grant was revoked. Remove matching orphan IDs before re-adding.
+        const registeredScripts = await scrobblixWorkerApi.scripting.getRegisteredContentScripts();
+        const orphanIds = registeredScripts
+          .filter((script) => /^site_[a-f0-9]{32}$/u.test(script.id)
+            && script.matches?.includes(message.site.pattern))
+          .map((script) => script.id);
+        if (orphanIds.length > 0) {
+          await scrobblixWorkerApi.scripting.unregisterContentScripts({ ids: orphanIds });
+        }
         await scrobblixWorkerApi.scripting.registerContentScripts([{
           id: message.site.id,
           matches: [message.site.pattern],

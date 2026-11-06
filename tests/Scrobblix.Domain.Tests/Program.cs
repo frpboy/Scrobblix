@@ -88,8 +88,8 @@ Assert(boundedCache.Count == 0 && !boundedCache.TryGetValue("second", out _),
     "Clearing metadata cache state removes all entries and eviction history.");
 var concurrentBoundedCache = new BoundedCache<int, int>(64);
 Parallel.For(0, 5000, value => concurrentBoundedCache.Set(value, value));
-Assert(concurrentBoundedCache.Count <= 64,
-    "Concurrent metadata-cache writes never exceed the configured capacity.");
+Assert(concurrentBoundedCache.Count == 64,
+    "Concurrent metadata-cache writes retain exactly the configured capacity after distinct writes.");
 var jobTracker = new MetadataEnrichmentJobTracker(maxPendingJobs: 2, completedCapacity: 2);
 Assert(jobTracker.TrySchedule("play:1:v1:source"), "The first metadata job key schedules.");
 Assert(jobTracker.TrySchedule("play:2:v1:source"), "A second distinct metadata job key schedules.");
