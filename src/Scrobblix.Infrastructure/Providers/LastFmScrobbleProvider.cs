@@ -34,8 +34,10 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (TryReadApiError(payload, out var apiError))
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapError(apiError), response);
+            if (hasApiError || payload.Length > 65536)
+                return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
             if (!response.IsSuccessStatusCode)
             {
                 // A response without a documented Last.fm API result is ambiguous: do not blindly resend it.
@@ -84,8 +86,8 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (TryReadApiError(payload, out var apiError))
-                return WithRetryAfter(MapError(apiError), response);
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
+                return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
             {
                 var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
@@ -130,8 +132,8 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
-            if (TryReadApiError(payload, out var apiError))
-                return WithRetryAfter(MapError(apiError), response);
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
+                return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
             {
                 var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
@@ -304,9 +306,10 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             : delay.Value;
     }
 
-    private static bool TryReadApiError(string payload, out int errorCode)
+    private static bool TryReadApiError(string payload, out int errorCode, out bool hasApiError)
     {
         errorCode = 0;
+        hasApiError = false;
         // Only documented, well-typed API failures establish rejection. Arbitrary HTML,
         // unknown error codes and oversized bodies must not authorize append-only retries.
         if (payload.Length > 65536) return false;
@@ -314,8 +317,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             using var document = JsonDocument.Parse(payload);
             if (document.RootElement.ValueKind != JsonValueKind.Object
-                || !document.RootElement.TryGetProperty("error", out var error)
-                || error.ValueKind != JsonValueKind.Number || !error.TryGetInt32(out var code)
+                || !document.RootElement.TryGetProperty("error", out var error)) return false;
+            hasApiError = true;
+            if (error.ValueKind != JsonValueKind.Number || !error.TryGetInt32(out var code)
                 || code is not (2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 13 or 16 or 26 or 29)) return false;
             errorCode = code;
             return true;
@@ -330,6 +334,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
     {
         return LastFmRequestSigner.Sign(parameters, secret);
     }
+
+    private static ProviderSubmissionResult MapStateChangeError(int errorCode) => errorCode == 8
+        ? new(false, ReasonCodes.Provider.TemporaryUnavailable, true) : MapError(errorCode);
 
     private static ProviderSubmissionResult MapError(int errorCode) => errorCode switch
     {
