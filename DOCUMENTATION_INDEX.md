@@ -419,3 +419,9 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 ## Released beta.2 audit evidence
 
 [Audit evidence and scope](docs/security/audit-2026-11-06/README.md) records package advisory checks, release SBOM, redacted history scan and cross-platform logger/export canary validation at released source `81142dc`. It does not close Windows or independent-audit gates.
+
+## Third-party license packaging
+
+- `scripts/collect-third-party-notices.mjs` collects license evidence from published NuGet dependencies.
+- `scripts/test-third-party-notices.mjs` tests collection and missing/unsafe license declarations.
+- `scripts/licenses/` contains MIT and Apache-2.0 reference license texts from the SPDX license-list-data project.
