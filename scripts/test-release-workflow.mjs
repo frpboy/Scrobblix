@@ -60,3 +60,5 @@ console.log(`Release workflow contract checks passed; ${checkedThirdPartyActions
 
 assert.match(ci, /collect-third-party-notices\.mjs \$bundle/, "Windows ZIP must carry dependency licenses before compression.");
 assert.match(ci, /collect-third-party-notices\.mjs \$companion/, "Browser companion must carry dependency licenses before compression.");
+
+assert.match(read("scripts/setup-browser-companion.ps1"), /collect-third-party-notices\.mjs \$packageRoot/, "Local source-clone packaging must carry the same license evidence.");

@@ -1698,6 +1698,14 @@ static async Task<long> CountRowsAsync(string connectionString, string sql)
 }
 
 var retention = new SqlitePlaybackObservationRetention(retentionConnectionString);
+foreach (var invalidBatchSize in new[] { -1, 0, 5_001 })
+{
+    var rejectedBatch = false;
+    try { await retention.PruneExpiredAsync(retentionCutoff, invalidBatchSize, CancellationToken.None); }
+    catch (ArgumentOutOfRangeException) { rejectedBatch = true; }
+    Assert(rejectedBatch, "Retention rejects unbounded, empty or excessive batch sizes before deleting.");
+}
+
 Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 1_205,
     "Synthetic retention dataset holds 1,200 expired, 1 boundary-expired, 1 boundary-kept and 3 recent raw observations.");
 var retentionIndex = await CountRowsAsync(retentionConnectionString,
@@ -1715,9 +1723,34 @@ catch (OperationCanceledException)
 Assert(retentionCancelled, "Retention pruning honors a pre-cancelled token instead of deleting.");
 Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 1_205,
     "A cancelled prune leaves every raw observation intact for safe retry.");
+// Abort the second batch using a SQLite trigger: the first500 deletions must
+// remain committed, and the failing transaction must roll back for safe retry.
+await using (var faultConnection = new SqliteConnection(retentionConnectionString))
+{
+    await faultConnection.OpenAsync();
+    await using var faultCommand = faultConnection.CreateCommand();
+    faultCommand.CommandText = """
+        CREATE TRIGGER retention_injected_failure BEFORE DELETE ON playback_observations
+        WHEN (SELECT count(*) FROM playback_observations) <= 705
+        BEGIN SELECT RAISE(ABORT, 'synthetic retention batch failure'); END;
+        """;
+    await faultCommand.ExecuteNonQueryAsync();
+}
+var retentionBatchFailed = false;
+try { await retention.PruneExpiredAsync(retentionCutoff, 500, CancellationToken.None); }
+catch (SqliteException) { retentionBatchFailed = true; }
+Assert(retentionBatchFailed && await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 705,
+    "A second-batch SQLite failure preserves the committed first batch and rolls back the failed batch.");
+await using (var faultConnection = new SqliteConnection(retentionConnectionString))
+{
+    await faultConnection.OpenAsync();
+    await using var faultCommand = faultConnection.CreateCommand();
+    faultCommand.CommandText = "DROP TRIGGER retention_injected_failure;";
+    await faultCommand.ExecuteNonQueryAsync();
+}
 var prunedTotal = await retention.PruneExpiredAsync(retentionCutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, CancellationToken.None);
-Assert(prunedTotal == 1_201,
-    "Retention pruning deletes exactly the 1,200 expired rows plus the boundary-expired row across bounded batches.");
+Assert(prunedTotal == 701,
+    "Retention retry deletes exactly the remaining701 expired rows after the committed first batch.");
 Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 4,
     "Only the boundary-kept and recent raw observations survive the 30-day retention window.");
 Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM plays WHERE play_id = 'retention-canonical';") == 1,

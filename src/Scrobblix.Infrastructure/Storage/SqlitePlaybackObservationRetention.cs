@@ -10,6 +10,8 @@ public sealed class SqlitePlaybackObservationRetention(string connectionString)
     // are returned; no listening metadata leaves this method.
     public async Task<long> PruneExpiredAsync(DateTimeOffset cutoffUtc, int batchSize, CancellationToken cancellationToken)
     {
+        ArgumentOutOfRangeException.ThrowIfLessThan(batchSize, 1);
+        ArgumentOutOfRangeException.ThrowIfGreaterThan(batchSize, 5_000);
         var cutoff = cutoffUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture);
         long totalDeleted = 0;
         while (true)
