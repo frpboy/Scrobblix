@@ -34,7 +34,7 @@ while (await ReadExactlyAsync(input, lengthBuffer, CancellationToken.None))
     {
         using var message = JsonDocument.Parse(payload);
         var root = message.RootElement;
-        if (root.GetProperty("protocolVersion").GetInt32() != 1
+        if (!root.GetProperty("protocolVersion").TryGetInt32(out var protocolVersion) || protocolVersion != 1
             || root.GetProperty("messageId").GetString() is not { Length: > 0 and <= 128 } messageId
             || root.GetProperty("type").GetString() is not { Length: > 0 and <= 128 } type)
         {
