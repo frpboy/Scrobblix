@@ -25,7 +25,8 @@ class MediaSessionReaderTest {
             session.setMetadata(MediaMetadata.Builder().putString(MediaMetadata.METADATA_KEY_ARTIST,"synthetic artist")
                 .putString(MediaMetadata.METADATA_KEY_TITLE,"synthetic title")
                 .putLong(MediaMetadata.METADATA_KEY_DURATION,300000).build())
-            session.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,12000,1f).build())
+            // Static synthetic position: native controller may extrapolate at nonzero playback speed.
+            session.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,12000,0f).build())
             val result=MediaSessionReader.snapshot(session.controller)
             assertEquals("synthetic title",result.title);assertEquals("synthetic artist",result.artist)
             assertEquals(300000L,result.durationMs);assertEquals(12000L,result.positionMs)
