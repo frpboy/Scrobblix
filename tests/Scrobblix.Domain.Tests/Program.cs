@@ -638,6 +638,15 @@ Assert(!sanitizedDiagnostic.Contains("Earth", StringComparison.Ordinal)
     && sanitizedDiagnostic.Contains("title=[REDACTED]", StringComparison.Ordinal),
     "Diagnostic logs fully redact artist/title/album values containing commas, semicolons, pipes and quotes.");
 
+var quotedBoundaryDiagnostic = DiagnosticMessageSanitizer.Sanitize(
+    "title=\"Hello; Part=2\"; action_id=abc123");
+Assert(!quotedBoundaryDiagnostic.Contains("Part=2", StringComparison.Ordinal)
+    && quotedBoundaryDiagnostic.Contains("action_id=abc123", StringComparison.Ordinal),
+    "Quoted metadata containing key-like fields is fully redacted before diagnostic boundary parsing.");
+var unfinishedQuotedDiagnostic = DiagnosticMessageSanitizer.Sanitize("title=\"Hello; Part=2");
+Assert(!unfinishedQuotedDiagnostic.Contains("Part=2", StringComparison.Ordinal),
+    "Unterminated quoted metadata is redacted to end rather than leaked.");
+
 // Verify local calendar-day boundaries around daylight-saving transitions independently of the CI machine's time zone.
 static (DateTimeOffset StartUtc, DateTimeOffset EndUtc) GetLocalDayUtcBounds(DateTimeOffset now, TimeZoneInfo timeZone)
 {
