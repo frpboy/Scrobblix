@@ -42,12 +42,23 @@ foreach (var nonPublicAddress in new[]
     "0.0.0.1", "10.0.0.1", "100.64.0.1", "127.0.0.1", "169.254.169.254",
     "172.16.0.1", "192.0.2.1", "192.168.1.1", "198.18.0.1", "203.0.113.1",
     "224.0.0.1", "240.0.0.1", "::", "::1", "fc00::1", "fe80::1",
-    "2001:db8::1", "2002:7f00:1::", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
+    "2001:db8::1", "3fff::", "3fff:f::1", "3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff", "2002:7f00:1::", "::ffff:127.0.0.1", "::ffff:10.0.0.1",
 })
 {
     Assert(!SafePublicArtworkConnector.IsPublicUnicastAddress(IPAddress.Parse(nonPublicAddress)),
         $"Non-public address {nonPublicAddress} is rejected for artwork fetching.");
 }
+
+Assert(SafePublicArtworkConnector.IsPublicUnicastAddress(IPAddress.Parse("3fff:1000::1")),
+    "The address immediately beyond the /20 documentation prefix is not accidentally blocked by this rule.");
+var documentationResolverRejected = false;
+try
+{
+    await SafePublicArtworkConnector.ConnectAsync(new DnsEndPoint("artwork.example", 443),
+        (_, _) => Task.FromResult(new[] { IPAddress.Parse("3fff:fff::1") }), CancellationToken.None);
+}
+catch (HttpRequestException) { documentationResolverRejected = true; }
+Assert(documentationResolverRejected, "Documentation-prefix DNS answers fail before opening a socket.");
 
 var privateDnsResolutionRejected = false;
 var privateDnsResolverCalled = false;
