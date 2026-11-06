@@ -47,3 +47,11 @@ CI runtime startup at648f2d6 failed before guest boot: emulator could not discov
 At848cc3e the CI API36 emulator booted and the instrumentation APK built; connectedDebugAndroidTest then failed. The log did not include test/runner details, so XML and crash diagnostics are now emitted on failure. No passing Android test is claimed.
 
 Actual Android tests at a9a3040 both failed schema initialization because Android SQLiteConnection creates android_metadata(locale TEXT) before app tables. LocalSchema now allows only this exact known metadata shape while still rejecting foreign tables and malformed metadata, with two new JVM regressions. Source checked: https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/master/core/java/android/database/sqlite/SQLiteConnection.java . Android rerun remains required.
+
+## Verified runtime milestone and next credential boundary
+
+At23792e3,22 JVM tests, Android AAR build, actual API36 SQLite instrumentation job and Windows CI pass. Actual runtime: https://github.com/frpboy/Scrobblix/actions/runs/42289215009/job/128137913957 . This supersedes the pending SQLite statements above, not service/player/auth/UI or release gates.
+
+A local SessionSecretStore boundary now uses per-provider/account AndroidKeyStore AES256-GCM keys, randomized IVs, account-bound authenticated data and AtomicFile ciphertext under noBackupFilesDir. It never stores plaintext as a fallback or regenerates keys while reading. Corruption/key loss returns unavailable for reconnect; no automatic data deletion. Its successful result redacts toString. Explicit remove is local only, not provider revocation. Single-process use only; background key use does not require biometric interaction. Hardware-backed/StrongBox security is not claimed. Actual emulator tests for key round-trip/reopen, replacement, account isolation, removal, tamper and key-loss fail-closed are added; test source compiles, runtime rerun pending. No actual user credentials were used, no auth transport is wired, and an app's final backup/data extraction manifest policy still needs review.
+
+Credential design sources: https://developer.android.com/privacy-and-security/keystore and https://developer.android.com/identity/data/autobackup . The latter documents noBackupFilesDir exclusion. No persistent secrets or production signing keys are included.
