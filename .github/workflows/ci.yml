@@ -51,6 +51,9 @@ jobs:
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
+      - name: Run native Windows artwork metadata checks
+        run: dotnet run --project tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj --configuration Release --no-build
+
       - name: Dump WinUI XAML compiler diagnostics on build failure
         if: failure()
         shell: pwsh

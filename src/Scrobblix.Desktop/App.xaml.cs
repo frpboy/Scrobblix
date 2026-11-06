@@ -336,7 +336,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 initialApiKey,
                 Path.Combine(dataDirectory, "artwork"),
                 message => logger.Info("METADATA_PROVIDER", message),
-                artworkHttpClient);
+                artworkHttpClient, new WindowsArtworkContentValidator());
             // Bound pending metadata work and completed-job suppression: rapid track
             // changes can no longer queue unbounded network work behind the
             // serialized provider gate, and long sessions cannot grow the
