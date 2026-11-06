@@ -12,14 +12,7 @@ data class ActionLease(val id: String, val provider: String, val account: String
 
 /** Local durable queue only. Does not contact Last.fm or persist credentials. */
 class DurableQueue(private val db: QueueSqlDriver) {
-    fun initialize() {
-        db.execute("""CREATE TABLE IF NOT EXISTS android_actions (
-            id TEXT PRIMARY KEY, provider TEXT NOT NULL, account TEXT NOT NULL, type TEXT NOT NULL,
-            state TEXT NOT NULL, created_ms INTEGER NOT NULL, due_ms INTEGER NOT NULL,
-            lease_owner TEXT, lease_expires_ms INTEGER, attempts INTEGER NOT NULL DEFAULT 0,
-            reason TEXT, completed_ms INTEGER, play_id TEXT,
-            UNIQUE(provider, account, type, id))""")
-    }
+    fun initialize() { LocalSchema.initialize(db) }
     fun enqueue(id: String, provider: String, account: String, type: ActionType, now: Long, playId: String? = null): Boolean {
         require(id.isNotBlank() && provider.isNotBlank() && account.isNotBlank())
         return db.execute("INSERT OR IGNORE INTO android_actions(id,provider,account,type,state,created_ms,due_ms,play_id) VALUES(?,?,?,?,?,?,?,?)",

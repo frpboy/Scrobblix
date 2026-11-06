@@ -5,12 +5,7 @@ data class LocalPlay(val id: String, val artist: String?, val title: String?, va
 
 /** Atomic local history + per-account scrobble intent. Never stores provider/session secrets. */
 class ListeningHistory(private val db: QueueSqlDriver, private val queue: DurableQueue) {
-    fun initialize() {
-        queue.initialize()
-        db.execute("""CREATE TABLE IF NOT EXISTS android_plays (
-            id TEXT PRIMARY KEY, artist TEXT, title TEXT, album TEXT, started_ms INTEGER NOT NULL,
-            duration_ms INTEGER, confirmed_ms INTEGER NOT NULL)""")
-    }
+    fun initialize() { LocalSchema.initialize(db) }
     fun observe(play: LocalPlay, provider: String?, account: String?, now: Long): Boolean {
         require(play.id.isNotBlank() && play.confirmedMs >= 0)
         require(listOf(play.artist,play.title,play.album).all { text ->
