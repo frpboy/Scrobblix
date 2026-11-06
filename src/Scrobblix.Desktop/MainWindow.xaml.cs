@@ -486,6 +486,7 @@ public sealed partial class MainWindow : Window
         // Polling the same pending artwork must not starve a slow valid load by restarting it.
         if (state.Pending is not null && state.RequestedPath == artworkPath) return;
         state.Pending?.Cancel();
+        state.Pending = null; state.RequestedPath = null;
         var generation = ++state.Generation;
         // Already displayed pixels were validated; never reopen this path in BitmapImage.
         if (artworkPath is not null && state.LoadedPath == artworkPath && image.Source is not null
