@@ -416,6 +416,10 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 | [`README.md`](Scrobblix-Docs/references/README.md) | **References.** Documentation for references. |
 | [`SOURCE_REVIEW_CHECKLIST.md`](Scrobblix-Docs/references/SOURCE_REVIEW_CHECKLIST.md) | **External Source Review Checklist.** When an external fact influences requirements or implementation: |
 
+## Released beta.2 audit evidence
+
+[Audit evidence and scope](docs/security/audit-2026-11-06/README.md) records package advisory checks, release SBOM, redacted history scan and cross-platform logger/export canary validation at released source `81142dc`. It does not close Windows or independent-audit gates.
+
 ## Third-party license packaging
 
 - `scripts/collect-third-party-notices.mjs` collects license evidence from published NuGet dependencies.

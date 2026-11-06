@@ -1,0 +1,328 @@
+{
+  "queries": [
+    {
+      "package": {
+        "name": "Microsoft.Data.Sqlite",
+        "ecosystem": "NuGet"
+      },
+      "version": "10.0.14"
+    },
+    {
+      "package": {
+        "name": "Microsoft.Data.Sqlite.Core",
+        "ecosystem": "NuGet"
+      },
+      "version": "10.0.14"
+    },
+    {
+      "package": {
+        "name": "Microsoft.Web.WebView2",
+        "ecosystem": "NuGet"
+      },
+      "version": "1.0.3719.77"
+    },
+    {
+      "package": {
+        "name": "Microsoft.Windows.AI.MachineLearning",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.4.89"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.AI",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.Foundation",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.InteractiveExperiences",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.ML",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.Search",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.Widgets",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK.WinUI",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4"
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.bundle_e_sqlite3",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13"
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.core",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13"
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.lib.e_sqlite3",
+        "ecosystem": "NuGet"
+      },
+      "version": "3.53.3"
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.provider.e_sqlite3",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13"
+    },
+    {
+      "package": {
+        "name": "System.Numerics.Tensors",
+        "ecosystem": "NuGet"
+      },
+      "version": "9.0.0"
+    },
+    {
+      "package": {
+        "name": "@types/chrome",
+        "ecosystem": "npm"
+      },
+      "version": "0.3.7"
+    },
+    {
+      "package": {
+        "name": "@types/har-format",
+        "ecosystem": "npm"
+      },
+      "version": "1.2.16"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-aix-ppc64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-darwin-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-darwin-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-freebsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-freebsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-arm",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-loong64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-mips64el",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-ppc64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-riscv64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-s390x",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-netbsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-netbsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-openbsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-openbsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-sunos-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-win32-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-win32-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    },
+    {
+      "package": {
+        "name": "typescript",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2"
+    }
+  ],
+  "response": {
+    "results": [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ]
+  }
+}

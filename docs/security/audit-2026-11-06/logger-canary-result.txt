@@ -1,0 +1,1 @@
+PASS: 5 random synthetic credential canaries absent from actual file logger and decompressed support export.
