@@ -2,8 +2,8 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Private-beta readiness; core surfaces implemented, real-world qualification pending  
-> **Last updated:** 2026-10-28
+> **Status:** Public unsigned preview; real-world qualification pending  
+> **Last updated:** 2026-11-06
 
 
 Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
@@ -19,6 +19,8 @@ Scrobblix must answer three questions immediately:
 3. **Why did or did not this track scrobble?**
 
 ## Downloads and preview releases
+
+Current downloadable preview: [v0.1.0-beta.2](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.2). It contains the Windows Test Bundle, optional Browser Companion and SHA-256 checksums. This is not a final stable release.
 
 Version tags trigger the automated [Preview Release workflow](.github/workflows/release.yml). It runs the full Windows CI checks before publishing the desktop test bundle, optional browser companion, and SHA-256 checksums on the [GitHub Releases page](https://github.com/frpboy/Scrobblix/releases).
 
@@ -116,7 +118,7 @@ This is a **development build, not a signed production release**. Remaining rele
 - Live Last.fm authorization/scrobble validation with the user's account, plus real Chrome/Edge and Firefox extension installation/bridge tests.
 - Signed MSIX/App Installer and updater, install/upgrade/rollback/uninstall qualification, code-signing provenance and dependency/license/SBOM review.
 - Further same-user IPC threat review; the current pipe peer check is an extra gate, not cryptographic proof of an executable's identity or a replacement for signed binaries.
-- Privacy-safe support-bundle export is implemented on the private-beta readiness branch, including a versioned, normalized source-status snapshot plus canary-redaction assertions; real Windows Save/export/accessibility qualification remains pending, alongside the soak, backup-migration and formal release/security review.
+- Privacy-safe support-bundle export is implemented on main, including a versioned, normalized source-status snapshot plus canary-redaction assertions; real Windows Save/export/accessibility qualification remains pending, alongside the soak, backup-migration and formal release/security review.
 
 See `docs/PRIVATE_BETA_READINESS.md`, `Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md`, `Scrobblix-Docs/12_Testing/RELEASE_CHECKLIST.md` and `docs/IMPLEMENTATION_RESUME.md` before treating a build as release-ready.
 
@@ -191,3 +193,10 @@ Suggested public repositories:
 - `frpboy/scrobblix-docs` — optional separate docs repository if documentation becomes independently versioned.
 
 The monorepo model is recommended initially so each code pull request can update the related specification and tests atomically.
+
+## Maintainer and support
+
+Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source remains MIT-licensed; third-party components keep their own licenses.
+
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FrpBoy-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/frpboy)
+[![Become a Patron](https://img.shields.io/badge/Become_a_Patron-FrpBoy-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/FrpBoy)
