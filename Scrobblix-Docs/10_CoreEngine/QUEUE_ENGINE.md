@@ -13,7 +13,7 @@ The queue is scoped to provider and account. Do not describe a provider-independ
 
 ## Claim and lease lifecycle
 
-The current SQLite store claims one due `Pending` or `RetryScheduled` item inside a transaction, orders by due time then creation time, changes it to `InFlight`, increments attempt count and records the lease owner/expiry. Startup recovery converts expired in-flight leases into `SubmissionOutcomeUnknown` with the `provider.lease_expired` reason. The provider may have accepted the request before the app stopped, so automatic workers must not resubmit it. Reconcile against provider history before a deliberate user Retry action; records are retained and are not falsely marked accepted.
+The current SQLite store claims one due `Pending` or `RetryScheduled` item inside a transaction, orders by due time then creation time, changes it to `InFlight`, increments attempt count and records the lease owner/expiry. Startup recovery converts expired in-flight scrobble leases into `SubmissionOutcomeUnknown` with the `provider.lease_expired` reason. The provider may have accepted the request before the app stopped, so automatic workers must not resubmit it. Reconcile against provider history before a deliberate user Retry action; records are retained and are not falsely marked accepted. Expired Now Playing, Love and Unlove leases remain retry-scheduled: those operations set provider state rather than append a scrobble. The existing Now Playing age limit expires stale updates before claiming them.
 
 Queue state is local durable state. An `Accepted` action indicates the provider response was parsed as accepted; it must not be set merely because an HTTP request was started or sent.
 

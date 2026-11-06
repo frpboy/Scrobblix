@@ -848,6 +848,35 @@ Assert(await actionStore.RetryNowAsync(retryLease!.ActionId, observation.Observe
     "A deliberate user retry can release an outcome-unknown action after reconciliation.");
 Assert(await actionStore.ClaimNextDueAsync("worker-user-confirmed", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(3), TimeSpan.FromMinutes(1), CancellationToken.None) is not null,
     "Only an explicit retry makes the crash-ambiguous action deliverable again.");
+// State-setting operations do not append duplicate scrobbles and must not be
+// sent through the scrobble-specific uncertain-outcome reconciliation UI.
+var leaseTypeDatabase = Path.Combine(Path.GetTempPath(), $"scrobblix-lease-types-{Guid.NewGuid():N}.db");
+var leaseTypeConnection = $"Data Source={leaseTypeDatabase};Pooling=False";
+await new SqliteDatabase(leaseTypeConnection).InitializeAsync(CancellationToken.None);
+await using (var typeConnection = new SqliteConnection(leaseTypeConnection))
+{
+    await typeConnection.OpenAsync();
+    foreach (var actionType in new[] { ProviderActionType.NowPlaying, ProviderActionType.Love, ProviderActionType.Unlove })
+    {
+        await using var command = typeConnection.CreateCommand();
+        command.CommandText = """
+            INSERT INTO provider_actions(action_id, provider, account_id, action_type, idempotency_key, state, due_utc, created_utc, updated_utc, lease_expires_utc)
+            VALUES($id, 'lastfm', 'account-1', $type, $id, $state, $expired, $expired, $expired, $expired);
+            """;
+        command.Parameters.AddWithValue("$id", actionType.ToString());
+        command.Parameters.AddWithValue("$type", (int)actionType);
+        command.Parameters.AddWithValue("$state", (int)ProviderActionState.InFlight);
+        command.Parameters.AddWithValue("$expired", observation.ObservedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
+        await command.ExecuteNonQueryAsync();
+    }
+}
+var leaseTypeStore = new SqliteProviderActionStore(leaseTypeConnection);
+Assert(await leaseTypeStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 3,
+    "Expired state-setting actions are recovered without using scrobble-specific unknown outcomes.");
+Assert(await CountRowsAsync(leaseTypeConnection, $"SELECT COUNT(*) FROM provider_actions WHERE state = {(int)ProviderActionState.RetryScheduled};") == 3,
+    "Now Playing, Love and Unlove remain retry-scheduled, with Now Playing expiry enforced by its claim path.");
+File.Delete(leaseTypeDatabase);
+
 var historyReader = new SqliteHistoryReader(connectionString);
 var recentHistory = await historyReader.GetRecentAsync(10, CancellationToken.None);
 Assert(recentHistory.Count == 2 && recentHistory.Any(play => play.PlayId == "play-2"), "Local history is queryable without relying on a provider.");
