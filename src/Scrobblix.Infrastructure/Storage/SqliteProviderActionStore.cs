@@ -43,7 +43,7 @@ public sealed class SqliteProviderActionStore(string connectionString) : IProvid
         command.CommandText = """
             UPDATE provider_actions
             SET state = $pending, due_utc = $now, updated_utc = $now,
-                last_reason_code = NULL, lease_owner = NULL, lease_expires_utc = NULL
+                last_reason_code = NULL, completed_utc = NULL, lease_owner = NULL, lease_expires_utc = NULL
             WHERE provider = $provider AND account_id = $account AND state = $blocked;
             """;
         command.Parameters.AddWithValue("$pending", (int)ProviderActionState.Pending);

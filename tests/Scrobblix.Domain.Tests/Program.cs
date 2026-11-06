@@ -847,6 +847,8 @@ Assert(await accountIsolationActionStore.ResumeAuthBlockedAsync("lastfm", "accou
     "Reconnection resumes only the authenticated account/provider's auth-blocked action.");
 Assert(await CountRowsAsync(accountIsolationConnectionString, $"SELECT COUNT(*) FROM provider_actions WHERE state={(int)ProviderActionState.AuthBlocked};") == 2,
     "Reconnection cannot release another account or provider's auth-blocked actions.");
+Assert(await CountRowsAsync(accountIsolationConnectionString, $"SELECT COUNT(*) FROM provider_actions WHERE account_id='account-a' AND provider='lastfm' AND completed_utc IS NOT NULL;") == 0,
+    "Reconnection clears terminal completion metadata before resuming delivery.");
 var resumedAccountLease = await accountIsolationActionStore.ClaimNextDueAsync("reconnected", "lastfm", "account-a", observation.ObservedAtUtc.AddMinutes(2), TimeSpan.FromMinutes(1), CancellationToken.None);
 Assert(resumedAccountLease?.AccountId == "account-a", "The reconnected account's action becomes genuinely claimable.");
 await accountIsolationActionStore.CompleteAsync(resumedAccountLease!.ActionId, ProviderActionState.SubmissionOutcomeUnknown, ReasonCodes.Provider.SubmissionOutcomeUnknown, observation.ObservedAtUtc.AddMinutes(2), CancellationToken.None);
