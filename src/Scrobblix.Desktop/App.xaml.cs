@@ -41,6 +41,23 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if SCROBBLIX_UI_QUALIFICATION
+        // Explicit CI-only build: bypass every normal account/network/tray/storage path.
+        if (Environment.GetEnvironmentVariable("SCROBBLIX_UI_OUTPUT") is { } output)
+        {
+        Directory.CreateDirectory(output);
+        try
+        {
+            var probe = new MainWindow();
+            probe.Activate();
+            await probe.QualifyArtworkAsync(Environment.GetEnvironmentVariable("SCROBBLIX_UI_FIXTURES")!, output);
+            File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI qualification");
+        }
+        catch (Exception failure) { File.WriteAllText(Path.Combine(output, "result.txt"), failure.ToString()); }
+        Exit();
+        return;
+        }
+#endif
         if (!TryAcquireSingleInstance())
         {
             Exit();

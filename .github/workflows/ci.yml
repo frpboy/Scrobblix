@@ -54,6 +54,21 @@ jobs:
       - name: Run native Windows artwork metadata checks
         run: dotnet run --project tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj --configuration Release --no-build
 
+      - name: Build isolated self-contained artwork UI probe
+        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=true --output artifacts/ui-probe
+
+      - name: Execute isolated real WinUI artwork fixture probe
+        run: ./scripts/test-artwork-ui.ps1
+
+      - name: Preserve synthetic WinUI renders
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: artwork-ui-qualification
+          path: ${{ runner.temp }}/scrobblix-artwork-ui
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Dump WinUI XAML compiler diagnostics on build failure
         if: failure()
         shell: pwsh

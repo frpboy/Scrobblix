@@ -19,3 +19,9 @@ Sources checked:
 - https://learn.microsoft.com/en-us/uwp/api/windows.graphics.imaging.bitmapdecoder.pixelwidth
 
 Source review follow-up: identical pending same-path polls are coalesced rather than invalidating slow loads every2s. New selections cancel prior bounded read/metadata work; generation checks still fence an OS image decode that cannot be cancelled through this surface. These source checks are not runtime race or pixel qualification.
+
+## Bounded actual UI route investigation
+
+Standard hosted Windows runner is a fresh VM, but interactive session/rendering is not assumed from label alone. A compile-time-only fixture probe now attempts the real MainWindow/SetArtwork on that runner, using a self-contained test publish (no normal account/storage/network/tray startup), synthetic fixture paths,60s process bound, state assertions and actual RenderTargetBitmap PNG captures. It checks coalesced same-path polls, invalid fallback, rapid valid-to-invalid/null, recovery and close during load. Test-only code is excluded from ordinary builds. Results and pixels remain pending until executed and inspected. RenderTargetBitmap alone is not desktop compositing, DPI-fleet or accessibility proof.
+
+Deployment source: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps . Runner source: https://docs.github.com/en/actions/reference/runners/github-hosted-runners . No paid runner, new machine or account requested.

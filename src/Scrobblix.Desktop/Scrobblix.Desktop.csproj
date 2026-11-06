@@ -5,6 +5,9 @@
     <UseWinUI>true</UseWinUI>
     <WindowsPackageType>None</WindowsPackageType>
   </PropertyGroup>
+  <PropertyGroup Condition="'$(ScrobblixUiQualification)' == 'true'">
+    <DefineConstants>$(DefineConstants);SCROBBLIX_UI_QUALIFICATION</DefineConstants>
+  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
     <ProjectReference Include="../Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
