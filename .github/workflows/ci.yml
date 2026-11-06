@@ -198,6 +198,18 @@ jobs:
       - name: Publish unpackaged Windows application
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
 
+      - name: Qualify ordinary fresh-profile published startup
+        run: ./scripts/test-ordinary-startup.ps1
+
+      - name: Preserve ordinary startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ordinary-startup-qualification
+          path: ${{ runner.temp }}/scrobblix-ordinary-startup
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Publish native messaging host
         run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --no-restore --output artifacts/Scrobblix/native-host
 
