@@ -9,7 +9,7 @@ Safety change, not aggregate cache eviction. Historical cache files are not dele
 
 ## Proof and limits
 
-Local cross-target Windows test project builds with0warnings/errors. Actual Windows execution is pending CI. Synthetic fixtures contain a valid1x1 PNG,100000x1 PNG (470bytes),5000x4000 PNG (85909bytes), two-frame GIF and malformed PNG. Oversized PNGs contain complete zlib-compressed scanlines, not just forged dimensions. Tests never request full pixel allocation for these fixtures.
+Local cross-target Windows test project builds with0warnings/errors. Actual native Windows metadata, remote and GSMTC integration tests passed7460186 (run42296216346). Overall CI then failed a legacy source assertion requiring UriSource-based loading; updated assertion now requires same-snapshot SetSourceAsync, fencing and fallback-until-decoded semantics. Full rerun pending. Synthetic fixtures contain a valid1x1 PNG,100000x1 PNG (470bytes),5000x4000 PNG (85909bytes), two-frame GIF and malformed PNG. Oversized PNGs contain complete zlib-compressed scanlines, not just forged dimensions. Tests never request full pixel allocation for these fixtures.
 
 Native Windows tests cover valid/rejected metadata, checked-width pixel math, compressed streaming bound, actual remote new/old cache paths, missing validator, actual GSMTC stream-reference new/old cache paths and byte-preservation. These tests do not render WinUI. Async old/new selection, fallback appearance, closed-window behavior and real Windows decoder/UI pixels still require direct visual/runtime qualification. No production-ready, exploit-proof or fixed maximum-memory claim is made.
 
