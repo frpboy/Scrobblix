@@ -154,6 +154,8 @@ SECURITY AND SUPPORT
         Set-Content -LiteralPath (Join-Path $packageRoot 'INSTALL.txt') -Value $instructions -Encoding utf8
 
         if (Test-Path -LiteralPath $zipPath) { Remove-Item -LiteralPath $zipPath -Force }
+        node scripts/collect-third-party-notices.mjs $packageRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Browser companion license collection failed.' }
         Compress-Archive -Path (Join-Path $packageRoot '*') -DestinationPath $zipPath -Force
         Write-Host ''
         Write-Host 'Browser companion build and package checks passed.'
