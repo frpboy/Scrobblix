@@ -1,0 +1,28 @@
+name: Android Kotlin validation
+on:
+  pull_request:
+    branches: [main]
+    paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
+  push:
+    branches: [main]
+    paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-kotlin-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+jobs:
+  kotlin-platform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test shared behavior and compile platform library (not APK)
+        shell: bash
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          android/gradlew -p android :core:test :platform:assembleDebug --no-daemon
