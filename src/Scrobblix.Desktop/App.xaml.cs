@@ -677,7 +677,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                     return;
                 }
             }
-        });
+        }, cancellationToken);
     }
 
     private void StartSingleInstanceActivationListener()
