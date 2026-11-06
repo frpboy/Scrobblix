@@ -183,6 +183,9 @@ jobs:
       - name: Publish native messaging host
         run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --no-restore --output artifacts/Scrobblix/native-host
 
+      - name: Verify native-host malformed envelope recovery
+        run: node scripts/test-native-host-framing.mjs artifacts/Scrobblix/native-host/Scrobblix.NativeHost.dll
+
       - name: Assemble local test bundle
         shell: pwsh
         run: |
