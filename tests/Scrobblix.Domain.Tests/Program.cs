@@ -635,6 +635,78 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
     "A nominal success response without a scrobbles result does not inflate accepted totals.");
 
 
+// Documented Last.fm errors carry meaning independently of HTTP status.
+foreach (var status in new[] { System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.BadRequest, System.Net.HttpStatusCode.Forbidden, System.Net.HttpStatusCode.ServiceUnavailable })
+foreach (var (code, reason, transient) in new[] {
+    (9, ReasonCodes.Provider.AuthInvalidSession, false),
+    (6, ReasonCodes.Provider.ResponseInvalid, false),
+    (11, ReasonCodes.Provider.TemporaryUnavailable, true),
+    (16, ReasonCodes.Provider.TemporaryUnavailable, true),
+    (29, ReasonCodes.Provider.RateLimited, true),
+})
+{
+    using var errorClient = new HttpClient(new StatusHttpHandler(status, $"{{\"error\":{code}}}"));
+    var provider = new LastFmScrobbleProvider(errorClient, "test-key", "test-secret");
+    var results = new[] {
+        await provider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None),
+        await provider.UpdateNowPlayingAsync(lovedSubmission, CancellationToken.None),
+        await provider.LoveTrackAsync(lovedSubmission, CancellationToken.None),
+        await provider.UnloveTrackAsync(lovedSubmission, CancellationToken.None),
+    };
+    Assert(results.All(result => !result.Accepted && result.ReasonCode == reason && result.IsTransient == transient),
+        "Documented API errors map consistently across HTTP status and all four operations.");
+    if (code != 29) Assert(results.All(result => result.RetryAfter is null), "Non-rate API errors ignore Retry-After.");
+    if (code == 29) Assert(results.All(result => result.RetryAfter == TimeSpan.FromSeconds(27)), "API rate errors preserve Retry-After.");
+}
+foreach (var body in new[] { "<html>gateway error</html>", "[]", "null", "{", "{\"error\":\"9\"}", "{\"error\":2147483648}", "{\"error\":1.5}", "{\"error\":999}", new string('x', 65537) })
+{
+    using var invalidClient = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.BadGateway, body));
+    var provider = new LastFmScrobbleProvider(invalidClient, "test-key", "test-secret");
+    var result = await provider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(!result.Accepted && !result.IsTransient && result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown,
+        "Malformed/non-API/unknown error response never authorizes blind append-only retries.");
+}
+using (var rateClient = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.TooManyRequests, "not-json")))
+{
+    var result = await new LastFmScrobbleProvider(rateClient, "test-key", "test-secret").SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(result.ReasonCode == ReasonCodes.Provider.RateLimited && result.RetryAfter == TimeSpan.FromSeconds(27), "HTTP429 fallback preserves Retry-After without a documented body.");
+}
+
+foreach (var body in new[] { "{\"error\":\"9\"}", "{\"error\":999}", "{\"error\":2147483648}", new string('x', 65537) })
+{
+    using var client = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.TooManyRequests, body));
+    var result = await new LastFmScrobbleProvider(client, "test-key", "test-secret").SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown && !result.IsTransient,
+        "Unknown/type-invalid API429 bodies and oversized responses cannot authorize append-only retries.");
+}
+foreach (var body in new[] { "<html>bad</html>", "[]", "null", "{", "{\"error\":\"9\"}", "{\"error\":999}" })
+foreach (var status in new[] { System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.BadGateway })
+{
+    using var client = new HttpClient(new StatusHttpHandler(status, body));
+    var provider = new LastFmScrobbleProvider(client, "test-key", "test-secret");
+    var results = new[] { await provider.UpdateNowPlayingAsync(lovedSubmission, CancellationToken.None),
+        await provider.LoveTrackAsync(lovedSubmission, CancellationToken.None), await provider.UnloveTrackAsync(lovedSubmission, CancellationToken.None) };
+    var transient = status != System.Net.HttpStatusCode.OK;
+    Assert(results.All(result => !result.Accepted && result.IsTransient == transient && result.ReasonCode ==
+        (transient ? ReasonCodes.Provider.TemporaryUnavailable : ReasonCodes.Provider.ResponseInvalid)),
+        "Malformed state-setting responses preserve documented success/non-success fallback.");
+}
+using (var client = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.ServiceUnavailable, "{\"error\":8}")))
+{
+    var provider = new LastFmScrobbleProvider(client, "test-key", "test-secret");
+    Assert((await provider.LoveTrackAsync(lovedSubmission, CancellationToken.None)).IsTransient
+        && (await provider.UnloveTrackAsync(lovedSubmission, CancellationToken.None)).IsTransient,
+        "Definitive backend error8 retries idempotent Love/Unlove changes.");
+    Assert(!(await provider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None)).IsTransient,
+        "Code8 never introduces an automatic append-only scrobble retry.");
+}
+using (var client = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.BadRequest, "{\"error\":29}", includeRetryAfter: false)))
+{
+    var result = await new LastFmScrobbleProvider(client, "test-key", "test-secret").SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(result.ReasonCode == ReasonCodes.Provider.RateLimited && result.IsTransient && result.RetryAfter is null,
+        "API rate error without header uses lifecycle backoff rather than invented Retry-After.");
+}
+
 // Logger sanitizer regression: metadata must remain redacted when values contain field delimiters.
 var sanitizedDiagnostic = Scrobblix.Infrastructure.Diagnostics.DiagnosticMessageSanitizer.Sanitize(
     "artist=Earth, Wind & Fire; title=\"Hello, World; Part 2\"; album=Re-Load | Remaster; action_id=abc123");
@@ -2064,5 +2136,15 @@ sealed class SequenceHttpHandler(params string[] bodies) : HttpMessageHandler
     {
         RequestBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(_bodies.Dequeue(), Encoding.UTF8, "application/json") };
+    }
+}
+
+sealed class StatusHttpHandler(System.Net.HttpStatusCode status, string body, bool includeRetryAfter = true) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+        if (includeRetryAfter) response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(27));
+        return Task.FromResult(response);
     }
 }
