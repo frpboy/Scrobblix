@@ -39,10 +39,16 @@ jobs:
           set -euo pipefail
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
           test -e /dev/kvm
           sudo chmod a+rw /dev/kvm
           sdkmanager 'emulator' 'system-images;android-36;default;x86_64'
-          echo no | avdmanager create avd -n scrobblix-test -k 'system-images;android-36;default;x86_64' --force
+          echo no | avdmanager create avd -n scrobblix-test -k 'system-images;android-36;default;x86_64' --path "$ANDROID_AVD_HOME/scrobblix-test.avd" --force
+          test -f "$ANDROID_AVD_HOME/scrobblix-test.ini"
+          emulator -list-avds | grep -Fx scrobblix-test
           emulator -avd scrobblix-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-emulator.log 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" || true' EXIT

@@ -41,3 +41,5 @@ Local API36 emulator/system image installed and AVD created. Acceleration check 
 ## Android SQLite runtime qualification pending
 
 Two instrumentation tests now target the actual Android SQLite driver (reopen/history, unknown recovery/stale completion fencing, rollback/future-version rejection). Kotlin test source compiles locally; full instrumentation APK dex packaging exceeded two bounded local120s build attempts and is not claimed passed. A separate standard Ubuntu API36 KVM emulator job will build/install/run these tests, no public app identity or release key. Until its actual result is inspected, Android runtime qualification remains pending.
+
+CI runtime startup at648f2d6 failed before guest boot: emulator could not discover the AVD created by avdmanager (Unknown AVD name). The follow-up sets an explicit shared temporary Android user/emulator/AVD directory and image path, and checks both the ini file and emulator discovery before waiting for adb. This is a startup correction, not runtime test evidence. Kotlin and Windows jobs passed648f2d6.
