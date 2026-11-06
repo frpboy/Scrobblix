@@ -3,7 +3,7 @@
   "auditDate": "2026-11-06",
   "repository": "frpboy/Scrobblix",
   "baseBranch": "main",
-  "baseSha": "fa7adbcd81ccb0a3e16a729abbc3d58a030bd457",
+  "baseSha": "81142dcb50fe3f2a896c622a6da5c3328ac21361",
   "auditBranch": "docs/audit-checkpoint-2026-11-06",
   "findings": [
     {
@@ -304,9 +304,10 @@
       "evidence": [
         "browser-extension/package-lock.json",
         ".github/workflows/ci.yml",
-        "Scrobblix.slnx"
+        "Scrobblix.slnx",
+        "docs/security/audit-2026-11-06/README.md"
       ],
-      "validation": "No exact-commit dependency/license/SBOM/Git-history secret scan was run. No clean checkout or official validator toolchain was available."
+      "validation": "Exact released SHA81142dc: npm audit zero findings; OSV40 package identity queries zero matches; Syft115-component SBOM; Gitleaks all-ref redacted scan1056 non-empty commits zero findings; NuGet17-package license inventory. Evidence in docs/security/audit-2026-11-06. Microsoft redistribution review and Windows/full independent-audit qualification remain open."
     },
     {
       "id": "AUD-SEC-003",
@@ -338,78 +339,10 @@
     "exactHeadCIRequired": true,
     "manualQualification": "NOT RUN; see issue #17"
   },
-  "currentMainSha": "d27d06d809d59b1ca17e81a29019fc44be700b90",
   "baselineCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39812019297",
-  "currentMainCiRun": "https://github.com/frpboy/Scrobblix/actions/runs/39903649228",
+  "currentMainCiRun": 42167800462,
   "auditStartSha": "0436ed83762971ef75dae5be1ffd15bab7e1eae5",
   "currentMainCiConclusion": "success",
-  "currentMain": {
-    "sha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
-    "ciRun": 40640792254,
-    "ciConclusion": "success",
-    "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/40640792254",
-    "recursiveTree": {
-      "truncated": false,
-      "fileBlobs": 412,
-      "treeEntries": 481
-    },
-    "openIssues": 11,
-    "openPullRequests": 8,
-    "defaultBranch": "main",
-    "mainProtected": false,
-    "rulesets": [],
-    "openPRs": [
-      {
-        "number": 80,
-        "head": "7e74ddc934fe7abdaf44127c429e40de958b48ae",
-        "ci": "passed",
-        "run": 40984305515
-      },
-      {
-        "number": 81,
-        "head": "be0e0519b2e9fcda1d79b22ef798db8472a55095",
-        "base": "fix/82-cancel-custom-site-inflight-observations-main",
-        "ci": "not_run_on_stacked_base"
-      },
-      {
-        "number": 84,
-        "head": "2703a69cd252bb1f82cbcd70d6895ac0ee68aec9",
-        "ci": "passed",
-        "run": 41154351961
-      },
-      {
-        "number": 86,
-        "head": "ffdc98c9efc0aa3e1537a0c7f5567eb265dc072d",
-        "ci": "passed",
-        "run": 41155240404
-      },
-      {
-        "number": 89,
-        "head": "0d732db5dd9ac82a987378cce70f120b6ae25621",
-        "ci": "passed",
-        "run": 41154607171
-      },
-      {
-        "number": 90,
-        "head": "7ef909376741c09e3f108374451427937d1e95ac",
-        "base": "fix/82-cancel-custom-site-inflight-observations-main",
-        "ci": "passed",
-        "run": 41156914390
-      },
-      {
-        "number": 91,
-        "head": "0336532743ccbe7f395d7ae9ae085eff2109c665",
-        "ci": "passed",
-        "run": 41154745247
-      },
-      {
-        "number": 93,
-        "ci": "pending_after_latest_docs_refresh",
-        "refsIssue": 78,
-        "previousHeadCiRun": 41156677952
-      }
-    ]
-  },
   "executionEnvironment": {
     "container": "isolated Linux container",
     "node": "v22.16.0",
@@ -431,5 +364,83 @@
     "GitHub-hosted Windows CI results are recorded per exact head SHA; they do not replace Windows named-pipe ACL tests or real-browser qualification.",
     "Branch metadata reports protected=false and the rulesets query is empty, but the direct branch-protection endpoint returned HTTP 403; effective policy remains unverified.",
     "The requested Cloudflare security-audit skill/official validators are not installed; the requested report bundle, findings-detail, coverage ledger, run metadata and artifact manifest are absent from the current main tree."
-  ]
+  ],
+  "historicalMainSnapshots": {
+    "previousCurrentMain": {
+      "sha": "5227d5312f6a4fa358d517b0b0dd5c495a29bb96",
+      "ciRun": 40640792254,
+      "ciConclusion": "success",
+      "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/40640792254",
+      "recursiveTree": {
+        "truncated": false,
+        "fileBlobs": 412,
+        "treeEntries": 481
+      },
+      "openIssues": 11,
+      "openPullRequests": 8,
+      "defaultBranch": "main",
+      "mainProtected": false,
+      "rulesets": [],
+      "openPRs": [
+        {
+          "number": 80,
+          "head": "7e74ddc934fe7abdaf44127c429e40de958b48ae",
+          "ci": "passed",
+          "run": 40984305515
+        },
+        {
+          "number": 81,
+          "head": "be0e0519b2e9fcda1d79b22ef798db8472a55095",
+          "base": "fix/82-cancel-custom-site-inflight-observations-main",
+          "ci": "not_run_on_stacked_base"
+        },
+        {
+          "number": 84,
+          "head": "2703a69cd252bb1f82cbcd70d6895ac0ee68aec9",
+          "ci": "passed",
+          "run": 41154351961
+        },
+        {
+          "number": 86,
+          "head": "ffdc98c9efc0aa3e1537a0c7f5567eb265dc072d",
+          "ci": "passed",
+          "run": 41155240404
+        },
+        {
+          "number": 89,
+          "head": "0d732db5dd9ac82a987378cce70f120b6ae25621",
+          "ci": "passed",
+          "run": 41154607171
+        },
+        {
+          "number": 90,
+          "head": "7ef909376741c09e3f108374451427937d1e95ac",
+          "base": "fix/82-cancel-custom-site-inflight-observations-main",
+          "ci": "passed",
+          "run": 41156914390
+        },
+        {
+          "number": 91,
+          "head": "0336532743ccbe7f395d7ae9ae085eff2109c665",
+          "ci": "passed",
+          "run": 41154745247
+        },
+        {
+          "number": 93,
+          "ci": "pending_after_latest_docs_refresh",
+          "refsIssue": 78,
+          "previousHeadCiRun": 41156677952
+        }
+      ]
+    },
+    "previousCurrentMainSha": "d27d06d809d59b1ca17e81a29019fc44be700b90"
+  },
+  "currentMainSha": "81142dcb50fe3f2a896c622a6da5c3328ac21361",
+  "currentMain": {
+    "sha": "81142dcb50fe3f2a896c622a6da5c3328ac21361",
+    "ciRun": 42167800462,
+    "ciConclusion": "success",
+    "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/42167800462",
+    "scope": "Released beta.2 audited baseline, not a live pointer to later main commits"
+  }
 }
