@@ -12,7 +12,7 @@ try {
   const pkg = join(cache, 'example', '1.0.0'); mkdirSync(pkg, {recursive:true});
   writeFileSync(join(pkg, 'example.nuspec'), '<package><metadata><license type="expression">MIT</license></metadata></package>');
   writeFileSync(join(pkg, 'NOTICE.txt'), 'copyright fixture');
-  writeFileSync(join(pkg,'NOTICE'),'extensionless notice fixture'); mkdirSync(join(pkg,'license')); 
+  writeFileSync(join(pkg,'NOTICE'),'extensionless notice fixture'); mkdirSync(join(pkg,'license'));
   let result = collectNotices(bundle, cache, license);
   assert.equal(result.length, 1);
   assert.equal(readFileSync(join(bundle,'LICENSE'),'utf8'), 'app license fixture');
