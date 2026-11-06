@@ -5,7 +5,10 @@ Write-Output "Interactive=$([Environment]::UserInteractive) Session=$((Get-Proce
 $env:SCROBBLIX_UI_OUTPUT = $output
 $env:SCROBBLIX_UI_FIXTURES = Join-Path $PWD 'tests/Scrobblix.Windows.Tests/fixtures'
 $app = Join-Path $PWD 'artifacts/ui-probe/Scrobblix.Desktop.exe'
-$p = Start-Process -FilePath $app -PassThru
+$appDirectory = Split-Path $app
+Get-ChildItem $appDirectory -Filter *.pri | ForEach-Object { Write-Output "PRI=$($_.FullName) bytes=$($_.Length)" }
+Get-ChildItem $appDirectory -Recurse -Filter *.xbf | ForEach-Object { Write-Output "XBF=$($_.FullName)" }
+$p = Start-Process -FilePath $app -WorkingDirectory $appDirectory -PassThru
 if (-not $p.WaitForExit(60000)) { $p.Kill(); throw 'Isolated fixture app timed out60s' }
 Write-Output "Exit=$($p.ExitCode)"
 $result = Join-Path $output 'result.txt'
