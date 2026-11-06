@@ -1,7 +1,6 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using System.Diagnostics;
-using System.Collections.Concurrent;
 using System.Security.Cryptography;
 using System.Globalization;
 using System.Buffers.Binary;
@@ -337,7 +336,11 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 Path.Combine(dataDirectory, "artwork"),
                 message => logger.Info("METADATA_PROVIDER", message),
                 artworkHttpClient);
-            var metadataStarted = new ConcurrentDictionary<string, byte>(StringComparer.Ordinal);
+            // Bound pending metadata work and completed-job suppression: rapid track
+            // changes can no longer queue unbounded network work behind the
+            // serialized provider gate, and long sessions cannot grow the
+            // suppression state without limit (issue #97).
+            var metadataStarted = new MetadataEnrichmentJobTracker(maxPendingJobs: 8, completedCapacity: 512);
             var localPlayStore = new SqliteLocalPlayStore(connectionString);
             var observationIngestion = new PlaybackObservationIngestionService(new SqlitePlaybackObservationStore(connectionString));
             var observationGate = new SemaphoreSlim(1, 1);
@@ -903,7 +906,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         SemaphoreSlim observationGate,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
-        ConcurrentDictionary<string, byte> metadataStarted,
+        MetadataEnrichmentJobTracker metadataStarted,
         ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
@@ -992,7 +995,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         SemaphoreSlim observationGate,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
-        ConcurrentDictionary<string, byte> metadataStarted,
+        MetadataEnrichmentJobTracker metadataStarted,
         ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
@@ -1112,7 +1115,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         SemaphoreSlim observationGate,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
-        ConcurrentDictionary<string, byte> metadataStarted,
+        MetadataEnrichmentJobTracker metadataStarted,
         string connectionString,
         ScrobblixFileLogger logger,
         MainWindow window,
@@ -1182,7 +1185,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         PlaybackTrackingStatus trackingStatus,
         TrackMetadataEnricher metadataEnricher,
         SqliteLocalPlayStore localPlayStore,
-        ConcurrentDictionary<string, byte> metadataStarted,
+        MetadataEnrichmentJobTracker metadataStarted,
         string connectionString,
         MainWindow window,
         ScrobblixFileLogger logger,
@@ -1197,7 +1200,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             ? "source"
             : Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(observation.ArtworkUrl)));
         var jobKey = $"{trackingStatus.PlayId}:{metadataEnricher.ConfigurationVersion}:{artworkVariation}";
-        if (!metadataStarted.TryAdd(jobKey, 0))
+        if (!metadataStarted.TrySchedule(jobKey))
         {
             return;
         }
@@ -1225,14 +1228,15 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 };
                 window.DispatcherQueue.TryEnqueue(() => window.SetEnrichedMetadata(playId, enrichedObservation, metadata));
                 await RefreshDashboardAsync(window, connectionString, cancellationToken);
+                metadataStarted.Complete(jobKey);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
-                metadataStarted.TryRemove(jobKey, out _);
+                metadataStarted.Abandon(jobKey);
             }
             catch (Exception exception)
             {
-                metadataStarted.TryRemove(jobKey, out _);
+                metadataStarted.Abandon(jobKey);
                 logger.Error("METADATA", $"Metadata enrichment failed; play_id={playId}; exception={exception.GetType().Name}; message={exception.Message}");
                 Debug.WriteLine($"Scrobblix metadata enrichment failed: {exception.GetType().Name}");
             }
