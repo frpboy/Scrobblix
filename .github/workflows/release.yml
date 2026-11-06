@@ -89,6 +89,10 @@ jobs:
             - **Browser Companion** — separate browser/native-host development package. Browser store signing/publication is not implied.
             - **SHA256SUMS.txt** — SHA-256 hashes for both ZIP downloads.
 
+            ## Data retention in this build
+
+            Scrobblix keeps raw playback diagnostic data for 30 days, then deletes it automatically. Your listening history and scrobbles are never deleted by this cleanup.
+
             The desktop app may require the matching Microsoft Windows App Runtime. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
           files: release-assets/*
           fail_on_unmatched_files: true
