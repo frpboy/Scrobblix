@@ -12,6 +12,7 @@ try {
   const pkg = join(cache, 'example', '1.0.0'); mkdirSync(pkg, {recursive:true});
   writeFileSync(join(pkg, 'example.nuspec'), '<package><metadata><license type="expression">MIT</license></metadata></package>');
   writeFileSync(join(pkg, 'NOTICE.txt'), 'copyright fixture');
+  writeFileSync(join(pkg,'NOTICE'),'extensionless notice fixture'); mkdirSync(join(pkg,'license')); 
   let result = collectNotices(bundle, cache, license);
   assert.equal(result.length, 1);
   assert.equal(readFileSync(join(bundle,'LICENSE'),'utf8'), 'app license fixture');
@@ -24,10 +25,13 @@ try {
   result=collectNotices(bundle,cache,license);
   assert.ok(existsSync(join(target,'LICENSE.txt')));
   assert.equal(result[0].licenseType,'file');
-  writeFileSync(join(pkg,'example.nuspec'), '<license type="file">../secret.txt</license>');
+  writeFileSync(join(pkg,'example.nuspec'), '<package><metadata><license type="file">../secret.txt</license></metadata></package>');
   assert.throws(()=>collectNotices(bundle,cache,license), /Unsafe license path/);
-  writeFileSync(join(pkg,'example.nuspec'), '<license type="expression">Unknown-1.0</license>');
+  writeFileSync(join(pkg,'example.nuspec'), '<package><metadata><license type="expression">Unknown-1.0</license></metadata></package>');
   assert.throws(()=>collectNotices(bundle,cache,license), /requires review/);
+  writeFileSync(join(pkg,'example.nuspec'), '<package><metadata><!-- <license type="expression">MIT</license> --></metadata></package>');
+  assert.throws(()=>collectNotices(bundle,cache,license), /Missing license declaration/);
+  assert.ok(existsSync(join(target,'NOTICE')));
   writeFileSync(join(bundle,'app.deps.json'), JSON.stringify({libraries:{'App/1':{type:'project'}}}));
   assert.equal(collectNotices(bundle,cache,license).length,0, 'Framework-only native host has no third-party NuGet packages.');
   console.log('Third-party notice packaging fixtures passed.');

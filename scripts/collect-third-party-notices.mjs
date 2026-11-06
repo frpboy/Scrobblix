@@ -1,10 +1,10 @@
-import { readdirSync, readFileSync, existsSync, mkdirSync, copyFileSync, writeFileSync } from 'node:fs';
+import { readdirSync, readFileSync, existsSync, mkdirSync, copyFileSync, writeFileSync, statSync } from 'node:fs';
 import { join, basename, dirname, resolve } from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { homedir } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 const scriptDirectory = dirname(fileURLToPath(import.meta.url));
-const decodeXml = (value) => value.replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 export function collectNotices(bundle, cache, applicationLicense) {
   const packages = new Map();
@@ -36,19 +36,20 @@ export function collectNotices(bundle, cache, applicationLicense) {
     const files = readdirSync(directory);
     const nuspec = files.find(name => name.toLowerCase().endsWith('.nuspec'));
     if (!nuspec) throw new Error(`Missing restored package metadata: ${identity}`);
-    const metadata = readFileSync(join(directory, nuspec), 'utf8');
-    const license = metadata.match(/<license\s+type=["'](expression|file)["'][^>]*>([^<]+)<\/license>/i);
-    if (!license) throw new Error(`Missing license declaration: ${identity}`);
-    const type = license[1].toLowerCase(), value = decodeXml(license[2].trim());
+    const parsed = spawnSync('python', [join(scriptDirectory, 'read-nuspec-license.py'), join(directory, nuspec)], {encoding:'utf8'});
+    if (parsed.status !== 0) throw new Error(`Missing license declaration or invalid nuspec: ${identity}`);
+    const { type, value, copyright } = JSON.parse(parsed.stdout);
     const destination = join(output, `${id}-${version}`);
     mkdirSync(destination, { recursive: true });
     copyFileSync(join(directory, nuspec), join(destination, nuspec));
     const included = [];
     for (const name of files.filter(name => /license|licence|notice|copying|copyright/i.test(name))) {
-      if (!/\.(txt|md)$/i.test(name) && !/^(license|licence|copying|copyright)$/i.test(name)) continue;
+      if (!/\.(txt|md)$/i.test(name) && !/^(license|licence|notice|copying|copyright)$/i.test(name)) continue;
+      if (!statSync(join(directory, name)).isFile()) continue;
       copyFileSync(join(directory, name), join(destination, name));
       included.push(name);
     }
+    if (copyright) { writeFileSync(join(destination, 'PACKAGE-COPYRIGHT.txt'), copyright + '\n'); included.push('PACKAGE-COPYRIGHT.txt'); }
     if (type === 'file') {
       // NuGet license paths are package-relative; reject traversal and absolute paths.
       const normalized = value.replace(/\\/g, '/');
@@ -61,6 +62,11 @@ export function collectNotices(bundle, cache, applicationLicense) {
     } else {
       if (!['MIT', 'Apache-2.0'].includes(value)) throw new Error(`License expression requires review: ${identity} (${value})`);
       const name = `SPDX-${value}.txt`;
+      if (id === 'Microsoft.Data.Sqlite' || id === 'Microsoft.Data.Sqlite.Core') {
+        if (version !== '10.0.14') throw new Error(`Upstream license requires version review: ${identity}`);
+        copyFileSync(join(scriptDirectory, 'licenses', 'Microsoft.Data.Sqlite-10.0.14.txt'), join(destination, 'UPSTREAM-LICENSE.txt'));
+        included.push('UPSTREAM-LICENSE.txt');
+      }
       copyFileSync(join(scriptDirectory, 'licenses', `${value}.txt`), join(destination, name));
       included.push(name);
     }
