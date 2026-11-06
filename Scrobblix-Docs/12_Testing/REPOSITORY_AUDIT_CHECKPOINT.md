@@ -1,6 +1,41 @@
 # Repository Audit Checkpoint
 
-## Current checkpoint — 2026-10-31
+## Current checkpoint - 2026-11-06
+
+> This section is the live status snapshot. The 2026-10-31 checkpoint below is retained as historical evidence and is not the current repository baseline.
+
+- **Repository:** [frpboy/Scrobblix](https://github.com/frpboy/Scrobblix) - public, MIT, default branch `main`.
+- **Current main SHA:** `fa7adbcd81ccb0a3e16a729abbc3d58a030bd457`.
+- **Main CI:** [run 42164307715](https://github.com/frpboy/Scrobblix/actions/runs/42164307715) - **PASSED on that exact main SHA**.
+- **Working documentation branch:** `docs/audit-checkpoint-2026-11-06`.
+- **Audit status:** <strong>PARTIAL</strong>. The 2026-11-06 remediation wave merged nine pull requests and closed six issues, but the full security audit is not complete and no release-readiness claim is made.
+
+### 2026-11-06 remediation wave
+
+- PR [#94](https://github.com/frpboy/Scrobblix/pull/94) (dependabot @types/chrome bump) merged as `43db2b7`; exact-head Windows CI passed in run 41373447172.
+- PR [#96](https://github.com/frpboy/Scrobblix/pull/96) (bound the in-memory metadata enrichment cache) merged as `f051bc6`; run 41564336477. Issue #95 auto-closed.
+- PR [#102](https://github.com/frpboy/Scrobblix/pull/102) (short-circuit artwork lookup in media observer) merged as `be4a3db`; run 42077763185.
+- PR [#101](https://github.com/frpboy/Scrobblix/pull/101) (empty state and aria-label for custom sites list) merged as `ff50b7b`; run 41892138750.
+- PR [#84](https://github.com/frpboy/Scrobblix/pull/84) (cancel in-flight custom-site observations on removal) merged as `5e31044`; run 42161560927. Issue [#82](https://github.com/frpboy/Scrobblix/issues/82) closed.
+- PR [#90](https://github.com/frpboy/Scrobblix/pull/90) (serialize custom-site registration mutations) merged as `cfb62d3` after rebase onto post-#84 main and base retarget to `main`; run 42162719905. Issue [#87](https://github.com/frpboy/Scrobblix/issues/87) closed.
+- PR [#81](https://github.com/frpboy/Scrobblix/pull/81) (generic YouTube stays custom-site-only) reconstructed as a single commit preserving original authorship, merged as `b0cad79`; run 42163260317. Issue [#73](https://github.com/frpboy/Scrobblix/issues/73) closed.
+- PR [#86](https://github.com/frpboy/Scrobblix/pull/86) (workflow concurrency bounds and cancel-in-progress) merged as `372294c`; run 42163602270. Issue [#85](https://github.com/frpboy/Scrobblix/issues/85) closed.
+- PR [#104](https://github.com/frpboy/Scrobblix/pull/104) (bound metadata enrichment scheduling and completed-job tracking) merged as `fa7adbc`; run 42163922553. Issue [#97](https://github.com/frpboy/Scrobblix/issues/97) closed.
+- PRs [#99](https://github.com/frpboy/Scrobblix/pull/99), [#100](https://github.com/frpboy/Scrobblix/pull/100) and [#103](https://github.com/frpboy/Scrobblix/pull/103) were closed as superseded with explanatory comments and the `duplicate` label.
+
+### Remaining open items
+
+| Area | Current disposition |
+|---|---|
+| #17 real-world release qualification | **BLOCKED / NOT RUN** - the manual matrix (real Windows device, Spotify, Last.fm, installed browsers, GUI, accessibility, restore, install/upgrade/rollback) still requires dedicated hardware and accounts. |
+| #74 Windows named-pipe caller/ACL authorization | PR [#91](https://github.com/frpboy/Scrobblix/pull/91) merged 2026-11-01; Windows pipe ACL/peer-identity qualification remains **NEEDS VALIDATION** on a real device. |
+| #75 credential redaction | **NEEDS VALIDATION** - synthetic canary coverage across logs, backups, support bundles and packages has not been run. |
+| #76 dependency/lockfile/SBOM/history scans | **PARTIAL** - local scans on 2026-11-06 found npm 0 vulnerabilities, NuGet/OSV clean (Microsoft.Data.Sqlite 10.0.14, WindowsAppSDK 2.6.4, SQLitePCLRaw.lib.e_sqlite3 3.53.3) and no secrets across 1187 commits of Git history; SBOM and license scans remain outstanding. |
+| #78 security-audit bundle | **PARTIAL / BLOCKED** - official validators and the full audit bundle remain unavailable. |
+| #88 branch-protection policy | **USER DECISION REQUIRED** - `main` reports `protected: false` and no rulesets; choosing and enabling a protection policy is the repository owner's decision. |
+| #98 bounded retention policy | **USER DECISION REQUIRED** - the issue explicitly requires owner approval of the retention duration/policy before any automatic deletion is implemented. |
+
+## Historical checkpoint - 2026-10-31
 
 > This section is the live status snapshot. The 2026-10-23 checkpoint below is retained as historical evidence and is not the current repository baseline.
 
