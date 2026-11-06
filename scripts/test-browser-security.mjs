@@ -392,6 +392,41 @@ finalPermission.resolve(true);
 await new Promise((resolve) => setTimeout(resolve, 0));
 assert.equal(forwardedPlaybackMessages.length, 0, "A site revoked during final authorization must not post playback data.");
 
+// Failed permission verification must clean up the grant acquired by the popup.
+workerSettings = { paused: false, customSites: [] };
+removedPermissionOrigin = undefined;
+permissionBehavior = async () => { throw new Error("permission verification unavailable"); };
+const priorPermissionRemovals = permissionRemoveCalls;
+const rejectedPermissionAdd = await addToWorker({id: "site_cccccccccccccccccccccccccccccccc", origin: "https://failed.example", pattern: "https://failed.example/*"});
+assert.equal(rejectedPermissionAdd.added, false);
+assert.equal(permissionRemoveCalls, priorPermissionRemovals + 1, "A failed permission check removes the popup-acquired host grant.");
+assert.deepEqual(workerSettings.customSites, []);
+
+// Re-add must reconcile an orphan from a failed earlier removal, never double-register it.
+removedPermissionOrigin = undefined;
+permissionBehavior = async () => true;
+const originalGetScripts = workerApi.scripting.getRegisteredContentScripts;
+const originalUnregisterScripts = workerApi.scripting.unregisterContentScripts;
+const originalRegisterScripts = workerApi.scripting.registerContentScripts;
+const orphanId = "site_dddddddddddddddddddddddddddddddd";
+const readdedSite = {id: "site_eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee", origin:"https://orphan.example", pattern:"https://orphan.example/*"};
+const reconciliationOrder = [];
+workerApi.scripting.getRegisteredContentScripts = async () => [{id:orphanId, matches:[readdedSite.pattern]}];
+workerApi.scripting.unregisterContentScripts = async ({ids}) => { reconciliationOrder.push(`remove:${ids.join(",")}`); };
+workerApi.scripting.registerContentScripts = async () => { reconciliationOrder.push("register"); };
+assert.equal((await addToWorker(readdedSite)).added, true);
+assert.deepEqual(reconciliationOrder, [`remove:${orphanId}`, "register"]);
+workerSettings = {paused:false,customSites:[]};
+workerApi.scripting.unregisterContentScripts = async () => { throw new Error("orphan cleanup failed"); };
+const beforeOrphanFailure = reconciliationOrder.length;
+assert.equal((await addToWorker({...readdedSite,id:"site_ffffffffffffffffffffffffffffffff"})).added, false);
+assert.equal(reconciliationOrder.length, beforeOrphanFailure, "Failed orphan cleanup must never register another observer.");
+assert.deepEqual(workerSettings.customSites, []);
+workerApi.scripting.getRegisteredContentScripts = originalGetScripts;
+workerApi.scripting.unregisterContentScripts = originalUnregisterScripts;
+workerApi.scripting.registerContentScripts = originalRegisterScripts;
+removedPermissionOrigin = undefined;
+
 // Overlapping adds must serialize at the service-worker storage boundary.
 const addSiteOne = {
   id: "site_11111111111111111111111111111111",
