@@ -853,28 +853,23 @@ Assert(await actionStore.ClaimNextDueAsync("worker-user-confirmed", "lastfm", "a
 var leaseTypeDatabase = Path.Combine(Path.GetTempPath(), $"scrobblix-lease-types-{Guid.NewGuid():N}.db");
 var leaseTypeConnection = $"Data Source={leaseTypeDatabase};Pooling=False";
 await new SqliteDatabase(leaseTypeConnection).InitializeAsync(CancellationToken.None);
-await using (var typeConnection = new SqliteConnection(leaseTypeConnection))
-{
-    await typeConnection.OpenAsync();
-    foreach (var actionType in new[] { ProviderActionType.NowPlaying, ProviderActionType.Love, ProviderActionType.Unlove })
-    {
-        await using var command = typeConnection.CreateCommand();
-        command.CommandText = """
-            INSERT INTO provider_actions(action_id, provider, account_id, action_type, idempotency_key, state, due_utc, created_utc, updated_utc, lease_expires_utc)
-            VALUES($id, 'lastfm', 'account-1', $type, $id, $state, $expired, $expired, $expired, $expired);
-            """;
-        command.Parameters.AddWithValue("$id", actionType.ToString());
-        command.Parameters.AddWithValue("$type", (int)actionType);
-        command.Parameters.AddWithValue("$state", (int)ProviderActionState.InFlight);
-        command.Parameters.AddWithValue("$expired", observation.ObservedAtUtc.UtcDateTime.ToString("O", System.Globalization.CultureInfo.InvariantCulture));
-        await command.ExecuteNonQueryAsync();
-    }
-}
+var leaseTypeLocalStore = new SqliteLocalPlayStore(leaseTypeConnection);
 var leaseTypeStore = new SqliteProviderActionStore(leaseTypeConnection);
-Assert(await leaseTypeStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(3), CancellationToken.None) == 3,
-    "Expired state-setting actions are recovered without using scrobble-specific unknown outcomes.");
-Assert(await CountRowsAsync(leaseTypeConnection, $"SELECT COUNT(*) FROM provider_actions WHERE state = {(int)ProviderActionState.RetryScheduled};") == 3,
-    "Now Playing, Love and Unlove remain retry-scheduled, with Now Playing expiry enforced by its claim path.");
+foreach (var actionType in new[] { ProviderActionType.NowPlaying, ProviderActionType.Love, ProviderActionType.Unlove })
+{
+    var typePlayId = $"lease-{actionType}";
+    await leaseTypeLocalStore.UpsertAsync(historyRecord with { PlayId = typePlayId }, CancellationToken.None);
+    if (actionType == ProviderActionType.NowPlaying)
+        Assert(await new SqliteNowPlayingActionWriter(leaseTypeConnection).TryQueueAsync(typePlayId, "lastfm", "account-1", observation.ObservedAtUtc, CancellationToken.None), "Fresh Now Playing fixture is queued by its production writer.");
+    else
+        Assert(await new SqliteLovedActionWriter(leaseTypeConnection).EnqueueAsync(typePlayId, "account-1", actionType, observation.ObservedAtUtc, CancellationToken.None), "Love/Unlove fixture is queued by its production writer.");
+    var typeLease = await leaseTypeStore.ClaimNextDueAsync("before-crash", "lastfm", "account-1", observation.ObservedAtUtc, TimeSpan.FromSeconds(30), CancellationToken.None);
+    Assert(typeLease?.ActionType == actionType, "The state-setting fixture is genuinely claimable before simulated interruption.");
+    Assert(await leaseTypeStore.RecoverExpiredLeasesAsync(observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None) == 1, "The interrupted state-setting action is recovered.");
+    var recoveredTypeLease = await leaseTypeStore.ClaimNextDueAsync("after-crash", "lastfm", "account-1", observation.ObservedAtUtc.AddMinutes(1), TimeSpan.FromSeconds(30), CancellationToken.None);
+    Assert(recoveredTypeLease?.ActionType == actionType, "Now Playing, Love and Unlove can resume through the production claim path after recovery.");
+    await leaseTypeStore.CompleteAsync(recoveredTypeLease!.ActionId, ProviderActionState.Accepted, ReasonCodes.Provider.Accepted, observation.ObservedAtUtc.AddMinutes(1), CancellationToken.None);
+}
 File.Delete(leaseTypeDatabase);
 
 var historyReader = new SqliteHistoryReader(connectionString);
