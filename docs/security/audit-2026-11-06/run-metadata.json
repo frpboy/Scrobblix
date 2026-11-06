@@ -1,0 +1,25 @@
+{
+  "sourceSha": "81142dcb50fe3f2a896c622a6da5c3328ac21361",
+  "sourceCleanAtStart": true,
+  "release": "v0.1.0-beta.2",
+  "artifactSha256": "a93768501e62e32014756b8911bbd1197afe2cc95e560d78398b4e05834e4268",
+  "tools": {
+    "syft": "1.57.0",
+    "gitleaks": "8.30.1",
+    "dotnet": "10.0.403",
+    "node": "v22.23.4"
+  },
+  "history": {
+    "reachableCommits": 1091,
+    "scannerNonEmptyCommits": 1056,
+    "shallow": false
+  },
+  "limitations": [
+    "WinUI full solution NuGet restore unavailable on Linux",
+    "OSV uses exact package identities, not binary behavior",
+    "SBOM catalog metadata does not identify every native component license",
+    "No independent official six-phase audit validators available",
+    "Windows Credential Locker and authorization flow not exercised",
+    "Microsoft redistribution terms not independently certified"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "osv-batch.json": "eaa64395b7a5586308efcda8151d5dd4334becec42b5d99b08799a15409a7918",
+  "run-metadata.json": "03bcfee524f6ae591d637faad5b03882e830b9e69f0a3d941920b11c164126db",
+  "README.md": "763c04a6ea11a83a937ca5ce2ad4c26eb03d0b0374d8c791c3d8c7d68858780f",
+  "npm-audit.json": "a99d1d49e911f6e58b12f295e531174ecd55548aa717ee57e976505584cebfb3",
+  "release-sbom.cdx.json": "be940f4e14bf14fe8b6633a36bfeac6f2971cb7d01ddb12fbda4d6c48f10626f",
+  "nuget-licenses.json": "2173ba86eb3092cd77668cfa2e1202e91e810c22f6ce26de651f1e975be55376",
+  "gitleaks-all-refs.json": "37517e5f3dc66819f61f5a7bb8ace1921282415f10551d2defa5c3eb0985b570"
+}

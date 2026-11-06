@@ -1,0 +1,138 @@
+[
+  {
+    "name": "Microsoft.Data.Sqlite",
+    "version": "10.0.14",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.data.sqlite/10.0.14/microsoft.data.sqlite.nuspec",
+    "license": "MIT",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "name": "Microsoft.Data.Sqlite.Core",
+    "version": "10.0.14",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.data.sqlite.core/10.0.14/microsoft.data.sqlite.core.nuspec",
+    "license": "MIT",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/MIT"
+  },
+  {
+    "name": "Microsoft.Web.WebView2",
+    "version": "1.0.3719.77",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.web.webview2/1.0.3719.77/microsoft.web.webview2.nuspec",
+    "license": "LICENSE.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.Windows.AI.MachineLearning",
+    "version": "2.4.89",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windows.ai.machinelearning/2.4.89/microsoft.windows.ai.machinelearning.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk/2.6.4/microsoft.windowsappsdk.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.AI",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.ai/2.6.4/microsoft.windowsappsdk.ai.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.Foundation",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.foundation/2.6.4/microsoft.windowsappsdk.foundation.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.InteractiveExperiences",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.interactiveexperiences/2.6.4/microsoft.windowsappsdk.interactiveexperiences.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.ML",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.ml/2.6.4/microsoft.windowsappsdk.ml.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.Search",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.search/2.6.4/microsoft.windowsappsdk.search.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.Widgets",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.widgets/2.6.4/microsoft.windowsappsdk.widgets.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "Microsoft.WindowsAppSDK.WinUI",
+    "version": "2.6.4",
+    "source": "https://api.nuget.org/v3-flatcontainer/microsoft.windowsappsdk.winui/2.6.4/microsoft.windowsappsdk.winui.nuspec",
+    "license": "license.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "SQLitePCLRaw.bundle_e_sqlite3",
+    "version": "2.1.13",
+    "source": "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.bundle_e_sqlite3/2.1.13/sqlitepclraw.bundle_e_sqlite3.nuspec",
+    "license": "Apache-2.0",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "name": "SQLitePCLRaw.core",
+    "version": "2.1.13",
+    "source": "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.core/2.1.13/sqlitepclraw.core.nuspec",
+    "license": "Apache-2.0",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "name": "SQLitePCLRaw.lib.e_sqlite3",
+    "version": "3.53.3",
+    "source": "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.lib.e_sqlite3/3.53.3/sqlitepclraw.lib.e_sqlite3.nuspec",
+    "license": "LICENSE.txt",
+    "type": "file",
+    "licenseUrl": "https://aka.ms/deprecateLicenseUrl"
+  },
+  {
+    "name": "SQLitePCLRaw.provider.e_sqlite3",
+    "version": "2.1.13",
+    "source": "https://api.nuget.org/v3-flatcontainer/sqlitepclraw.provider.e_sqlite3/2.1.13/sqlitepclraw.provider.e_sqlite3.nuspec",
+    "license": "Apache-2.0",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+  },
+  {
+    "name": "System.Numerics.Tensors",
+    "version": "9.0.0",
+    "source": "https://api.nuget.org/v3-flatcontainer/system.numerics.tensors/9.0.0/system.numerics.tensors.nuspec",
+    "license": "MIT",
+    "type": "expression",
+    "licenseUrl": "https://licenses.nuget.org/MIT"
+  }
+]
