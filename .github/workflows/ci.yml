@@ -198,6 +198,17 @@ jobs:
       - name: Publish unpackaged Windows application
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
 
+      - name: Install matching official Windows App Runtime on ephemeral runner
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:USERPROFILE '.nuget/packages/microsoft.windowsappsdk.runtime/2.6.4/tools/MSIX/win10-x64'
+          foreach ($name in @('Microsoft.WindowsAppRuntime.2.msix','Microsoft.WindowsAppRuntime.Singleton.2.msix','Microsoft.WindowsAppRuntime.Main.2.msix','Microsoft.WindowsAppRuntime.DDLM.2.msix')) {
+            $package = Join-Path $root $name
+            if (-not (Test-Path $package)) { throw "Restored official runtime package absent: $name" }
+            Add-AppxPackage -Path $package
+          }
+          Get-AppxPackage *WindowsAppRuntime* | Select-Object Name,Version,Architecture
+
       - name: Qualify ordinary fresh-profile published startup
         run: ./scripts/test-ordinary-startup.ps1
 

@@ -39,6 +39,7 @@ try {
         $graphics.CopyFromScreen($rect.Left,$rect.Top,0,0,$bitmap.Size)
         $bitmap.Save((Join-Path $output 'ordinary-startup.png'),[Drawing.Imaging.ImageFormat]::Png)
     } finally { $graphics.Dispose();$bitmap.Dispose() }
+    if ($p.MainWindowTitle -match 'could not be started|Windows App Runtime') { throw 'Bootstrap dependency dialog, not ordinary application window' }
     $logs = Get-ChildItem (Join-Path $data 'logs') -File
     if (-not $logs) { throw 'No ordinary app startup logs' }
     $text = ($logs | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
