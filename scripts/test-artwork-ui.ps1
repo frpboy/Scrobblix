@@ -12,6 +12,7 @@ $result = Join-Path $output 'result.txt'
 if (-not (Test-Path $result)) { throw 'App exited before producing qualification result' }
 $text = Get-Content $result -Raw
 Write-Output $text
+Get-ChildItem $output -Filter *.txt | ForEach-Object { Write-Output $_.Name; Get-Content $_.FullName }
 if ($text -notmatch '^PASS') { throw 'Artwork UI qualification failed' }
 foreach ($name in @('valid-artwork.png','invalid-fallback.png','recovered-valid.png')) {
     if (-not (Test-Path (Join-Path $output $name))) { throw "Missing actual render $name" }
