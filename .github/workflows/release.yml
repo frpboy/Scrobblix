@@ -91,7 +91,7 @@ jobs:
 
             ## Data retention in this build
 
-            Scrobblix keeps raw playback diagnostic data for 30 days, then deletes it automatically. Your listening history and scrobbles are never deleted by this cleanup.
+            Scrobblix automatically cleans raw playback diagnostic data older than 30 days at app startup and every 24 hours while it is running. If the app is closed, cleanup waits until the next launch. Your listening history and scrobbles are never deleted by this cleanup.
 
             The desktop app may require the matching Microsoft Windows App Runtime. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
           files: release-assets/*

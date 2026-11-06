@@ -1698,6 +1698,14 @@ static async Task<long> CountRowsAsync(string connectionString, string sql)
 }
 
 var retention = new SqlitePlaybackObservationRetention(retentionConnectionString);
+foreach (var invalidBatchSize in new[] { -1, 0, 5_001 })
+{
+    var rejectedBatch = false;
+    try { await retention.PruneExpiredAsync(retentionCutoff, invalidBatchSize, CancellationToken.None); }
+    catch (ArgumentOutOfRangeException) { rejectedBatch = true; }
+    Assert(rejectedBatch, "Retention rejects unbounded, empty or excessive batch sizes before deleting.");
+}
+
 Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 1_205,
     "Synthetic retention dataset holds 1,200 expired, 1 boundary-expired, 1 boundary-kept and 3 recent raw observations.");
 var retentionIndex = await CountRowsAsync(retentionConnectionString,

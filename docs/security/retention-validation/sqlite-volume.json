@@ -1,0 +1,36 @@
+{
+  "engine": "3.37.2",
+  "scope": "SQLite SQL path synthetic benchmark, not Windows timings or managed scheduler test",
+  "before": {
+    "bytes": 31477760,
+    "rows": 100000,
+    "freePages": 0
+  },
+  "deleted": 90000,
+  "elapsedSeconds": 0.1195,
+  "after": {
+    "bytes": 31477760,
+    "rows": 10000,
+    "freePages": 6911
+  },
+  "queryPlan": [
+    [
+      3,
+      0,
+      0,
+      "SEARCH playback_observations USING INTEGER PRIMARY KEY (rowid=?)"
+    ],
+    [
+      7,
+      0,
+      0,
+      "LIST SUBQUERY 1"
+    ],
+    [
+      12,
+      7,
+      0,
+      "SEARCH playback_observations USING COVERING INDEX ix_playback_observations_captured_utc (captured_utc<?)"
+    ]
+  ]
+}

@@ -15,7 +15,7 @@ Do not describe source-transition, provider-attempt, analytics, exclusions, or r
 
 The repository owner approved a 30-day retention period for raw `playback_observations` diagnostics on 2026-11-06 (issue [#98](https://github.com/frpboy/Scrobblix/issues/98)). Shipped behavior:
 
-- Raw observations older than 30 days are deleted automatically by a background task that runs at app start and every 24 hours.
+- Raw observations older than 30 days are deleted by a background task at app start and every 24 hours while the app runs. No cleanup runs while the app is closed; expired rows wait until the next launch.
 - Cleanup deletes in bounded batches of 500 rows inside individual transactions, honors cancellation between batches, and retries on the next cycle after a failure; only deleted row counts are logged, never listening metadata.
 - Canonical `plays` listening history, `provider_actions` (including pending or ambiguous submissions), `accounts` and `loved_tracks` are never touched by this cleanup.
 - Migration `0006_observation_retention` adds the `ix_playback_observations_captured_utc` index backing the expiry query.
@@ -54,3 +54,7 @@ The current implementation should never claim secure erasure beyond the operatin
 ## Verification
 
 Do not mark a retention/deletion scenario PASS based on policy text. Record exact candidate SHA and real behavior in the test matrix; leave incomplete scenarios as NOT RUN.
+
+## Backup, restore and diagnostic retention
+
+Existing backup archives are immutable snapshots and can retain raw observations older than the active database window. Cleanup does not rewrite or delete archive files. A restored database follows the same startup cleanup policy, so expired raw observations can be pruned after restore. Keep a separate archived backup when diagnostics must be retained for investigation. There is no retention opt-out or diagnostic-history selector in this build. Canonical listening history and queued/ambiguous provider actions remain unchanged. This is logical SQLite deletion, not secure erasure; freed pages may remain in the database file and can be reused. Cleanup does not run VACUUM or promise immediate on-disk file shrinkage.

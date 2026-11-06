@@ -421,3 +421,7 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 - `scripts/collect-third-party-notices.mjs` collects license evidence from published NuGet dependencies.
 - `scripts/test-third-party-notices.mjs` tests collection and missing/unsafe license declarations.
 - `scripts/licenses/` contains MIT and Apache-2.0 reference license texts from the SPDX license-list-data project.
+
+## Retention validation
+
+`docs/security/retention-validation/sqlite-volume.json` records the100000-row SQLite SQL-path benchmark and indexed query plan. Timing is local, not Windows qualification; deletion frees pages without shrinking the database file.
