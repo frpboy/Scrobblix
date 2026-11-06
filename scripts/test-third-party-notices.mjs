@@ -28,5 +28,7 @@ try {
   assert.throws(()=>collectNotices(bundle,cache,license), /Unsafe license path/);
   writeFileSync(join(pkg,'example.nuspec'), '<license type="expression">Unknown-1.0</license>');
   assert.throws(()=>collectNotices(bundle,cache,license), /requires review/);
+  writeFileSync(join(bundle,'app.deps.json'), JSON.stringify({libraries:{'App/1':{type:'project'}}}));
+  assert.equal(collectNotices(bundle,cache,license).length,0, 'Framework-only native host has no third-party NuGet packages.');
   console.log('Third-party notice packaging fixtures passed.');
 } finally { rmSync(root,{recursive:true,force:true}); }

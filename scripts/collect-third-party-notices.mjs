@@ -8,11 +8,13 @@ const decodeXml = (value) => value.replace(/&quot;/g, '"').replace(/&apos;/g, "'
 
 export function collectNotices(bundle, cache, applicationLicense) {
   const packages = new Map();
+  let manifestCount = 0;
   function visit(directory) {
     for (const entry of readdirSync(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
       if (entry.isDirectory()) visit(path);
       else if (entry.name.endsWith('.deps.json')) {
+        manifestCount += 1;
         for (const [identity, metadata] of Object.entries(JSON.parse(readFileSync(path, 'utf8')).libraries ?? {})) {
           if (metadata.type !== 'package') continue;
           const separator = identity.lastIndexOf('/');
@@ -24,7 +26,7 @@ export function collectNotices(bundle, cache, applicationLicense) {
     }
   }
   visit(bundle);
-  if (!packages.size) throw new Error('No NuGet packages found in published dependency manifests');
+  if (!manifestCount) throw new Error('No published dependency manifests found');
   const output = join(bundle, 'third-party-notices');
   mkdirSync(output, { recursive: true });
   copyFileSync(applicationLicense, join(bundle, 'LICENSE'));
