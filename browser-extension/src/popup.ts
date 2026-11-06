@@ -142,7 +142,7 @@ async function trackCurrentSite(): Promise<void> {
 
 function renderCustomSites(sites: CustomSite[]): void {
   if (noCustomSites) {
-    noCustomSites.style.display = sites.length === 0 ? "block" : "none";
+    noCustomSites.hidden = sites.length !== 0;
   }
   customSites.replaceChildren(...sites.map((site) => {
     const item = document.createElement("li");
