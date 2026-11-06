@@ -46,7 +46,10 @@ jobs:
           emulator -avd scrobblix-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-emulator.log 2>&1 &
           emulator_pid=$!
           trap 'kill "$emulator_pid" || true' EXIT
-          timeout 300 adb wait-for-device
+          if ! timeout 180 adb wait-for-device; then
+            cat /tmp/scrobblix-emulator.log
+            exit 1
+          fi
           booted=false
           for attempt in $(seq 1 120); do
             if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
