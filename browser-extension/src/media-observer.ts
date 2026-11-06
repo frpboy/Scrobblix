@@ -25,23 +25,22 @@ function toHttpsArtworkUrl(candidate: string | undefined): string | undefined {
 }
 
 function findArtworkUrl(media: HTMLMediaElement, metadata: ExtendedMediaMetadata | undefined): string | undefined {
-  const sessionArtwork = metadata?.artwork
-    ?.map((image) => toHttpsArtworkUrl(image.src))
-    .find((src): src is string => Boolean(src));
-  if (sessionArtwork) return sessionArtwork;
+  // Optimization: Short-circuit on the first valid HTTPS artwork to avoid allocating intermediate
+  // arrays, parsing unnecessary URLs, and executing redundant DOM queries during frequent playback updates.
+  if (metadata?.artwork) {
+    for (const image of metadata.artwork) {
+      const candidate = toHttpsArtworkUrl(image.src);
+      if (candidate) return candidate;
+    }
+  }
 
   // Many web players don't populate MediaSession artwork. Prefer the active video poster,
   // then same-page Open Graph/Twitter imagery. Only HTTPS URLs are sent to the desktop host.
+  // Evaluate fallbacks lazily to skip querying the DOM when an earlier candidate matches.
   const poster = media instanceof HTMLVideoElement ? media.poster : undefined;
-  const pageArtwork = [
-    poster,
-    document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content,
-    document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]')?.content,
-  ]
-    .map((candidate) => toHttpsArtworkUrl(candidate))
-    .find((src): src is string => Boolean(src));
-
-  return pageArtwork;
+  return toHttpsArtworkUrl(poster)
+    ?? toHttpsArtworkUrl(document.querySelector<HTMLMetaElement>('meta[property="og:image"]')?.content)
+    ?? toHttpsArtworkUrl(document.querySelector<HTMLMetaElement>('meta[name="twitter:image"]')?.content);
 }
 
 function send(media: HTMLMediaElement, state: PlaybackState): void {
