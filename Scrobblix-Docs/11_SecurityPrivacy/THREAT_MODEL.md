@@ -27,7 +27,7 @@ This is a source-based threat review, not an external penetration test, code-sig
 
 | Threat | Current controls | Remaining limitation |
 |---|---|---|
-| Malicious page sends malformed metadata | Browser payload validation, bounded field handling, browser-supplied sender identity, allow-listed adapters/origins | Requires real-browser qualification and continued regression tests |
+| Malicious page sends malformed metadata or races site revocation | Browser payload validation, bounded field handling, browser-supplied sender identity, allow-listed adapters/origins; custom-site removal revokes the service-worker authorization gate before asynchronous cleanup, and pending forwards re-check permission plus current registration both before opening the native port and immediately before native-host delivery | Requires real-browser qualification and continued regression tests; deterministic authorization-gate coverage does not replace installed-browser revocation testing |
 | Untrusted extension calls native host | Registered Chromium/Firefox extension ID allow-lists; identity checked before handling message types, including ping; fixed protocol message types | Registry/file tampering by the same user and extension-store supply chain still matter |
 | Untrusted process writes browser pipe | Current-user-only named pipe; desktop checks native-host image path and parent process basename against supported browsers | Defense-in-depth, not cryptographic executable identity or publisher-signature proof |
 | Oversized or malformed Native Messaging frames | Four-byte length prefix, maximum frame size 256 KiB, envelope/version/message checks | Test against actual browser behavior and malformed inputs on Windows |
@@ -50,6 +50,7 @@ Do not widen the allow-list to include track/artist, full URLs, usernames, arbit
 ## Abuse cases to keep testing
 
 - Replay or flood browser messages to create duplicate history or queue work.
+- Race a custom-site observation against user removal; the service-worker revocation gate must reject pending forwards before native-host delivery.
 - Spoof source identity or artist/title to pollute local history.
 - Use the native host as a generic command bridge.
 - Attempt to bypass extension allow-list using ping or malformed identities.

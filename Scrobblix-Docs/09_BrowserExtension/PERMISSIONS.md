@@ -32,7 +32,7 @@ Incognito behavior must remain disabled by default and comply with browser defau
 
 ## Permission UX and revocation
 
-The popup should state what the companion does, provide clear user action to test host reachability or add a site, and show actionable errors. When the user removes a site, revoke the associated browser permission and remove the site's local allow-list entry. A host registration entry does not prove that the extension is currently enabled or delivering observations.
+The popup should state what the companion does, provide clear user action to test host reachability or add a site, and show actionable errors. When the user removes a site, the popup first asks the service worker to synchronously invalidate that registration and remove it from the local allow-list. Only after that acknowledgement does the popup unregister the content script and revoke the browser permission. Pending custom-site forwards re-check the browser grant and latest registration after asynchronous permission checks and again after opening the native port immediately before delivery; a removed registration must not reach the native host. The removal message is accepted only from this extension's own popup context, not a content script. A host registration entry does not prove that the extension is currently enabled or delivering observations.
 
 ## Release gate
 
