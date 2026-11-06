@@ -46,3 +46,5 @@ The implementation supports retry-now for eligible queue states, a specific acti
 Automated tests cover selected lifecycle, state, lease and recovery rules. Real network/provider acceptance, multi-day listening correctness, account reconnect behavior and long-duration reliability require a real Windows/Last.fm test profile and remain manual release gates.
 
 Successful Last.fm reconnection requeues only `AuthBlocked` actions belonging to the newly authenticated provider/account. Other accounts/providers and ambiguous outcomes remain untouched. Now Playing age checks still apply before delivery.
+
+Last.fm documented JSON API failures are classified before HTTP fallback, including non-2xx responses: invalid session blocks authentication, permanent errors do not retry, temporary/rate errors may retry. Malformed/non-API/unknown errors retain outcome-unknown for append-only scrobbles; state-setting operations keep their existing conservative HTTP retry behavior. The API-error classifier ignores bodies above 64Ki characters; this is a classification limit, not a network response-memory cap. See [Last.fm error handling](https://www.last.fm/api/scrobbling).

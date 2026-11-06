@@ -635,6 +635,42 @@ Assert(!unknownScrobbleResult.Accepted && unknownScrobbleResult.ReasonCode == Re
     "A nominal success response without a scrobbles result does not inflate accepted totals.");
 
 
+// Documented Last.fm errors carry meaning independently of HTTP status.
+foreach (var status in new[] { System.Net.HttpStatusCode.OK, System.Net.HttpStatusCode.BadRequest, System.Net.HttpStatusCode.Forbidden, System.Net.HttpStatusCode.ServiceUnavailable })
+foreach (var (code, reason, transient) in new[] {
+    (9, ReasonCodes.Provider.AuthInvalidSession, false),
+    (6, ReasonCodes.Provider.ResponseInvalid, false),
+    (11, ReasonCodes.Provider.TemporaryUnavailable, true),
+    (16, ReasonCodes.Provider.TemporaryUnavailable, true),
+    (29, ReasonCodes.Provider.RateLimited, true),
+})
+{
+    using var errorClient = new HttpClient(new StatusHttpHandler(status, $"{{\"error\":{code}}}"));
+    var provider = new LastFmScrobbleProvider(errorClient, "test-key", "test-secret");
+    var results = new[] {
+        await provider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None),
+        await provider.UpdateNowPlayingAsync(lovedSubmission, CancellationToken.None),
+        await provider.LoveTrackAsync(lovedSubmission, CancellationToken.None),
+        await provider.UnloveTrackAsync(lovedSubmission, CancellationToken.None),
+    };
+    Assert(results.All(result => !result.Accepted && result.ReasonCode == reason && result.IsTransient == transient),
+        "Documented API errors map consistently across HTTP status and all four operations.");
+    if (code == 29) Assert(results.All(result => result.RetryAfter == TimeSpan.FromSeconds(27)), "API rate errors preserve Retry-After.");
+}
+foreach (var body in new[] { "<html>gateway error</html>", "[]", "null", "{", "{\"error\":\"9\"}", "{\"error\":2147483648}", "{\"error\":1.5}", "{\"error\":999}", new string('x', 65537) })
+{
+    using var invalidClient = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.BadGateway, body));
+    var provider = new LastFmScrobbleProvider(invalidClient, "test-key", "test-secret");
+    var result = await provider.SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(!result.Accepted && !result.IsTransient && result.ReasonCode == ReasonCodes.Provider.SubmissionOutcomeUnknown,
+        "Malformed/non-API/unknown error response never authorizes blind append-only retries.");
+}
+using (var rateClient = new HttpClient(new StatusHttpHandler(System.Net.HttpStatusCode.TooManyRequests, "not-json")))
+{
+    var result = await new LastFmScrobbleProvider(rateClient, "test-key", "test-secret").SubmitScrobbleAsync(lovedSubmission, CancellationToken.None);
+    Assert(result.ReasonCode == ReasonCodes.Provider.RateLimited && result.RetryAfter == TimeSpan.FromSeconds(27), "HTTP429 fallback preserves Retry-After without a documented body.");
+}
+
 // Logger sanitizer regression: metadata must remain redacted when values contain field delimiters.
 var sanitizedDiagnostic = Scrobblix.Infrastructure.Diagnostics.DiagnosticMessageSanitizer.Sanitize(
     "artist=Earth, Wind & Fire; title=\"Hello, World; Part 2\"; album=Re-Load | Remaster; action_id=abc123");
@@ -2064,5 +2100,15 @@ sealed class SequenceHttpHandler(params string[] bodies) : HttpMessageHandler
     {
         RequestBodies.Add(await request.Content!.ReadAsStringAsync(cancellationToken));
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent(_bodies.Dequeue(), Encoding.UTF8, "application/json") };
+    }
+}
+
+sealed class StatusHttpHandler(System.Net.HttpStatusCode status, string body) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var response = new HttpResponseMessage(status) { Content = new StringContent(body) };
+        response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(27));
+        return Task.FromResult(response);
     }
 }
