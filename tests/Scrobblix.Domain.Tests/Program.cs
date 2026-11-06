@@ -738,7 +738,7 @@ await using (var migrationConnection = new SqliteConnection(connectionString))
     await migrationConnection.OpenAsync(CancellationToken.None);
     await using var migrationCommand = migrationConnection.CreateCommand();
     migrationCommand.CommandText = "SELECT COUNT(*) FROM schema_migrations;";
-    Assert(Convert.ToInt32(await migrationCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 5, "Every embedded migration is recorded after initialization.");
+    Assert(Convert.ToInt32(await migrationCommand.ExecuteScalarAsync(CancellationToken.None), System.Globalization.CultureInfo.InvariantCulture) == 6, "Every embedded migration is recorded after initialization.");
 }
 var observationStore = new SqlitePlaybackObservationStore(connectionString);
 var ingestion = new PlaybackObservationIngestionService(observationStore);
@@ -1653,6 +1653,78 @@ Assert(File.ReadAllText(restoreSwapActivePath) == "replacement-main-db"
     && !File.Exists(restoreSwapReplacementPath),
     "A successful restore activates the replacement and leaves no old WAL/SHM at SQLite's active paths.");
 Directory.Delete(restoreSwapTestDirectory, recursive: true);
+
+// Raw playback observation retention (issue #98): the approved 30-day policy prunes only
+// expired raw observations, in bounded cancellation-safe batches; canonical plays are untouched.
+var retentionTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-retention-{Guid.NewGuid():N}");
+Directory.CreateDirectory(retentionTestDirectory);
+var retentionConnectionString = $"Data Source={Path.Combine(retentionTestDirectory, "scrobblix.db")};Pooling=False";
+await new SqliteDatabase(retentionConnectionString).InitializeAsync(CancellationToken.None);
+var retentionObservationStore = new SqlitePlaybackObservationStore(retentionConnectionString);
+var retentionNow = DateTimeOffset.UtcNow;
+var retentionCutoff = retentionNow - PlaybackObservationRetentionPolicy.RetentionPeriod;
+for (var index = 0; index < 1_200; index++)
+{
+    await retentionObservationStore.TryAppendAsync(new PlayObservation(
+        new SourceEventKey("gsmtc", "retention-session", index + 1, $"expired-{index}"),
+        retentionNow.AddDays(-40), retentionNow.AddDays(-40), "gsmtc", "app-1", "Artist", $"Old {index}", null,
+        null, null, PlayState.Playing, null, null), CancellationToken.None);
+}
+await retentionObservationStore.TryAppendAsync(new PlayObservation(
+    new SourceEventKey("gsmtc", "retention-session", 9_001, "boundary-expired"),
+    retentionCutoff.AddSeconds(-1), retentionCutoff.AddSeconds(-1), "gsmtc", "app-1", "Artist", "Boundary expired", null,
+    null, null, PlayState.Playing, null, null), CancellationToken.None);
+await retentionObservationStore.TryAppendAsync(new PlayObservation(
+    new SourceEventKey("gsmtc", "retention-session", 9_002, "boundary-kept"),
+    retentionCutoff.AddSeconds(1), retentionCutoff.AddSeconds(1), "gsmtc", "app-1", "Artist", "Boundary kept", null,
+    null, null, PlayState.Playing, null, null), CancellationToken.None);
+for (var index = 0; index < 3; index++)
+{
+    await retentionObservationStore.TryAppendAsync(new PlayObservation(
+        new SourceEventKey("gsmtc", "retention-session", 9_100 + index, $"recent-{index}"),
+        retentionNow, retentionNow, "gsmtc", "app-1", "Artist", $"Recent {index}", null,
+        null, null, PlayState.Playing, null, null), CancellationToken.None);
+}
+var retentionPlayStore = new SqliteLocalPlayStore(retentionConnectionString);
+await retentionPlayStore.UpsertAsync(historyRecord with { PlayId = "retention-canonical" }, CancellationToken.None);
+
+static async Task<long> CountRowsAsync(string connectionString, string sql)
+{
+    await using var connection = new Microsoft.Data.Sqlite.SqliteConnection(connectionString);
+    await connection.OpenAsync();
+    await using var command = connection.CreateCommand();
+    command.CommandText = sql;
+    return (long)(await command.ExecuteScalarAsync())!;
+}
+
+var retention = new SqlitePlaybackObservationRetention(retentionConnectionString);
+Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 1_205,
+    "Synthetic retention dataset holds 1,200 expired, 1 boundary-expired, 1 boundary-kept and 3 recent raw observations.");
+var retentionIndex = await CountRowsAsync(retentionConnectionString,
+    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'index' AND name = 'ix_playback_observations_captured_utc';");
+Assert(retentionIndex == 1, "The retention migration adds the captured_utc expiry index.");
+var retentionCancelled = false;
+try
+{
+    await retention.PruneExpiredAsync(retentionCutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, new CancellationToken(canceled: true));
+}
+catch (OperationCanceledException)
+{
+    retentionCancelled = true;
+}
+Assert(retentionCancelled, "Retention pruning honors a pre-cancelled token instead of deleting.");
+Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 1_205,
+    "A cancelled prune leaves every raw observation intact for safe retry.");
+var prunedTotal = await retention.PruneExpiredAsync(retentionCutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, CancellationToken.None);
+Assert(prunedTotal == 1_201,
+    "Retention pruning deletes exactly the 1,200 expired rows plus the boundary-expired row across bounded batches.");
+Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM playback_observations;") == 4,
+    "Only the boundary-kept and recent raw observations survive the 30-day retention window.");
+Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM plays WHERE play_id = 'retention-canonical';") == 1,
+    "Retention pruning never touches canonical plays history.");
+Assert(await retention.PruneExpiredAsync(retentionCutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, CancellationToken.None) == 0,
+    "A second retention run is idempotent once no expired rows remain.");
+Directory.Delete(retentionTestDirectory, recursive: true);
 
 var backupTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-backup-{Guid.NewGuid():N}");
 Directory.CreateDirectory(backupTestDirectory);

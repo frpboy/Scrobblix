@@ -3,13 +3,24 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (frpboy)  
 > **Status:** Privacy requirements; full retention/deletion workflow is not established as shipped  
-> **Last reviewed:** 2026-10-28
+> **Last reviewed:** 2026-11-06
 
 ## Current persisted data
 
 The migration-backed SQLite tables are `schema_migrations`, `playback_observations`, `plays`, `provider_actions`, `accounts`, and `loved_tracks`. Logs, non-secret UI preferences, and artwork cache are stored separately under the user profile. Last.fm session credentials and application API credentials are managed through Windows Credential Locker.
 
 Do not describe source-transition, provider-attempt, analytics, exclusions, or retention-job tables as present unless a migration creates them. Refer to the [Database Schema](DATABASE_SCHEMA.md) for the exact physical schema.
+
+## Approved shipped policy: raw playback observations (2026-11-06)
+
+The repository owner approved a 30-day retention period for raw `playback_observations` diagnostics on 2026-11-06 (issue [#98](https://github.com/frpboy/Scrobblix/issues/98)). Shipped behavior:
+
+- Raw observations older than 30 days are deleted automatically by a background task that runs at app start and every 24 hours.
+- Cleanup deletes in bounded batches of 500 rows inside individual transactions, honors cancellation between batches, and retries on the next cycle after a failure; only deleted row counts are logged, never listening metadata.
+- Canonical `plays` listening history, `provider_actions` (including pending or ambiguous submissions), `accounts` and `loved_tracks` are never touched by this cleanup.
+- Migration `0006_observation_retention` adds the `ix_playback_observations_captured_utc` index backing the expiry query.
+
+Other data classes below remain policy targets until individually implemented and reviewed.
 
 ## Privacy policy recommendations
 

@@ -220,6 +220,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
+            StartPlaybackObservationRetention(connectionString, logger, applicationCancellation.Token);
             _window.BackupRequested += async destinationPath =>
             {
                 await ScrobblixBackupService.CreateBackupAsync(connectionString, destinationPath, applicationCancellation.Token);
@@ -640,6 +641,43 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         return false;
+    }
+
+    private static void StartPlaybackObservationRetention(string connectionString, ScrobblixFileLogger logger, CancellationToken cancellationToken)
+    {
+        var retention = new SqlitePlaybackObservationRetention(connectionString);
+        _ = Task.Run(async () =>
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var cutoff = DateTimeOffset.UtcNow - PlaybackObservationRetentionPolicy.RetentionPeriod;
+                    var pruned = await retention.PruneExpiredAsync(cutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, cancellationToken);
+                    if (pruned > 0)
+                    {
+                        logger.Info("STORAGE", $"Pruned {pruned} expired raw playback observations under the 30-day retention policy.");
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("STORAGE", $"Raw playback observation retention failed and will retry on the next cycle; exception={exception.GetType().Name}.");
+                }
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromHours(24), cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+        }, cancellationToken);
     }
 
     private void StartSingleInstanceActivationListener()
