@@ -198,6 +198,29 @@ jobs:
       - name: Publish unpackaged Windows application
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
 
+      - name: Install matching official Windows App Runtime on ephemeral runner
+        shell: pwsh
+        run: |
+          $root = Join-Path $env:USERPROFILE '.nuget/packages/microsoft.windowsappsdk.runtime/2.6.4/tools/MSIX/win10-x64'
+          foreach ($name in @('Microsoft.WindowsAppRuntime.2.msix','Microsoft.WindowsAppRuntime.Singleton.2.msix','Microsoft.WindowsAppRuntime.Main.2.msix','Microsoft.WindowsAppRuntime.DDLM.2.msix')) {
+            $package = Join-Path $root $name
+            if (-not (Test-Path $package)) { throw "Restored official runtime package absent: $name" }
+            Add-AppxPackage -Path $package
+          }
+          Get-AppxPackage *WindowsAppRuntime* | Select-Object Name,Version,Architecture
+
+      - name: Qualify ordinary fresh-profile published startup
+        run: ./scripts/test-ordinary-startup.ps1
+
+      - name: Preserve ordinary startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ordinary-startup-qualification
+          path: ${{ runner.temp }}/scrobblix-ordinary-startup
+          retention-days: 7
+          if-no-files-found: warn
+
       - name: Publish native messaging host
         run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --no-restore --output artifacts/Scrobblix/native-host
 
