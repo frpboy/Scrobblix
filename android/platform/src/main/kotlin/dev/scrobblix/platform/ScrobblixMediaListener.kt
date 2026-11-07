@@ -34,6 +34,7 @@ abstract class ScrobblixMediaListener : NotificationListenerService() {
     /** Must be called from the main thread by explicit app state, not external notification data. */
     fun setUserTrackingEnabled(enabled:Boolean) {
         check(Looper.myLooper()==Looper.getMainLooper())
+        session?.disconnected() // Account/control transition cannot inherit earlier confirmed listening.
         tracking=enabled
         handler.removeCallbacks(tick)
         if(enabled && connected) handler.post(tick) else session?.disconnected()

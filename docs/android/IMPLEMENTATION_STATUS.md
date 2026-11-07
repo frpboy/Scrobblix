@@ -61,3 +61,12 @@ At2c8892f, four actual API36 Android instrumentation tests pass (SQLite + synthe
 Two native MediaSession boundary instrumentation tests are added next: access-required without enabling notification access, and synthetic session/controller metadata/playback snapshots with unsafe/control/oversize/blank field rejection. Their source compiles locally; actual emulator rerun pending. This is not third-party player integration or background/listener lifecycle qualification. The reader now reads playback state once per snapshot to avoid internally inconsistent repeated reads.
 
 Native test at192d963:5/6 passed; the synthetic playing session returned position12002 rather than12000 at speed1, exposing a nondeterministic exact-position assertion. Test now uses static speed0 for field-extraction qualification. Production extraction is unchanged; real timing/player behavior remains unqualified.
+
+
+## Full-app work resumed 2026-11-07
+
+User requested complete Android app and releases, beyond the library milestone. Current development app uses test-only `dev.scrobblix.preview`, not an approved permanent Play identity. Local debug APK assembly, app instrumentation source compilation and22 existing JVM tests pass. Actual app runtime/UI testing is next, not yet claimed.
+
+The installable Compose preview now has opt-in tracking, Android media-access review, local history, account-scoped delivery status, concrete media listener and network-constrained background worker. HTTPS Last.fm mobile-auth/transport source is added with conservative append-only ambiguity handling. No registered API credentials are bundled, so this preview explicitly disables sign-in and cannot send listening data. Credentials are not logged; user passwords are never persisted; session keys use the existing encrypted store; backup is disabled. This is development progress, not complete sign-in or release qualification.
+
+Official mobile auth is https://www.last.fm/api/mobileauth and https://www.last.fm/api/authspec . Desktop-only browser auth is not silently adopted. API registration and terms scope require an owner-approved application configuration; client-embedded API shared secrets are extractable and cannot be described as vault-protected in a distributed APK. App identity/signing/Play/test-account decisions remain open. No release key or store listing has been created. Real-player/background/battery/long-run/accessibility/install/update/release audits remain required. No library/instrumentation success is labeled app completion.
