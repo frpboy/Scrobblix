@@ -7,6 +7,11 @@ on:
     branches: [main]
     paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
   workflow_dispatch:
+    inputs:
+      qualify_live_token_start:
+        description: 'Manually approved fresh API26 token-start only, no consent/session/listening'
+        type: boolean
+        default: false
 permissions:
   contents: read
 concurrency:
@@ -120,3 +125,41 @@ jobs:
             android-evidence
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/androidTest-results
+
+  live-token-start-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.qualify_live_token_start
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Fresh API26 actual client token start only
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+          sdkmanager 'emulator' 'system-images;android-26;default;x86_64'
+          echo no | avdmanager create avd --force --name token-start-only --package 'system-images;android-26;default;x86_64'
+          emulator -avd token-start-only -wipe-data -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/token-start-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          timeout 180 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          test "$booted" = true
+          adb install android/app/build/outputs/apk/debug/app-debug.apk
+          adb install android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          # ONLY this class executes. No synthetic auth, playback or queue suite ever runs here.
+          result=$(adb shell am instrument -w -r -e liveTokenStart true -e class dev.scrobblix.app.LiveTokenStartQualificationTest com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          printf '%s\n' "$result"
+          printf '%s\n' "$result" | grep -F 'OK (1 test)'
+          if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
