@@ -1,8 +1,8 @@
 # Fresh dependency, SBOM and secret scans - 2026-11-07
 
 Scope: [#76](https://github.com/frpboy/Scrobblix/issues/76). Exact target commit
-`d64b16bf9686f3d5f7afe84cf5766fc3f90c1595` (branch `security/pipe-credential-scans`,
-one commit on top of main `4432841`). Refresh of the historical
+`b72e0eb055df2e5a6fd327d220d92dfc218f4114` (branch `security/pipe-credential-scans`,
+merged with main `52dd269` after the #122 cache and #138 governance merges). Refresh of the historical
 [audit-2026-11-06](../audit-2026-11-06/README.md) bundle, which targeted the released
 beta.2 SHA `81142dc`; those older results remain historical evidence for that target only.
 
@@ -10,7 +10,7 @@ beta.2 SHA `81142dc`; those older results remain historical evidence for that ta
 
 | Check | Tool | Result | Artifact |
 |---|---|---|---|
-| Git history + all refs secret scan | gitleaks 8.30.1, `--redact`, all branch/tag/PR refs | 1175 commits, no leaks | `gitleaks-all-refs.json` |
+| Git history + all refs secret scan | gitleaks 8.30.1, `--redact`, all branch/tag/PR refs | 1179 commits, no leaks | `gitleaks-all-refs.json` |
 | NuGet vulnerabilities (direct + transitive) | `dotnet list package --vulnerable --include-transitive`, full restore incl. Windows targets | no vulnerable packages in any of the 9 projects | `nuget-vulnerable-transitive.txt` |
 | npm vulnerabilities (full lockfile) | `npm audit` | 0 vulnerabilities across 23 dependencies | `npm-audit.json` |
 | OSV cross-check (NuGet direct + WindowsAppSDK + full npm lockfile) | api.osv.dev querybatch | 31 package@version queries, 0 hits | `osv-batch.json` |

@@ -1,7 +1,7 @@
 {
-  "sourceSha": "d64b16bf9686f3d5f7afe84cf5766fc3f90c1595",
-  "branch": "security/pipe-credential-scans",
-  "scannedAt": "2026-11-07T07:20:00+05:30",
+  "sourceSha": "b72e0eb055df2e5a6fd327d220d92dfc218f4114",
+  "branch": "security/pipe-credential-scans (merged with main 52dd269)",
+  "scannedAt": "2026-11-07T07:42:00+05:30",
   "tools": {
     "gitleaks": "8.30.1",
     "syft": "1.57.0",
@@ -10,7 +10,7 @@
     "osv": "api.osv.dev/v1/querybatch"
   },
   "coverage": {
-    "gitHistory": "1175 commits across all branch, tag and pull-request refs, redacted report",
+    "gitHistory": "1179 commits across all branch, tag and pull-request refs, redacted report",
     "nuget": "dotnet list package --vulnerable --include-transitive over all 9 solution projects after a full EnableWindowsTargeting restore",
     "npm": "npm audit over the full browser-extension lockfile (23 dependencies) plus an OSV cross-check",
     "sbom": "syft dir scan, CycloneDX 1.7"
