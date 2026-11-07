@@ -32,7 +32,7 @@ class MainActivity:ComponentActivity() {
     }
 }
 @Composable
-fun AppScreen(store:AppStore,api:LastFmApi?=LastFmApi.configured(store.context)) {
+fun AppScreen(store:AppStore,api:LastFmApi?=null) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }

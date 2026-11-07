@@ -93,14 +93,15 @@ class AppRuntimeTest {
         val context=ui.activity.applicationContext
         val config=ApiConfigurationStore(context)
         val key="d".repeat(32);val secret="e".repeat(32)
-        config.write(key,secret)
-        assertEquals(key to secret,ApiConfigurationStore(context).read())
-        val directory=java.io.File(context.noBackupFilesDir,"scrobblix-session-secrets")
-        directory.listFiles()!!.forEach { file ->
-            val bytes=file.readBytes().toString(Charsets.ISO_8859_1)
-            assertFalse(bytes.contains(key));assertFalse(bytes.contains(secret))
-        }
-        dev.scrobblix.platform.SessionSecretStore(context).remove("lastfm-api-config","device")
+        try {
+            config.write(key,secret)
+            assertEquals(key to secret,ApiConfigurationStore(context).read())
+            val directory=java.io.File(context.noBackupFilesDir,"scrobblix-session-secrets")
+            directory.listFiles()!!.forEach { file ->
+                val bytes=file.readBytes().toString(Charsets.ISO_8859_1)
+                assertFalse(bytes.contains(key));assertFalse(bytes.contains(secret))
+            }
+        } finally { dev.scrobblix.platform.SessionSecretStore(context).remove("lastfm-api-config","device") }
         assertNull(config.read())
     }
 
