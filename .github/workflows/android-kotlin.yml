@@ -78,6 +78,11 @@ jobs:
           fi
           # Actual process boundary with synthetic data only. Instrumentation is a
           # separate invocation on each side of force-stop; verify PID and held ambiguity.
+          # Gradle connected tests uninstall their packages at teardown. Reinstall
+          # exact just-built debug/test APKs for the independent process phases.
+          adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+          adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb shell pm list instrumentation | grep -F 'com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner'
           for phase in prepare verify; do
             if [ "$phase" = verify ]; then adb shell am force-stop com.frpboy.scrobblix; fi
             method=prepareBeforeProcessDeath
@@ -87,6 +92,7 @@ jobs:
             printf '%s\n' "$result" | grep -F 'OK (1 test)'
             if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
           done
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
@@ -94,6 +100,7 @@ jobs:
         if: always()
         shell: bash
         run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
