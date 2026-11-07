@@ -62,3 +62,10 @@ assert.match(ci, /collect-third-party-notices\.mjs \$bundle/, "Windows ZIP must 
 assert.match(ci, /collect-third-party-notices\.mjs \$companion/, "Browser companion must carry dependency licenses before compression.");
 
 assert.match(read("scripts/setup-browser-companion.ps1"), /collect-third-party-notices\.mjs \$packageRoot/, "Local source-clone packaging must carry the same license evidence.");
+
+assert.match(ci, /portable-zip-startup:/, 'Final ZIP must have a separate fresh-runner startup job.');
+assert.match(ci, /needs: build-and-test/, 'ZIP startup must consume the completed package.');
+assert.match(ci, /RequirePrivateRuntime/, 'Startup must prove private runtime loading.');
+assert.match(ci, /WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=false --output artifacts\/Scrobblix\/desktop/, 'Delivered app must be ordinary self-contained build, not fixture.');
+assert.match(ci, /test-portable-package.ps1/, 'ZIP must verify runtime/resource files before launch.');
+assert.doesNotMatch(ci, /Install matching official Windows App Runtime/, 'Do not hide portable runtime gaps with runtime installation.');

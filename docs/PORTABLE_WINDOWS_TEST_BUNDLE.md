@@ -1,0 +1,11 @@
+# Windows x64 portable preview qualification
+
+Beta2 and beta3 published Windows ZIPs omit Scrobblix.Desktop.pri. Their README also does not identify the .NET10 runtime prerequisite. A package/checksum pass alone was not a successful launch test. Historical release assets are not replaced.
+
+The next bundle is an unpackaged, unsigned x64 preview, not an installer or stable release. The desktop app and optional native messaging host publish self-contained for .NET; the desktop also bundles Windows App SDK. Keep all files together after extracting the ZIP. Do not disable Windows security protections. Existing local settings and listening history are not deleted or reset by extraction. New source includes the separately documented owner-approved retention behavior, not a general data reset.
+
+CI builds normal product code with ScrobblixUiQualification=false. It checks the app PRI and private runtime files, then a separate fresh Windows runner downloads and extracts the final ZIP. It launches that exact extracted EXE, requires a responsive real window, captures actual pixels, checks normal startup/database logs, and checks that coreclr.dll and Microsoft.UI.Xaml.dll loaded from the extracted app folder rather than machine-wide installations. It records the tested ZIP SHA256. No account credentials or listening fixtures are used in this ordinary launch path. The runner still has standard system software and is not proof of every user Windows configuration.
+
+Only after those checks pass may the bundle be described as launch-qualified on the hosted Windows runner. Release remains subject to normal reviews and required checks. The user's actual Windows architecture and device retest remain separate checks; x64 is the build target, not an assertion about their PC. Real listening/provider/browser behavior, longer soak, upgrade/rollback, broader accessibility and signing remain open.
+
+Microsoft guidance: https://learn.microsoft.com/en-us/windows/apps/package-and-deploy/self-contained-deploy/deploy-self-contained-apps . Both .NET SelfContained and WindowsAppSDKSelfContained are needed. Folder distribution avoids single-file extraction/compatibility changes. Optional APIs that require other system packages must remain optional.

@@ -93,7 +93,7 @@ jobs:
 
             Scrobblix automatically cleans raw playback diagnostic data older than 30 days at app startup and every 24 hours while it is running. If the app is closed, cleanup waits until the next launch. Your listening history and scrobbles are never deleted by this cleanup.
 
-            The desktop app may require the matching Microsoft Windows App Runtime. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
+            The Windows x64 bundle includes its .NET and Windows App SDK runtimes. Extract all files before running desktop/Scrobblix.Desktop.exe; do not copy the EXE alone. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
           files: release-assets/*
           fail_on_unmatched_files: true
         env:
