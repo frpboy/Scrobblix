@@ -70,6 +70,7 @@ try
 finally { Directory.Delete(root, true); }
 await PipeSecurityChecks.RunAsync();
 await CredentialCanaryChecks.RunAsync();
+await MediaSessionChecks.RunAsync();
 Console.WriteLine("Windows native integration checks complete (artwork metadata, pipe authorization, credential canaries). No WinUI pixel, decoder memory-bound, or cryptographic caller-authentication claim.");
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
