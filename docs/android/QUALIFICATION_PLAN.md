@@ -39,7 +39,7 @@ Keep Android and Windows runs separate. Record selected account, platform/build 
 - Play a known track long enough to reach eligibility. Check local play/action and chosen Last.fm profile agree exactly once. Pause/resume and switch tracks within the bounded write allowance; additional submissions require expanding that allowance first.
 - Screen off for a short bounded interval. Observe actual background collection and queue state. Explain gaps truthfully; do not infer listening during missed samples.
 - Exercise offline/recovery with tracking paused or remaining within the approved write allowance. Preserve unknown submissions without replay. Revoking media access or pausing must stop new collection; an already-sent request may finish.
-- Inspect normal secure-window behavior directly on the device. Debug screenshot capture temporarily clears a window flag and does not qualify release capture/privacy behavior.
+- Verify screenshots and Android recent-app previews are available. Confirm that account/history visibility is disclosed and password/API-secret inputs remain masked; do not include real account secrets in test captures.
 - Schedule an owner-agreed soak only after the short test passes. Record battery restriction state, duration, gaps, queue totals and resource behavior. Do not silently disable battery protections.
 
 ## 4. Windows physical-machine test
