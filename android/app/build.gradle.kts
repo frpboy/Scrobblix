@@ -3,8 +3,8 @@ android {
     namespace = "dev.scrobblix.app"
     compileSdk = 37
     defaultConfig {
-        // Explicit test-only identity. No permanent Play identity or release key assumed.
-        applicationId = "dev.scrobblix.preview"
+        // Permanent package approved by owner; signing and Play submission are separate gates.
+        applicationId = "com.frpboy.scrobblix"
         minSdk = 26
         targetSdk = 36
         versionCode = 1

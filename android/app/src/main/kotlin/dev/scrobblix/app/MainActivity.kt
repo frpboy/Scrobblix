@@ -32,7 +32,7 @@ class MainActivity:ComponentActivity() {
     }
 }
 @Composable
-fun AppScreen(store:AppStore) {
+fun AppScreen(store:AppStore,api:LastFmApi?=LastFmApi.configured(store.context)) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }
@@ -97,7 +97,7 @@ fun AppScreen(store:AppStore) {
                     Text("Connected as $account")
                     Button(onClick={scope.launch { withContext(Dispatchers.IO) { store.disconnect() };account=null;tracking=false;message="Disconnected locally. History and queue are preserved. Revoke the session in Last.fm settings if needed." }}) { Text("Disconnect Last.fm") }
                 } else {
-                    val configured=remember { LastFmApi.configured(context) }
+                    val configured=api
                     if(configured==null) Text("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.")
                     else {
                         Text("Sign in over HTTPS using Last.fm's mobile authentication. Your password is sent to Last.fm once and is not saved. The session key is encrypted with Android Keystore.")
