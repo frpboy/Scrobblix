@@ -8,6 +8,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 - Raw playback observation retention: raw diagnostic observations are now automatically pruned after 30 days (owner-approved policy, issue #98). Cleanup runs in bounded cancellation-safe batches off the UI thread, logs only row counts, and never touches canonical listening history, scrobbles or provider actions.
 
+- Artwork cache retention: cached artwork files older than 30 days are now automatically deleted unless still referenced by retained listening history (owner-approved policy, issue #122). Cleanup runs off the UI thread in bounded cancellation-safe batches, skips locked files for the next cycle, removes orphaned temporary files after a 1-day grace period, bounds the in-memory GSMTC artwork key map, and never touches listening history, provider queues or non-artwork files.
+
 ### Fixed
 
 - Future Windows and Browser Companion ZIPs include the application license, third-party package metadata, license texts and redistribution notices. Packaging fails if declared license evidence is missing (issue #108). Existing beta.2 assets are unchanged.

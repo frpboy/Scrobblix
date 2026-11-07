@@ -248,6 +248,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             await database.InitializeAsync(CancellationToken.None);
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
             StartPlaybackObservationRetention(connectionString, logger, applicationCancellation.Token);
+            StartArtworkCacheRetention(connectionString, Path.Combine(dataDirectory, "artwork"), logger, applicationCancellation.Token);
             _window.BackupRequested += async destinationPath =>
             {
                 await ScrobblixBackupService.CreateBackupAsync(connectionString, destinationPath, applicationCancellation.Token);
@@ -670,6 +671,47 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         return false;
+    }
+
+    private static void StartArtworkCacheRetention(string connectionString, string artworkDirectory, ScrobblixFileLogger logger, CancellationToken cancellationToken)
+    {
+        var janitor = new ArtworkCacheJanitor(connectionString, artworkDirectory);
+        _ = Task.Run(async () =>
+        {
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                try
+                {
+                    var now = DateTimeOffset.UtcNow;
+                    var result = await janitor.PruneExpiredAsync(
+                        now - ArtworkCacheRetentionPolicy.RetentionPeriod,
+                        now - ArtworkCacheRetentionPolicy.TemporaryFileGracePeriod,
+                        ArtworkCacheRetentionPolicy.PruneBatchSize,
+                        cancellationToken);
+                    if (result.Deleted > 0 || result.Failed > 0)
+                    {
+                        logger.Info("STORAGE", $"Artwork cache retention removed {result.Deleted} expired files under the 30-day policy; {result.Failed} locked or inaccessible files were kept for the next cycle.");
+                    }
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+                catch (Exception exception)
+                {
+                    logger.Error("STORAGE", $"Artwork cache retention failed and will retry on the next cycle; exception={exception.GetType().Name}.");
+                }
+
+                try
+                {
+                    await Task.Delay(TimeSpan.FromHours(24), cancellationToken);
+                }
+                catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+                {
+                    return;
+                }
+            }
+        }, cancellationToken);
     }
 
     private static void StartPlaybackObservationRetention(string connectionString, ScrobblixFileLogger logger, CancellationToken cancellationToken)
