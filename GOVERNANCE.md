@@ -1,5 +1,22 @@
 # Governance
 
+## Current protection readback - 2026-11-07
+
+Owner requested protection. The native branch-protection endpoint was configured and read back successfully; main metadata reports `protected=true`.
+
+- Pull request required; zero independent approval count avoids impossible self-approval for the sole-owner workflow. This is not independent review certification; source review is still required before every merge.
+- GitHub Actions app15368 `build-and-test` required, with up-to-date base (`strict=true`).
+- Resolved review conversations and linear history required.
+- Administrators included; force pushes and branch deletion disabled; no bypass list or direct-main exception added.
+- No paid feature or plan change. Android jobs currently live in draft PR133, not main; they must pass for that proposed change and later applicable Android changes. They are not globally required on unrelated PRs.
+- Tag-triggered release workflow does not push main and remains available. No release was created by this settings change.
+
+[Effective API readback](https://api.github.com/repos/frpboy/Scrobblix/branches/main/protection). This is point-in-time evidence; verify current settings when relying on them. Historical protection-disabled/403 statements below describe earlier checkpoints.
+
+---
+
+## Historical governance checkpoint
+
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Current maintainer governance and enforcement observations  
