@@ -381,6 +381,25 @@ jobs:
         run: |
           ./scripts/test-ordinary-startup.ps1 -AppDirectory delivered/extracted/desktop -RequirePrivateRuntime
           Get-FileHash delivered/Scrobblix-Windows-TestBundle.zip -Algorithm SHA256 | Format-List | Out-String | Set-Content "$env:RUNNER_TEMP/scrobblix-ordinary-startup/tested-zip-sha256.txt"
+      - name: Qualify exact ZIP with known-LF synthetic legacy profile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Preserve the earlier fresh CI profile, never delete or reuse it.
+          Move-Item (Join-Path $env:LOCALAPPDATA 'Scrobblix') (Join-Path $env:RUNNER_TEMP 'scrobblix-fresh-profile-preserved')
+          python scripts/test-legacy-profile.py prepare
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic legacy fixture setup failed' }
+          ./scripts/test-ordinary-startup.ps1 -AppDirectory delivered/extracted/desktop -RequirePrivateRuntime -SyntheticLegacyProfile
+          python scripts/test-legacy-profile.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy profile preservation failed' }
+          Get-FileHash delivered/Scrobblix-Windows-TestBundle.zip -Algorithm SHA256 | Format-List | Out-String | Set-Content "$env:RUNNER_TEMP/scrobblix-legacy-startup/tested-zip-sha256.txt"
+      - name: Preserve legacy-profile ZIP startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: legacy-profile-zip-startup
+          path: ${{ runner.temp }}/scrobblix-legacy-startup
+          if-no-files-found: error
       - name: Preserve exact ZIP startup evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

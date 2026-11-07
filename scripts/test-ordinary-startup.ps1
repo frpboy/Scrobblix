@@ -1,12 +1,18 @@
 param(
     [string]$AppDirectory = 'artifacts/Scrobblix/desktop',
-    [switch]$RequirePrivateRuntime
+    [switch]$RequirePrivateRuntime,
+    [switch]$SyntheticLegacyProfile
 )
 $ErrorActionPreference = 'Stop'
-$output = Join-Path $env:RUNNER_TEMP 'scrobblix-ordinary-startup'
+$output = Join-Path $env:RUNNER_TEMP $(if ($SyntheticLegacyProfile) { 'scrobblix-legacy-startup' } else { 'scrobblix-ordinary-startup' })
 New-Item -ItemType Directory -Force $output | Out-Null
 $data = Join-Path $env:LOCALAPPDATA 'Scrobblix'
-if (Test-Path $data) { throw 'Fresh-profile precondition failed: existing Scrobblix data' }
+if ($SyntheticLegacyProfile) {
+    $marker = Join-Path $data 'synthetic-ci-fixture.marker'
+    if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_OS -ne 'Windows' -or -not (Test-Path $marker) -or (Get-Content $marker -Raw) -cne 'scrobblix-known-lf-legacy-fixture-v1') {
+        throw 'Synthetic hosted-CI legacy profile precondition failed'
+    }
+} elseif (Test-Path $data) { throw 'Fresh-profile precondition failed: existing Scrobblix data' }
 foreach ($name in @('SCROBBLIX_UI_OUTPUT','SCROBBLIX_UI_FIXTURES','SCROBBLIX_LASTFM_API_KEY','SCROBBLIX_LASTFM_API_SECRET')) {
     [Environment]::SetEnvironmentVariable($name, $null, 'Process')
 }
