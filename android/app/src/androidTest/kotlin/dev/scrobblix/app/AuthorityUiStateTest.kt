@@ -163,6 +163,8 @@ class AuthorityUiStateTest {
             ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
             ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
             ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).performScrollTo().assertIsDisplayed()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
             capture("authority-held-result","1 reviewed held scrobbles resumed locally.",partial=true)
         }finally{store.close()}
     }
@@ -244,6 +246,7 @@ class AuthorityUiStateTest {
             ui.waitUntil(10000){calls.get()==1}
             assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
             ui.onNodeWithText("Resume reviewed held scrobbles").assertDoesNotExist()
+            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
             gate.complete(Unit)
             ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
             assertEquals(1,calls.get())
@@ -263,6 +266,72 @@ class AuthorityUiStateTest {
             capture("authority-held-consent","Resume reviewed held scrobbles")
             assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
         }finally{store.close()}
+    }
+
+    @Test fun latePreClickPollCannotOverwriteRefreshAndFailedPollHidesCountsUntilRecovery() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        val requests=java.util.concurrent.LinkedBlockingQueue<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
+        val outstanding=java.util.concurrent.CopyOnWriteArrayList<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
+        fun next()=checkNotNull(requests.poll(10,java.util.concurrent.TimeUnit.SECONDS)) {"Expected suspended poll"}
+        val held=listOf(mapOf("state" to "LocalHold","total" to "1"))
+        val pending=listOf(mapOf("state" to "Pending","total" to "1"))
+        try {
+            store.setTracking(true);store.connect("SyntheticPollRace","a".repeat(32));seedHeld(store,"poll-held","SyntheticPollRace")
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},queueReader={refresh ->
+                if(refresh)store.states() else {
+                    val deferred=kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>()
+                    outstanding.add(deferred);requests.put(deferred);deferred.await()
+                }
+            })}}
+            next().complete(held)
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("LocalHold: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Resume reviewed held scrobbles").fetchSemanticsNodes().size==1}
+            val oldPoll=next() // This read started before the explicit mutation epoch.
+            ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            oldPoll.complete(held)
+            val failingPoll=next() // Its arrival proves the late old poll already returned.
+            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            failingPoll.completeExceptionally(java.io.IOException("synthetic queue read failure"))
+            ui.waitUntil(10000){ui.onAllNodesWithText("Checking current delivery counts.").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Pending: 1").assertDoesNotExist()
+            ui.onNodeWithText("Checking current delivery counts.").performScrollTo().assertIsDisplayed()
+            capture("authority-held-counts-unavailable","Checking current delivery counts.")
+            next().complete(pending)
+            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Pending: 1").performScrollTo().assertIsDisplayed()
+            capture("authority-held-counts-recovered","Pending: 1")
+        }finally{outstanding.forEach{it.cancel()};store.close()}
+    }
+    @Test fun failedPostCommitCountRefreshKeepsCommittedMessageAndHidesOldSummary() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        val releaseRefresh=kotlinx.coroutines.CompletableDeferred<Unit>()
+        val refreshStarted=java.util.concurrent.atomic.AtomicBoolean(false)
+        val allowRecovery=java.util.concurrent.atomic.AtomicBoolean(false)
+        try {
+            store.setTracking(true);store.connect("SyntheticRefreshFailure","a".repeat(32));seedHeld(store,"refresh-held","SyntheticRefreshFailure")
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},queueReader={refresh ->
+                if(refresh){refreshStarted.set(true);releaseRefresh.await();throw java.io.IOException("synthetic refresh failure")}
+                if(refreshStarted.get() && !allowRecovery.get())throw java.io.IOException("synthetic poll failure")
+                store.states()
+            })}}
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Resume reviewed held scrobbles").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){refreshStarted.get()}
+            assertEquals("Pending",store.sql.query("SELECT state FROM android_actions").single()["state"])
+            releaseRefresh.complete(Unit)
+            ui.waitForIdle()
+            ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).assertExists()
+            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            ui.onNodeWithText("Checking current delivery counts.").assertExists()
+            allowRecovery.set(true)
+            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).assertExists()
+        }finally{releaseRefresh.complete(Unit);store.close()}
     }
 
 }

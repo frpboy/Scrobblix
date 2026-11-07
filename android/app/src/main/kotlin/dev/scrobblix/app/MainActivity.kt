@@ -39,7 +39,8 @@ class MainActivity:ComponentActivity() {
 fun AppScreen(store:AppStore,api:LastFmApi?=null,
     browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
     heldReviewLoader:suspend ()->dev.scrobblix.core.ConnectionAuthority.HeldReview?={withContext(Dispatchers.IO){store.reviewHeld()}},
-    heldResumer:suspend (dev.scrobblix.core.ConnectionAuthority.HeldReview)->AppStore.LocalOutcome={review ->withContext(Dispatchers.IO){store.resumeHeld(review)}}) {
+    heldResumer:suspend (dev.scrobblix.core.ConnectionAuthority.HeldReview)->AppStore.LocalOutcome={review ->withContext(Dispatchers.IO){store.resumeHeld(review)}},
+    queueReader:suspend (Boolean)->List<Map<String,String?>> = {_ ->withContext(Dispatchers.IO){store.states()}}) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }
@@ -50,6 +51,9 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var access by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
     var sources by remember { mutableStateOf(emptySet<String>()) }
+    var queueEpoch by remember {mutableStateOf(0L)}
+    var queueMutationPending by remember {mutableStateOf(false)}
+    var queueSummaryCurrent by remember {mutableStateOf(false)}
     var states by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -70,11 +74,19 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         access=store.hasMediaAccess()
         val connection=withContext(Dispatchers.IO){store.accountState()}
         storageUnavailable=connection is AppStore.AccountState.StorageUnavailable
+        if(storageUnavailable)queueSummaryCurrent=false
         currentAuthority=(connection as? AppStore.AccountState.Saved)?.snapshot
         account=currentAuthority?.account
         connectionHealth=store.healthFor(connection);tracking=store.tracking();sources=store.knownSources()
-        try {withContext(Dispatchers.IO) { history=store.recent();states=store.states() }}
-        catch(_:Exception){storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
+        val polledQueueEpoch=queueEpoch
+        try {
+            val recent=withContext(Dispatchers.IO){store.recent()}
+            val readings=recent to queueReader(false)
+            history=readings.first
+            if(polledQueueEpoch==queueEpoch && !queueMutationPending && !storageUnavailable) {states=readings.second;queueSummaryCurrent=true}
+        }
+        catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}
+        catch(_:Exception){queueSummaryCurrent=false;storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
         delay(2000)
     } }
     Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -115,8 +127,11 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
             }
             "Queue" -> {
                 Text("Scrobble delivery",style=MaterialTheme.typography.headlineSmall)
-                if(states.isEmpty()) Text("No scrobbles queued yet.")
-                states.forEach { Text("${it["state"]}: ${it["total"]}") }
+                if(!queueSummaryCurrent)Text("Checking current delivery counts.")
+                else {
+                    if(states.isEmpty())Text("No scrobbles queued yet.")
+                    states.forEach {Text("${it["state"]}: ${it["total"]}")}
+                }
                 Text("Offline work stays on this device. Uncertain submissions are held and never retried automatically. Reconnect the same Last.fm account to resume auth-blocked work.")
                 Button(enabled=!busy && !storageUnavailable,onClick={scope.launch {message=withContext(Dispatchers.IO){store.schedule()}}}) { Text("Check pending delivery") }
                 Text("Held scrobbles need a separate review. Their last attempt had no send permit; earlier attempts may exist. Uncertain submissions are never resumed here. Held Now Playing is excluded.")
@@ -141,8 +156,23 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         if(busy)return@resumeClick
                         // Capture the displayed token, never recompute a batch at click time.
                         busy=true;heldReview=null;++reviewEpoch
-                        scope.launch {try {message=heldResumer(reviewed).message}
-                            catch(_:Exception){message="Held-work outcome unavailable. Refresh review; do not assume delivery."}finally{busy=false}}
+                        val refreshEpoch=++queueEpoch;queueSummaryCurrent=false;queueMutationPending=true
+                        scope.launch {try {
+                            val outcome=try {heldResumer(reviewed)}
+                                catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}
+                                catch(_:Exception){null}
+                            message=outcome?.message ?: "Held-work outcome unavailable. Refresh review; do not assume delivery."
+                            try {
+                                val refreshed=queueReader(true)
+                                if(refreshEpoch==queueEpoch && !storageUnavailable) {states=refreshed;queueSummaryCurrent=true}
+                            } catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}
+                            catch(_:Exception) {
+                                // Failed summary refresh cannot overwrite a confirmed commit.
+                                // Keep counts hidden until a later successful normal poll.
+                                queueSummaryCurrent=false
+                            }
+                        }finally{queueMutationPending=false;busy=false}}
+
                     }) {Text("Resume reviewed held scrobbles")}
                 }
             }
