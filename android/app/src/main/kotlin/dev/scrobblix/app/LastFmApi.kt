@@ -15,6 +15,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
     val isBroker:Boolean get()=brokerEndpoint!=null
     init { if(brokerEndpoint!=null) validateBrokerEndpoint(brokerEndpoint) }
     companion object {
+        internal const val DEFAULT_BROKER_ENDPOINT="https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm"
         internal fun validateBrokerEndpoint(endpoint:String) {
             val uri=java.net.URI(endpoint)
             require(uri.scheme=="https" && uri.host!=null && uri.host!="localhost" && uri.host!="127.0.0.1" && uri.host!="::1" &&
@@ -30,12 +31,15 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             // Supplied as private generated resources for a registered API application.
             fun value(name:String):String { val id=context.resources.getIdentifier(name,"string",context.packageName)
                 return if(id==0) "" else context.getString(id) }
-            val saved=ApiConfigurationStore(context).read()
-            val key=saved?.first ?: value("lastfm_api_key");val secret=saved?.second ?: value("lastfm_api_secret")
+            return configuration(ApiConfigurationStore(context).read(),value("lastfm_api_key") to value("lastfm_api_secret"),value("lastfm_broker_endpoint"))
+        }
+        internal fun configuration(saved:Pair<String,String>?,bundled:Pair<String,String>,brokerResource:String):LastFmApi? {
+            // A saved owner API app keeps its direct route and existing identity.
+            val (key,secret)=saved ?: bundled
             if(key.matches(Regex("[a-fA-F0-9]{32}")) && secret.matches(Regex("[a-fA-F0-9]{32}"))) return LastFmApi(key,secret)
-            // Public endpoint only. No app key or secret is bundled for broker mode.
-            val broker=value("lastfm_broker_endpoint")
-            return if(broker.isNotBlank()) try { LastFmApi("","",broker) } catch(_:Exception) { null } else null
+            val broker=brokerResource.ifBlank { DEFAULT_BROKER_ENDPOINT }
+            // An invalid explicit endpoint fails closed, never reroutes credentials.
+            return try { LastFmApi("","",broker) } catch(_:Exception) { null }
         }
         internal fun signature(values:Map<String,String>,secret:String):String = MessageDigest.getInstance("MD5")
             .digest((values.toSortedMap().entries.joinToString("") { it.key+it.value }+secret).toByteArray(Charsets.UTF_8))

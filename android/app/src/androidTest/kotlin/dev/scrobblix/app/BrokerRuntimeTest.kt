@@ -78,4 +78,15 @@ class BrokerRuntimeTest {
         rejected=false;try { badSessionKey.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
     }
 
+    @Test fun freshConfigurationUsesPinnedBrokerWhileSavedOwnerCredentialsKeepDirectRoute() {
+        val empty="" to ""
+        assertEquals("https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm",LastFmApi.DEFAULT_BROKER_ENDPOINT)
+        assertTrue(LastFmApi.configuration(null,empty,"")!!.isBroker)
+        assertFalse(LastFmApi.configuration("a".repeat(32) to "b".repeat(32),empty,"")!!.isBroker)
+        assertFalse(LastFmApi.configuration(null,"a".repeat(32) to "b".repeat(32),"")!!.isBroker)
+        assertNull(LastFmApi.configuration(null,empty,"http://invalid/v1/lastfm"))
+        // An invalid broker override cannot disturb an already configured direct app.
+        assertFalse(LastFmApi.configuration("a".repeat(32) to "b".repeat(32),empty,"http://invalid/v1/lastfm")!!.isBroker)
+    }
+
 }

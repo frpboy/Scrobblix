@@ -70,6 +70,15 @@ jobs:
             sleep 2
           done
           if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-emulator.log; exit 1; fi
+          # All instrumentation uses synthetic identities. Once a default endpoint
+          # exists, block emulator egress so queued fixture work cannot reach it.
+          # ADB uses the emulator transport, not this guest IP output path.
+          adb root
+          adb wait-for-device
+          adb shell iptables -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -C OUTPUT ! -o lo -j REJECT
           if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
             # Synthetic test data only. Preserve exact test/runner failures in job logs.
             find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \;
@@ -94,7 +103,7 @@ jobs:
           done
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
       - name: Preserve app pixels and test-only APK
         if: always()
@@ -102,7 +111,7 @@ jobs:
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

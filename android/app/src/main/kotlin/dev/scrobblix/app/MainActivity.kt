@@ -107,24 +107,24 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     val configured=remember(api,apiRevision) { api ?: LastFmApi.configured(context) }
                     if(configured==null) {
                         Text("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.")
-                        TextButton(onClick={configure=!configure}) { Text("Set up your own Last.fm API app") }
-                        if(configure) {
-                            Text("Use only API credentials for an application you own or are authorized to use. This stores them on this device, not in the APK. A public shared-app setup needs separate provider approval and disclosures. Changing the API app disconnects the local session, keeps history/queue and pauses tracking.")
-                            OutlinedTextField(value=apiKey,onValueChange={apiKey=it.take(64)},label={Text("Your API key")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
-                            OutlinedTextField(value=apiSecret,onValueChange={apiSecret=it.take(64)},label={Text("Your API shared secret")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
-                            Button(enabled=!busy && apiKey.matches(Regex("[a-fA-F0-9]{32}")) && apiSecret.matches(Regex("[a-fA-F0-9]{32}")),onClick={
-                                val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true
-                                scope.launch {
-                                    message=try { withContext(Dispatchers.IO) {
-                                        store.disconnect();ApiConfigurationStore(context).write(keyInput,secretInput)
-                                    };apiRevision++;"API app saved on this device. Sign in to Last.fm next." }
-                                    catch(_:Exception) { "Could not save API configuration. Reconnect and try again." }
-                                    busy=false
-                                }
-                            }) { Text("Save private API configuration") }
-                        }
                     }
-                    else {
+                    TextButton(onClick={configure=!configure}) { Text("Advanced: use your own Last.fm API app") }
+                    if(configure) {
+                        Text("Use only API credentials for an application you own or are authorized to use. This stores them on this device, not in the APK. A public shared-app setup needs separate provider approval and disclosures. Changing the API app disconnects the local session, keeps history/queue and pauses tracking.")
+                        OutlinedTextField(value=apiKey,onValueChange={apiKey=it.take(64)},label={Text("Your API key")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
+                        OutlinedTextField(value=apiSecret,onValueChange={apiSecret=it.take(64)},label={Text("Your API shared secret")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
+                        Button(enabled=!busy && apiKey.matches(Regex("[a-fA-F0-9]{32}")) && apiSecret.matches(Regex("[a-fA-F0-9]{32}")),onClick={
+                            val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true
+                            scope.launch {
+                                message=try { withContext(Dispatchers.IO) {
+                                    store.disconnect();ApiConfigurationStore(context).write(keyInput,secretInput)
+                                };apiRevision++;"API app saved on this device. Sign in to Last.fm next." }
+                                catch(_:Exception) { "Could not save API configuration. Reconnect and try again." }
+                                busy=false
+                            }
+                        }) { Text("Save private API configuration") }
+                    }
+                    if(configured!=null) {
                         if(configured.isBroker) Text("Connect without developer API keys. The Scrobblix connection service handles session keys and track details in transit to Last.fm; local history stays on this device.")
                         Text("Recommended: authorize Scrobblix in your browser. Your Last.fm password stays on Last.fm; the returned session key is encrypted on this device.")
                         Button(enabled=!busy,onClick={

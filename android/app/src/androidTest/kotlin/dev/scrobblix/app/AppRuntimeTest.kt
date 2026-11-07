@@ -37,7 +37,10 @@ class AppRuntimeTest {
         capture("queue")
         ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
         ui.onNodeWithText("Last.fm account").assertExists()
-        ui.onNodeWithText("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.").assertExists()
+        assertTrue(LastFmApi.configured(ui.activity)!!.isBroker)
+        ui.onNodeWithText("Authorize in browser").performScrollTo().assertIsDisplayed()
+        ui.onNodeWithText("Last.fm password").assertDoesNotExist()
+        ui.onNodeWithText("Your API key").assertDoesNotExist()
         capture("settings")
         assertFalse(store.tracking())
         assertNull(store.account())
@@ -109,7 +112,7 @@ class AppRuntimeTest {
         val store=(ui.activity.application as ScrobblixApp).store
         try {
             ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
-            ui.onNodeWithText("Set up your own Last.fm API app").performScrollTo().performClick()
+            ui.onNodeWithText("Advanced: use your own Last.fm API app").performScrollTo().performClick()
             ui.onNodeWithText("Your API key").performScrollTo().performTextInput("d".repeat(32))
             ui.onNodeWithText("Your API shared secret").performScrollTo().performTextInput("e".repeat(32))
             ui.onNodeWithText("Save private API configuration").performScrollTo().performClick()
