@@ -41,16 +41,41 @@ function isOptionalInteger(value: unknown, min: number, max: number): boolean {
   );
 }
 
-function isHttpsArtwork(value: unknown): boolean {
-  if (value === undefined) return true;
-  if (typeof value !== "string" || value.length > 4096) return false;
-
+// Defense-in-depth syntax filter for local/private literal targets and known local names.
+// DNS rebinding and redirect targets remain the native artwork connector's responsibility.
+export function isSafeHttpsArtworkUrl(value: string): boolean {
+  if (value.length > 4096) return false;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password;
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, "").replace(/\.$/u, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "metadata.google.internal") {
+      return false;
+    }
+    // URL canonicalizes IPv6 and IPv4-mapped literals before this syntactic filter.
+    // DNS resolution/rebinding and redirect targets still require the native connector.
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/u.exec(host);
+    const ipv4Host = mapped
+      ? [parseInt(mapped[1], 16) >> 8, parseInt(mapped[1], 16) & 255, parseInt(mapped[2], 16) >> 8, parseInt(mapped[2], 16) & 255].join(".")
+      : host;
+    const ipv4Parts = ipv4Host.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d+$/u.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+      const [b0, b1] = ipv4Parts.map(Number);
+      if (b0 === 0 || b0 === 10 || b0 === 127 || (b0 === 100 && b1 >= 64 && b1 <= 127) || (b0 === 198 && (b1 === 18 || b1 === 19)) || (b0 === 169 && b1 === 254) || (b0 === 172 && b1 >= 16 && b1 <= 31) || (b0 === 192 && b1 === 168)) {
+        return false;
+      }
+    }
+    const firstV6 = parseInt(host.split(":")[0] || "0", 16);
+    if (host.includes(":") && (host === "::" || host === "::1" || (firstV6 & 0xfe00) === 0xfc00 || (firstV6 & 0xffc0) === 0xfe80 || (firstV6 & 0xff00) === 0xff00)) return false;
+    return true;
   } catch {
     return false;
   }
+}
+
+function isHttpsArtwork(value: unknown): boolean {
+  if (value === undefined) return true;
+  return typeof value === "string" && isSafeHttpsArtworkUrl(value);
 }
 
 export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean {
