@@ -78,9 +78,8 @@ export function isAuthorizedObservationSender(
   try {
     const url = new URL(sender.url);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    // Optimization: Fast-path string and regex checks before constructing a `new URL()`
-    // object. This avoids allocating a URL instance for non-matching registered sites on
-    // frequent playback observation messages (~90% faster when filtering custom sites).
+    // Check exact origin, pattern and ID before parsing a matching registration.
+    // Non-matching registrations do not need another URL object.
     const origin = url.origin;
     const expectedPattern = `${origin}/*`;
     return customSites.some((site) => {
