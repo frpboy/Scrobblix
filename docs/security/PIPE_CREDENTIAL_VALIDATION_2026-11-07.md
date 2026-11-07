@@ -53,7 +53,7 @@ the regression tests can prove the spoof it accepted is now rejected.
 | 1 | Arbitrary same-user process (test host) connects and writes a forged observation | rejected `client_image_not_registered_native_host` | 0 payload bytes read |
 | 2 | Executable at the registered native-host path, launched by a non-browser parent | rejected `native_host_parent_not_supported_browser` | 0 payload bytes read |
 | 3 | Same, launched by a renamed copy of `cmd.exe` named `chrome.exe` in a temp directory | rejected `native_host_parent_not_supported_browser` | 0 payload bytes read; differential proof that the retired basename rule accepted this exact spoof |
-| 4 | Same, launched by a browser-shaped parent in a real vendor install directory | accepted | payload read; forged `browserInstanceId` observed as opaque data. Conditional: skipped with a NOTE when a real user-level Chrome install already occupies the vendor path; exercised in CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/42336892433) |
+| 4 | Same, launched by a browser-shaped parent in a real vendor install directory | accepted | payload read; forged `browserInstanceId` observed as opaque data. Conditional: skipped with a NOTE when a real user-level Chrome install already occupies the vendor path; exercised in CI run [42339493366](https://github.com/frpboy/Scrobblix/actions/runs/42339493366) |
 
 The effective pipe ACL is enumerated on every run: no allow entries for Everyone,
 Authenticated Users, BUILTIN\Users, Anonymous, or Network, and every allow entry is the
@@ -87,9 +87,11 @@ behavior the existing domain tests pin.
 
 ## Results
 
-CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/42336892433)
+CI run [42339493366](https://github.com/frpboy/Scrobblix/actions/runs/42339493366)
 (`build-and-test`, `windows-latest`) completed **SUCCESS** on the exact validating head
-`69f398e1974743ba89345c47fa36ee038b974a82`. Every assertion in the matrices above passed:
+`5696458e0488e8c6c3a4d7e91a0898d4d22a9cfb`, which includes the review-driven sanitizer and
+test-rigor fixes (an earlier green run, 42336892433, covered the pre-review head
+`69f398e`). Every assertion in the matrices above passed:
 
 - #74: all four scenarios behaved as asserted (reject-before-read on scenarios 1-3,
   positive control accepted on scenario 4), the differential proof against the retired
@@ -102,6 +104,6 @@ CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/4233689243
   bundle byte scans found no canary, with seeded-canary positive controls proving the
   database and archive scans can detect one.
 - #76: the refreshed scans in `scans-2026-11-07/` cover the validating head; gitleaks
-  was re-run after the final code commit (1186 commits across all refs, redacted report)
+  was re-run after the final code commit (1188 commits across all refs, redacted report)
   and found no leaks. The post-`b72e0eb` commits touch no manifest or lockfile, so the
   NuGet (0 vulnerable), npm audit (0) and OSV (0) results stand unchanged.
