@@ -55,6 +55,15 @@ assert.equal(isPlaybackObservation({ state: "playing", trackNumber: "3" }), fals
 assert.equal(isPlaybackObservation({ state: "playing", durationMilliseconds: -1 }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "http://example.com/art.jpg" }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://user:pass@example.com/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://127.0.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://localhost/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://foo.localhost/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://169.254.169.254/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://10.0.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://192.168.1.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://172.16.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://metadata.google.internal/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://[::1]/art.jpg" }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://example.com/art.jpg" }), true);
 
 

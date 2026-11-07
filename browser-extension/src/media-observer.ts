@@ -18,7 +18,20 @@ function toHttpsArtworkUrl(candidate: string | undefined): string | undefined {
 
   try {
     const url = new URL(candidate, document.baseURI);
-    return url.protocol === "https:" ? url.href : undefined;
+    if (url.protocol !== "https:" || url.username || url.password) return undefined;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "metadata.google.internal") {
+      return undefined;
+    }
+    const ipv4Parts = host.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d+$/u.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+      const [b0, b1] = ipv4Parts.map(Number);
+      if (b0 === 0 || b0 === 10 || b0 === 127 || (b0 === 169 && b1 === 254) || (b0 === 172 && b1 >= 16 && b1 <= 31) || (b0 === 192 && b1 === 168)) {
+        return undefined;
+      }
+    }
+    if (host === "::1" || host === "0:0:0:0:0:0:0:1") return undefined;
+    return url.href;
   } catch {
     return undefined;
   }

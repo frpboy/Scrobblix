@@ -41,16 +41,34 @@ function isOptionalInteger(value: unknown, min: number, max: number): boolean {
   );
 }
 
-function isHttpsArtwork(value: unknown): boolean {
-  if (value === undefined) return true;
-  if (typeof value !== "string" || value.length > 4096) return false;
-
+// Defense-in-depth: reject loopback, RFC1918 private, link-local, or cloud metadata
+// endpoints to prevent local or cloud SSRF/metadata probes via untrusted artwork URLs.
+export function isSafeHttpsArtworkUrl(value: string): boolean {
+  if (value.length > 4096) return false;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password;
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "metadata.google.internal") {
+      return false;
+    }
+    const ipv4Parts = host.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d+$/u.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+      const [b0, b1] = ipv4Parts.map(Number);
+      if (b0 === 0 || b0 === 10 || b0 === 127 || (b0 === 169 && b1 === 254) || (b0 === 172 && b1 >= 16 && b1 <= 31) || (b0 === 192 && b1 === 168)) {
+        return false;
+      }
+    }
+    if (host === "::1" || host === "0:0:0:0:0:0:0:1") return false;
+    return true;
   } catch {
     return false;
   }
+}
+
+function isHttpsArtwork(value: unknown): boolean {
+  if (value === undefined) return true;
+  return typeof value === "string" && isSafeHttpsArtworkUrl(value);
 }
 
 export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean {
