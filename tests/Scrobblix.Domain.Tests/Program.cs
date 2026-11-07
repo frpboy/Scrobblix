@@ -24,6 +24,9 @@ using System.Text.Json;
 using System.IO.Compression;
 using Scrobblix.Infrastructure.Diagnostics;
 
+await MigrationTextChecks.RunAsync();
+if (args.Contains("--migration-text-check",StringComparer.Ordinal)) return;
+
 Assert(BrowserPlaybackStateMapper.Parse("playing") == PlayState.Playing, "Browser media playing events map to Playing.");
 Assert(BrowserPlaybackStateMapper.Parse("paused") == PlayState.Paused, "Browser media pause events map to Paused.");
 Assert(BrowserPlaybackStateMapper.Parse("ended") == PlayState.Ended, "Browser media ended events stay distinct from pause events.");
