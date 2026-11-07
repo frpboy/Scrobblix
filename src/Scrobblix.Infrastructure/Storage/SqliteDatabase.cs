@@ -85,7 +85,13 @@ public sealed class SqliteDatabase(string connectionString)
             ?? throw new InvalidOperationException($"Missing embedded migration '{migration.ResourceName}'.");
         using var reader = new StreamReader(stream);
         var sql = await reader.ReadToEndAsync(cancellationToken);
-        var checksum = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(sql)));
+        // Git checkouts can embed identical SQL with LF or CRLF. Hash a canonical
+        // LF form for new records; accept only the exact historic CRLF equivalent.
+        // Do not trim/normalize SQL whitespace or rewrite existing migration records.
+        var canonicalSql = sql.Replace("\r\n", "\n", StringComparison.Ordinal);
+        var checksum = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(canonicalSql)));
+        var legacyCrLfChecksum = Convert.ToHexStringLower(SHA256.HashData(
+            Encoding.UTF8.GetBytes(canonicalSql.Replace("\n", "\r\n", StringComparison.Ordinal))));
 
         await using var lookup = connection.CreateCommand();
         lookup.CommandText = "SELECT checksum FROM schema_migrations WHERE migration_id = $id;";
@@ -93,7 +99,8 @@ public sealed class SqliteDatabase(string connectionString)
         var appliedChecksum = await lookup.ExecuteScalarAsync(cancellationToken) as string;
         if (appliedChecksum is not null)
         {
-            if (!string.Equals(appliedChecksum, checksum, StringComparison.Ordinal))
+            if (!string.Equals(appliedChecksum, checksum, StringComparison.Ordinal)
+                && !string.Equals(appliedChecksum, legacyCrLfChecksum, StringComparison.Ordinal))
             {
                 throw new InvalidOperationException($"Migration checksum mismatch for '{migration.Id}'.");
             }
