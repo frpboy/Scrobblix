@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using Microsoft.Data.Sqlite;
 using Scrobblix.Infrastructure.Storage;
 
@@ -18,7 +19,16 @@ internal static class MigrationTextChecks
                 await connection.OpenAsync();
                 using (var sentinel = connection.CreateCommand())
                 {
-                    sentinel.CommandText = "CREATE TABLE synthetic_preserved(id INTEGER PRIMARY KEY,value TEXT); INSERT INTO synthetic_preserved VALUES(1,'must-survive-upgrade');";
+                    sentinel.CommandText = """
+                        INSERT INTO plays (play_id,started_utc,artist,title,confirmed_played_ms,local_status,created_utc,updated_utc)
+                        VALUES ('synthetic-play','2026-01-01T00:00:00Z','Synthetic Artist','Synthetic Title',42000,0,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+                        INSERT INTO accounts (account_id,provider,remote_username,credential_resource,is_connected,created_utc,updated_utc)
+                        VALUES ('synthetic-account','lastfm','synthetic-user','synthetic-resource',1,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+                        INSERT INTO provider_actions (action_id,play_id,account_id,provider,action_type,state,idempotency_key,attempt_count,due_utc,created_utc,updated_utc)
+                        VALUES ('synthetic-action','synthetic-play','synthetic-account','lastfm',0,0,'synthetic-key',2,'2026-01-01T00:00:00Z','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+                        INSERT INTO loved_tracks (track_key,source_play_id,artist,title,is_loved,current_action_id,created_utc,updated_utc)
+                        VALUES ('synthetic-track','synthetic-play','Synthetic Artist','Synthetic Title',1,'synthetic-action','2026-01-01T00:00:00Z','2026-01-01T00:00:00Z');
+                        """;
                     await sentinel.ExecuteNonQueryAsync();
                 }
                 var assembly = typeof(SqliteDatabase).Assembly;
@@ -36,15 +46,11 @@ internal static class MigrationTextChecks
                     if (await update.ExecuteNonQueryAsync() != 1) throw new InvalidOperationException("Synthetic migration identity mismatch");
                     saved[id] = hash;
                 }
+                var before = await SnapshotAsync(connection);
+                if (saved.Count != 6) throw new InvalidOperationException("Not all migration resources were exercised");
                 await new SqliteDatabase(cs).InitializeAsync(CancellationToken.None);
-                using (var verify = connection.CreateCommand())
-                {
-                    verify.CommandText = "SELECT value FROM synthetic_preserved WHERE id=1";
-                    if ((string?)await verify.ExecuteScalarAsync() != "must-survive-upgrade") throw new InvalidOperationException("Existing data changed");
-                    verify.CommandText = "SELECT migration_id,checksum FROM schema_migrations";
-                    using var rows = await verify.ExecuteReaderAsync();
-                    while (await rows.ReadAsync()) if (saved[rows.GetString(0)] != rows.GetString(1)) throw new InvalidOperationException("Existing migration checksum rewritten");
-                }
+                if (await SnapshotAsync(connection) != before)
+                    throw new InvalidOperationException("Existing history/accounts/queue/loved tracks or migration records changed");
                 using (var corrupt = connection.CreateCommand())
                 {
                     corrupt.CommandText = "UPDATE schema_migrations SET checksum=$bad WHERE migration_id='0001_initial'";
@@ -60,4 +66,26 @@ internal static class MigrationTextChecks
             finally { File.Delete(path); }
         }
     }
+    private static async Task<string> SnapshotAsync(SqliteConnection connection)
+    {
+        var tables = new[] { "schema_migrations", "plays", "accounts", "provider_actions", "loved_tracks" };
+        var result = new List<List<object?[]>>();
+        foreach (var table in tables)
+        {
+            using var query = connection.CreateCommand();
+            // Table names are fixed test constants, never external input.
+            query.CommandText = $"SELECT * FROM {table} ORDER BY 1";
+            using var rows = await query.ExecuteReaderAsync();
+            var values = new List<object?[]>();
+            while (await rows.ReadAsync())
+            {
+                var row = new object?[rows.FieldCount];
+                for (var i = 0; i < row.Length; i++) row[i] = rows.IsDBNull(i) ? null : rows.GetValue(i);
+                values.Add(row);
+            }
+            result.Add(values);
+        }
+        return JsonSerializer.Serialize(result);
+    }
+
 }
