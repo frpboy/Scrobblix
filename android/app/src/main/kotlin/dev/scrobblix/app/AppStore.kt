@@ -31,11 +31,13 @@ class AppStore(val context:Context):java.io.Closeable {
     fun account()=preferences.getString("account",null)
     fun setTracking(enabled:Boolean) {
         preferences.edit().putBoolean("tracking",enabled).apply()
+        lastScheduledTick=Long.MIN_VALUE
         if(enabled) schedule() else { WorkManager.getInstance(context).cancelUniqueWork("delivery");WorkManager.getInstance(context).cancelUniqueWork("delivery-periodic") }
     }
     fun sourceAllowed(name:String)=!preferences.getStringSet("blocked-sources",emptySet())!!.contains(name)
     fun knownSources()=preferences.getStringSet("known-sources",emptySet())!!.toSet()
     fun discoverSources(names:Set<String>) {
+        if(names.size>256 || names.any { it.length>255 || !it.matches(Regex("[A-Za-z0-9_.]+")) }) return
         val updated=knownSources()+names
         if(updated!=knownSources()) preferences.edit().putStringSet("known-sources",updated).apply()
     }
