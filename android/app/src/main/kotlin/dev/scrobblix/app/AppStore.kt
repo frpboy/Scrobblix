@@ -16,6 +16,12 @@ internal class StoreStartup<T:Any>(private val create:()->T) {
     private val result:T? by lazy { try {create()} catch(_:Exception){null} }
     fun available():T?=result
 }
+/** Consume the short-lived credential read solely as an availability check. */
+internal fun credentialAvailableAndClear(result:SessionSecretStore.ReadResult):Boolean {
+    if(result !is SessionSecretStore.ReadResult.Available)return false
+    result.secret.fill(0)
+    return true
+}
 class ScrobblixApp:Application() {
     private val startup=StoreStartup {AppStore(this)}
     fun storeOrNull():AppStore?=startup.available()
@@ -70,7 +76,10 @@ class AppStore(val context:Context,
     val authority=ConnectionAuthority(sql,{
         val freshDb=SQLiteDatabase.openDatabase(context.getDatabasePath("listening.db").path,null,SQLiteDatabase.OPEN_READONLY)
         try { ConnectionSchema.read(AndroidQueueSqlDriver(freshDb)) } finally {freshDb.close()}
-    },authorityCoordinator)
+    },authorityCoordinator,{ids ->
+        val freshDb=SQLiteDatabase.openDatabase(context.getDatabasePath("listening.db").path,null,SQLiteDatabase.OPEN_READONLY)
+        try {val driver=AndroidQueueSqlDriver(freshDb);driver.transaction {ConnectionAuthority.readHeldState(driver,ids)}}finally{freshDb.close()}
+    })
     private var setupRevision=0L
     private var setupPending=false
     private var lastScheduledTick=Long.MIN_VALUE
@@ -132,6 +141,25 @@ class AppStore(val context:Context,
     }
     fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC LIMIT 50")
     fun states()=sql.query("SELECT state,COUNT(*) AS total FROM android_actions GROUP BY state ORDER BY state")
+    fun reviewHeld():ConnectionAuthority.HeldReview?=synchronized(authorityCoordinator) {authority.reviewHeld()}
+    fun resumeHeld(review:ConnectionAuthority.HeldReview):LocalOutcome=synchronized(authorityCoordinator) {
+        if(review.rows.isEmpty())return@synchronized LocalOutcome(false,"No held scrobbles selected. Nothing was resumed.")
+        val current=try{authority.snapshot()}catch(_:Exception){return@synchronized LocalOutcome(false,"Held-work outcome unavailable. Refresh review; do not assume delivery.")}
+        if(current!=review.snapshot || current.account==null || current.resumeConsentRequired || !tracking())
+            return@synchronized LocalOutcome(false,"Held-work review is stale or tracking is paused. Refresh review.")
+        val credential=readCredential(current)
+        if(!credentialAvailableAndClear(credential))
+            return@synchronized LocalOutcome(false,"Saved credential is unavailable. Held work was not resumed.")
+        when(val result=authority.resumeHeld(review,::tracking,System.currentTimeMillis())) {
+            is ConnectionAuthority.HeldOutcome.Committed -> {
+                // Queue commit and scheduler completion are separate facts. Do not reinterpret the commit.
+                val setup=try {schedule()}catch(_:Exception){"Local delivery setup is deferred."}
+                LocalOutcome(true,"${result.count} reviewed held scrobbles resumed locally. $setup")
+            }
+            ConnectionAuthority.HeldOutcome.Stale -> LocalOutcome(false,"Held-work review is stale. Refresh review; no new batch was selected.")
+            ConnectionAuthority.HeldOutcome.Unconfirmed -> LocalOutcome(false,"Held-work outcome is unconfirmed. Refresh review before any further action; do not assume delivery.")
+        }
+    }
     enum class ConnectState { Committed, NotCommitted, StorageUnavailable, InvalidInput, StageFailed }
     data class ConnectOutcome(val state:ConnectState,val message:String)
     fun connect(name:String,key:String):ConnectOutcome=synchronized(authorityCoordinator) {

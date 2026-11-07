@@ -37,12 +37,15 @@ class MainActivity:ComponentActivity() {
 }
 @Composable
 fun AppScreen(store:AppStore,api:LastFmApi?=null,
-    browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }) {
+    browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
+    heldReviewLoader:suspend ()->dev.scrobblix.core.ConnectionAuthority.HeldReview?={withContext(Dispatchers.IO){store.reviewHeld()}},
+    heldResumer:suspend (dev.scrobblix.core.ConnectionAuthority.HeldReview)->AppStore.LocalOutcome={review ->withContext(Dispatchers.IO){store.resumeHeld(review)}}) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }
     var storageUnavailable by remember { mutableStateOf(true) }
     var connectionHealth by remember { mutableStateOf<String?>("Checking local connection state.") }
+    var currentAuthority by remember {mutableStateOf<dev.scrobblix.core.ConnectionSnapshot?>(null)}
     var account by remember { mutableStateOf<String?>(null) }
     var access by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
@@ -59,12 +62,16 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var configure by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
+    var heldReview by remember { mutableStateOf<dev.scrobblix.core.ConnectionAuthority.HeldReview?>(null) }
+    var reviewEpoch by remember { mutableStateOf(0L) }
+    LaunchedEffect(currentAuthority) {heldReview=null;reviewEpoch++}
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
         access=store.hasMediaAccess()
         val connection=withContext(Dispatchers.IO){store.accountState()}
         storageUnavailable=connection is AppStore.AccountState.StorageUnavailable
-        account=(connection as? AppStore.AccountState.Saved)?.snapshot?.account
+        currentAuthority=(connection as? AppStore.AccountState.Saved)?.snapshot
+        account=currentAuthority?.account
         connectionHealth=store.healthFor(connection);tracking=store.tracking();sources=store.knownSources()
         try {withContext(Dispatchers.IO) { history=store.recent();states=store.states() }}
         catch(_:Exception){storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
@@ -112,6 +119,32 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 states.forEach { Text("${it["state"]}: ${it["total"]}") }
                 Text("Offline work stays on this device. Uncertain submissions are held and never retried automatically. Reconnect the same Last.fm account to resume auth-blocked work.")
                 Button(enabled=!busy && !storageUnavailable,onClick={scope.launch {message=withContext(Dispatchers.IO){store.schedule()}}}) { Text("Check pending delivery") }
+                Text("Held scrobbles need a separate review. Their last attempt had no send permit; earlier attempts may exist. Uncertain submissions are never resumed here. Held Now Playing is excluded.")
+                Button(enabled=!busy && !storageUnavailable,onClick=reviewClick@{
+                    if(busy)return@reviewClick
+                    busy=true;heldReview=null;val epoch=++reviewEpoch
+                    scope.launch {try {
+                        val reviewed=heldReviewLoader()
+                        if(epoch==reviewEpoch)heldReview=reviewed
+                    }catch(_:Exception){message="Held-work review unavailable. No work was resumed."}finally{busy=false}}
+                }) {Text("Review held scrobbles")}
+                heldReview?.let { reviewed ->
+                    Text("Review for Last.fm account: ${reviewed.snapshot.account}")
+                    Text("${reviewed.rows.size} held scrobbles in this batch; ${reviewed.remaining} remaining outside it.")
+                    reviewed.rows.forEach {row ->
+                        Text("${row.artist ?: "Unknown artist"} - ${row.title ?: "Unknown track"}")
+                        Text(row.startedMs?.let {started -> java.text.DateFormat.getDateTimeInstance().format(java.util.Date(started))} ?: "Play time unavailable")
+                    }
+                    if(reviewed.snapshot.resumeConsentRequired)Text("Choose tracking again before resuming held scrobbles.")
+                    if(!tracking)Text("Tracking is paused. Enable tracking before resuming held scrobbles.")
+                    Button(enabled=!busy && !storageUnavailable && tracking && !reviewed.snapshot.resumeConsentRequired && reviewed.rows.isNotEmpty(),onClick=resumeClick@{
+                        if(busy)return@resumeClick
+                        // Capture the displayed token, never recompute a batch at click time.
+                        busy=true;heldReview=null;++reviewEpoch
+                        scope.launch {try {message=heldResumer(reviewed).message}
+                            catch(_:Exception){message="Held-work outcome unavailable. Refresh review; do not assume delivery."}finally{busy=false}}
+                    }) {Text("Resume reviewed held scrobbles")}
+                }
             }
             "Settings" -> {
                 Text("Last.fm account",style=MaterialTheme.typography.headlineSmall)

@@ -23,7 +23,7 @@ class AuthorityUiStateTest {
             override fun getSharedPreferences(name:String,mode:Int)=base.getSharedPreferences("$prefix-$name",mode)
         }
     }
-    private fun capture(name:String,expectedContent:String) {
+    private fun capture(name:String,expectedContent:String,partial:Boolean=false) {
         ui.waitForIdle()
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         // Ten-second polling budget; framework idle calls carry their own timeouts.
@@ -55,11 +55,11 @@ class AuthorityUiStateTest {
                 verifyHost()
                 instrumentation.waitForIdleSync()
                 if(ready) {
-                    ui.onNodeWithText(expectedContent).assertIsDisplayed()
+                    ui.onNodeWithText(expectedContent,substring=partial).assertIsDisplayed()
                     val frame=instrumentation.uiAutomation.takeScreenshot()
                     if(frame!=null) {
                         verifyHost()
-                        ui.onNodeWithText(expectedContent).assertIsDisplayed()
+                        ui.onNodeWithText(expectedContent,substring=partial).assertIsDisplayed()
                         stable=ready && prior?.sameAs(frame)==true
                         prior?.recycle();prior=if(ready)frame else null
                         if(!ready)frame.recycle()
@@ -144,4 +144,125 @@ class AuthorityUiStateTest {
             capture("authority-setup-error","Local work setup is deferred. The saved account does not need another authorization.")
         }finally{store.close()}
     }
+    @Test fun heldScrobbleReviewShowsExactAccountMetadataAndExplicitAction() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(true)
+            assertEquals(AppStore.ConnectState.Committed,store.connect("SyntheticHeld","a".repeat(32)).state)
+            store.sql.execute("INSERT INTO android_plays VALUES('held-play','Synthetic Artist','Synthetic Held Track',NULL,1234567890000,300000,200000)")
+            store.queue.enqueue("held-pixel","lastfm","SyntheticHeld",dev.scrobblix.core.ActionType.Scrobble,0,"held-play")
+            store.sql.execute("UPDATE android_actions SET state='LocalHold',reason='local.unsent_recovery',lease_fence=1,connection_revision=?,credential_ref=?",listOf(store.authority.snapshot().revision,store.authority.snapshot().credentialRef))
+            show(store)
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Review for Last.fm account: SyntheticHeld").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("1 held scrobbles in this batch; 0 remaining outside it.").assertExists()
+            ui.onNodeWithText("Synthetic Artist - Synthetic Held Track").performScrollTo().assertIsDisplayed()
+            capture("authority-held-review","Synthetic Artist - Synthetic Held Track")
+            assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
+            ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
+            ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).performScrollTo().assertIsDisplayed()
+            capture("authority-held-result","1 reviewed held scrobbles resumed locally.",partial=true)
+        }finally{store.close()}
+    }
+
+    @Test fun delayedReviewFromPreviousAccountNeverBecomesClickable() {
+        val operations=java.util.concurrent.atomic.AtomicInteger(0)
+        val store=AppStore(context(),{operations.incrementAndGet();listOf(CompletableFuture.completedFuture(Unit))})
+        val gate=kotlinx.coroutines.CompletableDeferred<Unit>()
+        val requested=java.util.concurrent.atomic.AtomicBoolean(false)
+        try {
+            store.setTracking(true);store.connect("OldSynthetic","a".repeat(32))
+            seedHeld(store,"old-held","OldSynthetic")
+            val old=store.reviewHeld()!!
+            assertEquals(1,old.rows.size)
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},heldReviewLoader={
+                requested.set(true);gate.await();old
+            })}}
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){requested.get()}
+            store.connect("NewSynthetic","b".repeat(32))
+            // Visible current-account text proves the actual poll observed replacement.
+            ui.onNodeWithText("Settings",useUnmergedTree=true).performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Connected as NewSynthetic").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            val baseline=operations.get()
+            gate.complete(Unit);ui.waitForIdle()
+            assertEquals(baseline,operations.get())
+            assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions WHERE id='old-held'").single()["state"])
+            ui.onNodeWithText("Review for Last.fm account: OldSynthetic").assertDoesNotExist()
+            ui.onNodeWithText("Resume reviewed held scrobbles").assertDoesNotExist()
+        }finally{gate.complete(Unit);store.close()}
+    }
+    @Test fun heldReviewControlRemainsReachableAtTwoTimesComposeFontScale() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(true);store.connect("SyntheticHeldLarge","a".repeat(32))
+            store.sql.execute("INSERT INTO android_plays VALUES('large-held-play','Synthetic Artist','Synthetic Held Large Track',NULL,1234567890000,300000,200000)")
+            store.queue.enqueue("large-held-pixel","lastfm","SyntheticHeldLarge",dev.scrobblix.core.ActionType.Scrobble,0,"large-held-play")
+            store.sql.execute("UPDATE android_actions SET state='LocalHold',reason='local.unsent_recovery',lease_fence=1,connection_revision=?,credential_ref=?",listOf(store.authority.snapshot().revision,store.authority.snapshot().credentialRef))
+            ui.setContent {
+                val density=androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density,2f)) {
+                    MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")})}
+                }
+            }
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Review for Last.fm account: SyntheticHeldLarge").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Synthetic Artist - Synthetic Held Large Track").performScrollTo().assertIsDisplayed()
+            capture("authority-held-large-metadata","Synthetic Artist - Synthetic Held Large Track")
+            ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().assertIsDisplayed()
+            capture("authority-held-large-control","Resume reviewed held scrobbles")
+            assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
+        }finally{store.close()}
+    }
+
+    private fun seedHeld(store:AppStore,id:String,account:String) {
+        store.sql.execute("INSERT INTO android_plays VALUES(?,'Synthetic Artist','Synthetic Held Track',NULL,1234567890000,300000,200000)",listOf("play-$id"))
+        store.queue.enqueue(id,"lastfm",account,dev.scrobblix.core.ActionType.Scrobble,0,"play-$id")
+        val current=store.authority.snapshot()
+        store.sql.execute("UPDATE android_actions SET state='LocalHold',reason='local.unsent_recovery',lease_fence=1,connection_revision=?,credential_ref=? WHERE id=?",listOf(current.revision,current.credentialRef,id))
+    }
+    @Test fun twoActualResumeTapsWhileSuspendedInvokeOnlyShownBatchOnce() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        val gate=kotlinx.coroutines.CompletableDeferred<Unit>()
+        val calls=java.util.concurrent.atomic.AtomicInteger(0)
+        try {
+            store.setTracking(true);store.connect("SyntheticDoubleTap","a".repeat(32));seedHeld(store,"double-held","SyntheticDoubleTap")
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},heldResumer={review ->
+                calls.incrementAndGet();assertEquals(listOf("double-held"),review.rows.map{it.id});gate.await();store.resumeHeld(review)
+            })}}
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Resume reviewed held scrobbles").fetchSemanticsNodes().size==1}
+            val button=ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo()
+            val position=button.fetchSemanticsNode().boundsInRoot.center
+            ui.onRoot().performTouchInput {click(position);click(position)}
+            ui.waitUntil(10000){calls.get()==1}
+            assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
+            ui.onNodeWithText("Resume reviewed held scrobbles").assertDoesNotExist()
+            gate.complete(Unit)
+            ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
+            assertEquals(1,calls.get())
+        }finally{gate.complete(Unit);store.close()}
+    }
+    @Test fun heldResumeConsentIsDisabledAndExplained() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(true);store.connect("SyntheticConsent","a".repeat(32));seedHeld(store,"consent-held","SyntheticConsent")
+            store.authority.requireTrackingChoice(100)
+            show(store)
+            ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Resume reviewed held scrobbles").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Choose tracking again before resuming held scrobbles.").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().assertIsNotEnabled()
+            capture("authority-held-consent","Resume reviewed held scrobbles")
+            assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
+        }finally{store.close()}
+    }
+
 }

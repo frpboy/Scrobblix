@@ -46,7 +46,8 @@ sealed interface ConnectionCommit {
 /** Must own the process-wide authority lock. Fresh read opens/closes an independent durable handle.
  * No provider transport belongs in this class. Staging encrypted credentials is a separate boundary.
  */
-class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()->ConnectionSnapshot, private val lock:Any) {
+class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()->ConnectionSnapshot, private val lock:Any,
+    private val freshHeldRead:((List<String>)->HeldState)?=null) {
     fun snapshot():ConnectionSnapshot=synchronized(lock){ ConnectionSchema.read(db) }
     private fun publish(prior:ConnectionSnapshot,next:ConnectionSnapshot,resume:Boolean,now:Long):ConnectionCommit {
         try {
@@ -159,6 +160,108 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
                 WHERE id=? AND provider='lastfm' AND account=? AND connection_revision=? AND credential_ref=? AND lease_owner=? AND lease_fence=? AND state='InFlight' AND send_phase='SEND_STARTED'""",
                 listOf(outcome,reason,if(outcome=="RetryScheduled")Math.addExact(now,delay) else now,
                     if(outcome in listOf("Pending","RetryScheduled"))null else now,l.id,l.account,l.revision,l.ref,l.owner,l.fence))==1
+        }
+    }
+    /** Exact immutable local review, not a send permit. Historical lease provenance is retained. */
+    data class HeldRow internal constructor(val fields:Map<String,String?>) {
+        val id:String get()=fields.getValue("id")!!
+        val artist:String? get()=fields["review_artist"]
+        val title:String? get()=fields["review_title"]
+        val startedMs:Long? get()=fields["review_started_ms"]?.toLongOrNull()
+    }
+    data class HeldReview internal constructor(val snapshot:ConnectionSnapshot,val rows:List<HeldRow>,val remaining:Long)
+    data class HeldState(val snapshot:ConnectionSnapshot,val rows:List<HeldRow>)
+    sealed interface HeldOutcome {
+        data class Committed(val count:Int):HeldOutcome
+        data object Stale:HeldOutcome
+        data object Unconfirmed:HeldOutcome
+    }
+    companion object {
+        const val HELD_BATCH_LIMIT=20
+        private const val HELD_COLUMNS="""SELECT a.*,p.artist AS review_artist,p.title AS review_title,
+            p.album AS review_album,p.started_ms AS review_started_ms,p.duration_ms AS review_duration_ms,
+            p.confirmed_ms AS review_confirmed_ms FROM android_actions a LEFT JOIN android_plays p ON p.id=a.play_id"""
+        private fun heldRow(row:Map<String,String?>)=HeldRow(java.util.Collections.unmodifiableMap(HashMap(row)))
+        private fun validHeld(row:HeldRow,current:ConnectionSnapshot):Boolean=with(row.fields) {
+            fun number(key:String,min:Long=0,max:Long=Long.MAX_VALUE):Long? {
+                val raw=get(key) ?: return null
+                val value=raw.toLongOrNull() ?: return null
+                return value.takeIf {it in min..max && it.toString()==raw}
+            }
+            fun text(key:String,required:Boolean):Boolean {
+                val value=get(key) ?: return !required
+                return (!required || value.isNotBlank()) && value.length<=1024 && value.none{it.isISOControl()}
+            }
+            val fence=number("lease_fence",1,Long.MAX_VALUE-1) ?: return false
+            val revision=number("connection_revision",1,Long.MAX_VALUE-1) ?: return false
+            val ref=get("credential_ref") ?: return false
+            get("provider")=="lastfm" && get("account")==current.account && get("type")=="Scrobble" &&
+                get("state")=="LocalHold" && get("send_phase")=="UNSENT" &&
+                get("reason") in setOf("local.authority_changed_unsent","local.unsent_recovery") &&
+                number("attempts",0,fence)!=null && number("provider_sends",0,minOf(7,fence))!=null &&
+                revision<=current.revision && (ConnectionSchema.validGeneration(ref) || ref==get("account")) &&
+                get("lease_owner")==null && get("lease_expires_ms")==null && get("completed_ms")==null &&
+                !get("id").isNullOrBlank() && !get("play_id").isNullOrBlank() &&
+                number("created_ms")!=null && number("due_ms")!=null && number("review_started_ms")!=null &&
+                number("review_confirmed_ms")!=null &&
+                (get("review_duration_ms")==null || number("review_duration_ms",1,Int.MAX_VALUE.toLong())!=null) &&
+                text("review_artist",true) && text("review_title",true) && text("review_album",false)
+        }
+        /** Caller owns one read transaction when using an independent fresh handle. */
+        fun readHeldState(db:QueueSqlDriver,ids:List<String>):HeldState {
+            val snapshot=ConnectionSchema.read(db)
+            val rows=ids.mapNotNull {id -> db.query("$HELD_COLUMNS WHERE a.id=?",listOf(id)).singleOrNull()?.let(::heldRow)}
+            return HeldState(snapshot,java.util.Collections.unmodifiableList(rows))
+        }
+    }
+    fun reviewHeld():HeldReview?=synchronized(lock) {
+        val current=ConnectionSchema.read(db)
+        val account=current.account ?: return@synchronized null
+        val eligible="""a.provider='lastfm' AND a.account=? AND a.type='Scrobble' AND a.state='LocalHold'
+            AND a.send_phase='UNSENT' AND a.reason IN ('local.authority_changed_unsent','local.unsent_recovery')
+            AND a.provider_sends>=0 AND a.provider_sends<8 AND a.lease_owner IS NULL AND a.lease_expires_ms IS NULL"""
+        val count=db.query("SELECT COUNT(*) AS total FROM android_actions a WHERE $eligible",listOf(account)).single()["total"]!!.toLong()
+        val rows=db.query("$HELD_COLUMNS WHERE $eligible ORDER BY a.created_ms,a.id LIMIT $HELD_BATCH_LIMIT",listOf(account)).map(::heldRow)
+        check(count>=rows.size && rows.all {validHeld(it,current)}) {"Held rows require local repair, not delivery resume"}
+        HeldReview(current,java.util.Collections.unmodifiableList(rows),count-rows.size)
+    }
+    /** Never recomputes the displayed batch or changes another state. Any row change rejects all. */
+    fun resumeHeld(review:HeldReview,tracking:()->Boolean,now:Long):HeldOutcome=synchronized(lock) {
+        if(review.rows.isEmpty())return@synchronized HeldOutcome.Stale
+        val ids=review.rows.map {it.id}
+        if(ids.size>HELD_BATCH_LIMIT || ids.distinct().size!=ids.size)return@synchronized HeldOutcome.Stale
+        fun gate(snapshot:ConnectionSnapshot)=snapshot==review.snapshot && snapshot.account!=null &&
+            !snapshot.resumeConsentRequired && tracking()
+        val intended=review.rows.map {row -> heldRow(row.fields+mapOf("state" to "Pending","reason" to null,
+            "due_ms" to now.toString(),"completed_ms" to null))}
+        try {
+            db.transaction {
+                if(!gate(ConnectionSchema.read(db)))return@transaction false
+                val actual=readHeldState(db,ids)
+                if(actual.rows!=review.rows)return@transaction false
+                // Recheck the full eligibility predicate even for caller-created/copied tokens.
+                if(review.rows.any {!validHeld(it,review.snapshot)})return@transaction false
+                for(row in review.rows) {
+                    check(db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,due_ms=?,completed_ms=NULL
+                        WHERE id=? AND provider='lastfm' AND account=? AND type='Scrobble' AND state='LocalHold'
+                        AND send_phase='UNSENT' AND reason=? AND attempts=? AND provider_sends=? AND lease_fence=?
+                        AND connection_revision IS ? AND credential_ref IS ? AND lease_owner IS NULL AND lease_expires_ms IS NULL""",
+                        listOf(now,row.id,review.snapshot.account,row.fields["reason"],row.fields["attempts"],row.fields["provider_sends"],
+                            row.fields["lease_fence"],row.fields["connection_revision"],row.fields["credential_ref"]))==1)
+                }
+                true
+            }.let {if(it)HeldOutcome.Committed(ids.size) else HeldOutcome.Stale}
+        }catch(_:Exception) {
+            // Read-only confirmation only. An intervening worker claim is unconfirmed, never a retry.
+            try {
+                val observed=freshHeldRead?.invoke(ids) ?: return@synchronized HeldOutcome.Unconfirmed
+                when {
+                    observed.snapshot!=review.snapshot -> HeldOutcome.Unconfirmed
+                    observed.rows==intended -> HeldOutcome.Committed(ids.size)
+                    observed.rows==review.rows -> HeldOutcome.Stale
+                    else -> HeldOutcome.Unconfirmed
+                }
+            }catch(_:Exception){HeldOutcome.Unconfirmed}
         }
     }
     enum class Completion { Accepted, Unknown, InvalidSession, TemporaryFailure }
