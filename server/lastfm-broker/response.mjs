@@ -32,7 +32,7 @@ export function safeProviderResponse(method,payload) {
   return {error:Number(error),message:'Last.fm returned an API error'};
  }
  if(method==='auth.getToken') {
-  if(typeof payload.token!=='string' || !REQUEST_TOKEN.test(payload.token))return invalid();return {token:payload.token};
+  if(typeof payload.token!=='string' || payload.token.length!==32 || !REQUEST_TOKEN.test(payload.token))return invalid();return {token:payload.token};
  }
  if(method==='auth.getSession') {
   const s=payload.session;if(!plain(s) || !text(s.name,255) || !s.name.trim() || !HEX.test(s.key??''))return invalid();

@@ -22,7 +22,7 @@ export function validatedParams(input, nowSeconds) {
   if (!fields || Object.keys(input).some(k => k !== 'method' && !fields.includes(k))) throw new Error('invalid');
   const result = {method: input.method};
   if (input.method === 'auth.getSession') {
-    if (!REQUEST_TOKEN.test(input.token ?? '')) throw new Error('invalid');
+    if (typeof input.token!=='string' || input.token.length!==32 || !REQUEST_TOKEN.test(input.token)) throw new Error('invalid');
     result.token = input.token;
   }
   if (input.method.startsWith('track.')) {

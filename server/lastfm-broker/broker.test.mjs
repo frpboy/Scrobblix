@@ -127,3 +127,14 @@ test('URL-safe request token round trip stays bounded; failures have no diagnost
   assert.deepEqual(await (await h(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
  }
 });
+
+test('request token type and exact length precede regex coercion and final-newline semantics',async()=>{
+ for(const token of ['x'.repeat(32)+'\n','x'.repeat(32)+'\r','x'.repeat(32)+'\r\n',['x'.repeat(32)],{token:'x'.repeat(32)},null,32]) {
+  assert.throws(()=>validatedParams({method:'auth.getSession',token},0));
+  let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;return Response.json({token});}});
+  const rejected=await h(request({method:'auth.getSession',token}),env);
+  assert.equal(rejected.status,400);assert.equal(calls,0);
+  const malformed=await h(request({method:'auth.getToken'}),env);
+  assert.equal(malformed.status,502);assert.deepEqual(await malformed.json(),{broker_error:'upstream_outcome_unknown'});
+ }
+});
