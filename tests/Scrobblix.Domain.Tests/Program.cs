@@ -17,6 +17,7 @@ using System.Text;
 using System.Net;
 using System.Net.Http;
 using Microsoft.Data.Sqlite;
+using Scrobblix.Application.Caching;
 using Scrobblix.Infrastructure.Providers;
 using Scrobblix.NativeHost;
 using System.Text.Json;
@@ -1900,6 +1901,130 @@ Assert(await CountRowsAsync(retentionConnectionString, "SELECT COUNT(*) FROM pla
 Assert(await retention.PruneExpiredAsync(retentionCutoff, PlaybackObservationRetentionPolicy.PruneBatchSize, CancellationToken.None) == 0,
     "A second retention run is idempotent once no expired rows remain.");
 Directory.Delete(retentionTestDirectory, recursive: true);
+
+// Artwork cache retention (issue #122): the owner approved 30-day cache expiry on 2026-11-07.
+// Expired files still referenced by retained plays history survive; history rows are never touched.
+Assert(ArtworkCacheRetentionPolicy.RetentionPeriod == TimeSpan.FromDays(30),
+    "Artwork cache retention uses the owner-approved 30-day period.");
+var artworkCacheTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-artwork-cache-{Guid.NewGuid():N}");
+var artworkCacheDirectory = Path.Combine(artworkCacheTestDirectory, "artwork");
+Directory.CreateDirectory(artworkCacheDirectory);
+var artworkCacheConnectionString = $"Data Source={Path.Combine(artworkCacheTestDirectory, "scrobblix.db")};Pooling=False";
+await new SqliteDatabase(artworkCacheConnectionString).InitializeAsync(CancellationToken.None);
+var artworkCachePlayStore = new SqliteLocalPlayStore(artworkCacheConnectionString);
+var artworkNow = DateTimeOffset.UtcNow;
+var artworkCutoff = artworkNow - ArtworkCacheRetentionPolicy.RetentionPeriod;
+var artworkTemporaryCutoff = artworkNow - ArtworkCacheRetentionPolicy.TemporaryFileGracePeriod;
+
+string WriteCachedFile(string name, byte marker, DateTimeOffset lastWriteUtc)
+{
+    var path = Path.Combine(artworkCacheDirectory, name);
+    File.WriteAllBytes(path, [marker]);
+    File.SetLastWriteTimeUtc(path, lastWriteUtc.UtcDateTime);
+    return path;
+}
+
+var expiredReferencedPath = WriteCachedFile("expired-referenced.png", 1, artworkNow.AddDays(-40));
+var expiredFreePath = WriteCachedFile("expired-free.jpg", 2, artworkNow.AddDays(-40));
+var boundaryExpiredArtworkPath = WriteCachedFile("boundary-expired.webp", 3, artworkCutoff.AddSeconds(-1));
+var boundaryKeptArtworkPath = WriteCachedFile("boundary-kept.png", 4, artworkCutoff.AddSeconds(1));
+var recentFreePath = WriteCachedFile("recent-free.png", 5, artworkNow);
+var staleTemporaryPath = WriteCachedFile($"stale.{Guid.NewGuid():N}.tmp", 6, artworkNow.AddDays(-2));
+var freshTemporaryPath = WriteCachedFile($"fresh.{Guid.NewGuid():N}.tmp", 7, artworkNow.AddHours(-2));
+var foreignFilePath = WriteCachedFile("not-artwork.db", 8, artworkNow.AddDays(-90));
+var caseVariantReferencePath = WriteCachedFile("case-preserved.bmp", 9, artworkNow.AddDays(-40));
+var nestedArtworkDirectory = Path.Combine(artworkCacheDirectory, "nested");
+Directory.CreateDirectory(nestedArtworkDirectory);
+var nestedExpiredPath = Path.Combine(nestedArtworkDirectory, "nested-expired.png");
+File.WriteAllBytes(nestedExpiredPath, [10]);
+File.SetLastWriteTimeUtc(nestedExpiredPath, artworkNow.AddDays(-40).UtcDateTime);
+
+await artworkCachePlayStore.UpsertAsync(historyRecord with { PlayId = "artwork-referenced", ArtworkPath = expiredReferencedPath }, CancellationToken.None);
+// Case-insensitive Windows filesystems must not defeat reference preservation on casing differences.
+await artworkCachePlayStore.UpsertAsync(historyRecord with { PlayId = "artwork-case-referenced", ArtworkPath = caseVariantReferencePath.ToUpperInvariant() }, CancellationToken.None);
+
+var artworkJanitor = new ArtworkCacheJanitor(artworkCacheConnectionString, artworkCacheDirectory);
+foreach (var invalidBatchSize in new[] { -1, 0, 5_001 })
+{
+    var rejectedArtworkBatch = false;
+    try { await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, invalidBatchSize, CancellationToken.None); }
+    catch (ArgumentOutOfRangeException) { rejectedArtworkBatch = true; }
+    Assert(rejectedArtworkBatch, "Artwork cache retention rejects unbounded, empty or excessive batch sizes before deleting.");
+}
+
+var missingDirectoryJanitor = new ArtworkCacheJanitor(artworkCacheConnectionString, Path.Combine(artworkCacheTestDirectory, "missing"));
+Assert(await missingDirectoryJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None) is { Deleted: 0, Failed: 0 },
+    "Artwork cache retention treats a missing cache directory as nothing to do.");
+
+var artworkPruneCancelled = false;
+try
+{
+    await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, new CancellationToken(canceled: true));
+}
+catch (OperationCanceledException)
+{
+    artworkPruneCancelled = true;
+}
+Assert(artworkPruneCancelled, "Artwork cache retention honors a pre-cancelled token instead of deleting.");
+Assert(File.Exists(expiredReferencedPath) && File.Exists(expiredFreePath) && File.Exists(boundaryExpiredArtworkPath) && File.Exists(staleTemporaryPath),
+    "A cancelled artwork cache prune leaves every cached file intact for safe retry.");
+
+var firstArtworkPrune = await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None);
+Assert(firstArtworkPrune is { Deleted: 3, Failed: 0 },
+    "The first artwork cache prune deletes exactly the expired unreferenced artwork and the stale temporary file.");
+Assert(!File.Exists(expiredFreePath) && !File.Exists(boundaryExpiredArtworkPath) && !File.Exists(staleTemporaryPath),
+    "Expired unreferenced artwork and stale temporary files are removed under the 30-day policy.");
+Assert(File.Exists(expiredReferencedPath) && File.Exists(caseVariantReferencePath),
+    "Expired artwork still referenced by retained listening history is preserved.");
+Assert(File.Exists(boundaryKeptArtworkPath) && File.Exists(recentFreePath) && File.Exists(freshTemporaryPath),
+    "Artwork inside the retention window and fresh temporary files are kept.");
+Assert(File.Exists(foreignFilePath) && File.Exists(nestedExpiredPath),
+    "Cleanup never removes non-artwork files or anything outside the flat artwork cache directory.");
+Assert(await CountRowsAsync(artworkCacheConnectionString, "SELECT COUNT(*) FROM plays;") == 2,
+    "Artwork cache retention never touches canonical plays history.");
+Assert(await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None) is { Deleted: 0, Failed: 0 },
+    "A second artwork cache prune is idempotent once no expired files remain.");
+
+// Volume beyond one batch is still fully processed in bounded batches.
+for (var bulkIndex = 0; bulkIndex < 45; bulkIndex++)
+{
+    WriteCachedFile($"bulk-{bulkIndex}.png", 13, artworkNow.AddDays(-40));
+}
+var bulkPrune = await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, 20, CancellationToken.None);
+Assert(bulkPrune is { Deleted: 45, Failed: 0 }
+    && !Directory.EnumerateFiles(artworkCacheDirectory, "bulk-*.png").Any(),
+    "Artwork cache retention processes volumes beyond one batch without leftovers.");
+
+// A concurrent cache writer neither crashes the prune nor loses its fresh files.
+var concurrentWriter = Task.Run(() =>
+{
+    for (var index = 0; index < 50; index++)
+    {
+        File.WriteAllBytes(Path.Combine(artworkCacheDirectory, $"concurrent-{index}.png"), [14]);
+    }
+});
+await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None);
+await concurrentWriter;
+Assert(Directory.EnumerateFiles(artworkCacheDirectory, "concurrent-*.png").Count() == 50,
+    "Artwork files written concurrently with cleanup are preserved.");
+
+if (OperatingSystem.IsWindows())
+{
+    // Windows enforces share modes: a locked expired file is skipped, not fatal to the run.
+    var lockedExpiredPath = WriteCachedFile("locked-expired.png", 15, artworkNow.AddDays(-40));
+    ArtworkCachePruneResult lockedPrune;
+    using (var lockStream = new FileStream(lockedExpiredPath, FileMode.Open, FileAccess.Read, FileShare.None))
+    {
+        lockedPrune = await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None);
+    }
+    Assert(lockedPrune is { Deleted: 0, Failed: 1 } && File.Exists(lockedExpiredPath),
+        "A locked artwork file is skipped for the next cycle instead of failing the run.");
+    Assert(await artworkJanitor.PruneExpiredAsync(artworkCutoff, artworkTemporaryCutoff, ArtworkCacheRetentionPolicy.PruneBatchSize, CancellationToken.None) is { Deleted: 1, Failed: 0 }
+        && !File.Exists(lockedExpiredPath),
+        "A previously locked artwork file is removed once the lock is released.");
+}
+
+Directory.Delete(artworkCacheTestDirectory, recursive: true);
 
 var backupTestDirectory = Path.Combine(Path.GetTempPath(), $"scrobblix-backup-{Guid.NewGuid():N}");
 Directory.CreateDirectory(backupTestDirectory);

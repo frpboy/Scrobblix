@@ -1,10 +1,10 @@
-namespace Scrobblix.Infrastructure.Providers;
+namespace Scrobblix.Application.Caching;
 
 /// <summary>
 /// A small, thread-safe FIFO cache for process-local metadata results.
 /// Updating an existing key does not change its eviction position.
 /// </summary>
-internal sealed class BoundedCache<TKey, TValue> where TKey : notnull
+public sealed class BoundedCache<TKey, TValue> where TKey : notnull
 {
     private readonly int _capacity;
     private readonly Dictionary<TKey, TValue> _entries;

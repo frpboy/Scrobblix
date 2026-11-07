@@ -1,5 +1,5 @@
 using Scrobblix.Application.Artwork;
-using System.Collections.Concurrent;
+using Scrobblix.Application.Caching;
 using System.Security.Cryptography;
 using System.Text;
 using Scrobblix.Application.Abstractions;
@@ -17,7 +17,10 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
     private const ulong MaximumArtworkBytes = 8 * 1024 * 1024;
     private readonly string _artworkDirectory = artworkDirectory
         ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scrobblix", "artwork");
-    private readonly ConcurrentDictionary<string, string> _artworkCache = new(StringComparer.Ordinal);
+    // Bounded FIFO memoization of on-disk cache entries; a miss revalidates against the
+    // filesystem, so evicted keys are recovered from disk instead of regrowing without limit.
+    private const int ArtworkCacheKeyCapacity = 2_048;
+    private readonly BoundedCache<string, string> _artworkCache = new(ArtworkCacheKeyCapacity, StringComparer.Ordinal);
     // Sequence numbers restart with this collector; a fresh instance ID prevents collisions with prior process runs.
     private readonly string _sourceInstanceId = Guid.NewGuid().ToString("N");
     private long _sequence;
@@ -112,7 +115,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             if (File.Exists(path))
             {
                 if (!await IsSafeFileAsync(path, cancellationToken)) return null;
-                _artworkCache[cacheKey] = path;
+                _artworkCache.Set(cacheKey, path);
                 return path;
             }
 
@@ -125,7 +128,7 @@ public sealed class GsmTcPlaybackObservationSource(IWallClock clock, string? art
             var temporaryPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
             await File.WriteAllBytesAsync(temporaryPath, bytes, cancellationToken);
             File.Move(temporaryPath, path, overwrite: false);
-            _artworkCache[cacheKey] = path;
+            _artworkCache.Set(cacheKey, path);
             return path;
         }
         catch (OperationCanceledException)
