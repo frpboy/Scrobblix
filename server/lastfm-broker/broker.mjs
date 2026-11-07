@@ -64,7 +64,15 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
     catch { return reply(503,{broker_error:'limiter_unavailable'}); }
     const args={...params,api_key:env.LASTFM_API_KEY};
     const body=new URLSearchParams({...args,api_sig:signature(args,env.LASTFM_API_SECRET),format:'json'});
-    let stage="network",upstreamStatus=0,upstreamType="unknown";
+    let stage="network",upstreamStatus=0,upstreamType="unknown",schema="unread";
+    const tokenShape=p=>{
+      if(!p || typeof p!=='object' || Array.isArray(p)) return 'not_object';
+      if(p.error!==undefined) return 'provider_error';
+      if(!Object.hasOwn(p,'token')) return 'token_missing';
+      if(typeof p.token!=='string') return 'token_not_string';
+      if(p.token.length!==32) return 'token_wrong_length';
+      return HEX.test(p.token)?'token_hex32':'token_nonhex32';
+    };
     try {
       const response=await fetcher(UPSTREAM,{method:'POST',body,redirect:'manual',signal:AbortSignal.timeout(15000)});
       upstreamStatus=response.status;
@@ -74,6 +82,7 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
       if(response.status>=300 && response.status<400) throw new Error("redirect");
       const raw=await readLimited(response.body,65536);stage="parse";
       const payload=JSON.parse(raw);stage="schema";
+      if(params.method==='auth.getToken')schema=tokenShape(payload);
       if(!payload || typeof payload!=='object' || Array.isArray(payload)) throw new Error('invalid');
       // Preserve provider semantics; a transport/parse failure is never proof a scrobble was rejected.
       const safe=safeProviderResponse(params.method,payload);
@@ -82,7 +91,7 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
       return reply(response.status,safe);
     } catch {
       // A bounded diagnostic only for starting anonymous browser consent. Never echo response data.
-      const detail=params.method==='auth.getToken'?{diagnostic:{stage,upstreamStatus,upstreamType}}:{};
+      const detail=params.method==='auth.getToken'?{diagnostic:{stage,upstreamStatus,upstreamType,schema}}:{};
       return reply(502,{broker_error:'upstream_outcome_unknown',...detail});
     }
   };
