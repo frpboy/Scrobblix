@@ -10,7 +10,7 @@ header span, footer { color: #625c71; }
 .status[data-state="checking"] { color: #4e4a58; }
 .recovery { margin: -8px 0 0; color: #34313a; overflow-wrap: anywhere; }
 .diagnostic { margin: -10px 0 0; color: #625c71; font-size: 11px; overflow-wrap: anywhere; }
-section { border-top: 1px solid #d6d0db; padding-top: 12px; }
+section { min-width: 0; border-top: 1px solid #d6d0db; padding-top: 12px; }
 h1, h2 { font-size: 13px; margin: 0 0 4px; }
 p { margin: 0 0 10px; overflow-wrap: anywhere; }
 button { border: 0; border-radius: 6px; background: #655789; color: #fff; cursor: pointer; font: inherit; min-height: 34px; padding: 0 12px; }
@@ -21,7 +21,10 @@ button:disabled { background: #e7e0ec; color: #625c71; cursor: default; }
 .secondary:hover { background: #e1d9e7; }
 .empty-state { color: #625c71; font-size: 12px; margin: 0; }
 ul { display: grid; gap: 8px; list-style: none; margin: 0; padding: 0; }
-li { align-items: center; display: flex; gap: 8px; justify-content: space-between; }
-li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-li button { background: transparent; color: #655789; min-height: 28px; padding: 0; }
+li { min-width: 0; align-items: center; display: flex; gap: 8px; justify-content: space-between; }
+li span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+li button { flex-shrink: 0; background: transparent; border-radius: 4px; color: #655789; min-height: 28px; padding: 2px 6px; }
+li button:hover { background: #ece6f0; color: #594b7c; text-decoration: underline; }
+li button:focus-visible { outline: 2px solid #655789; outline-offset: 1px; }
+li button:active { background: #e1d9e7; }
 footer { border-top: 1px solid #d6d0db; font-size: 12px; padding-top: 12px; }
