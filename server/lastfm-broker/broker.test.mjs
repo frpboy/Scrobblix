@@ -29,7 +29,7 @@ test('limit, missing configuration and limiter failure fail closed',async()=>{
 });
 test('network ambiguity explicit with no retry',async()=>{
  let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;throw Error('network')}});
- const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{error:'upstream_outcome_unknown'});assert.equal(calls,1);
+ const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown'});assert.equal(calls,1);
 });
 test('oversize upstream response not reflected',async()=>{
  const h=handler({gate:async()=>true,fetcher:async()=>new Response('x'.repeat(65537))});assert.equal((await h(request({method:'auth.getToken'}),env)).status,502);
@@ -80,4 +80,14 @@ test('authorization URL is generated from fixed Last.fm origin and bound token, 
  const h=handler({gate:async()=>true,fetcher:async()=>Response.json({token,authorizationUrl:'https://invalid.example/',secret:'not reflected'})});
  const response=await h(request({method:'auth.getToken'}),env);
  assert.deepEqual(await response.json(),{token,authorizationUrl:'https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+token});
+});
+
+test('broker rejection marker is separate from provider API errors and only pre-forward cases allow retry',async()=>{
+ let calls=0;const fetcher=async()=>{calls++;return Response.json({token:'c'.repeat(32)})};
+ for(const [gate,status,marker] of [[async()=>false,429,'limited'],[async()=>{throw Error('synthetic')},503,'limiter_unavailable']]) {
+  const result=await handler({gate,fetcher})(request({method:'auth.getToken'}),env);
+  assert.equal(result.status,status);assert.deepEqual(await result.json(),{broker_error:marker});
+ }
+ const invalid=await handler({gate:async()=>true,fetcher})(request({method:'unknown'}),env);
+ assert.equal(invalid.status,400);assert.deepEqual(await invalid.json(),{broker_error:'invalid_request'});assert.equal(calls,0);
 });

@@ -53,15 +53,15 @@ async function readLimited(stream, limit) {
 /** Preparation only. Not deployed. No console calls, arbitrary upstream, password flow or automatic retries. */
 export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
   return async (request,env) => {
-    if(new URL(request.url).pathname!=='/v1/lastfm' || request.method!=='POST') return reply(404,{error:'not_found'});
-    if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')??'')) return reply(415,{error:'json_required'});
-    if(!HEX.test(env.LASTFM_API_KEY??'') || !HEX.test(env.LASTFM_API_SECRET??'') || !gate) return reply(503,{error:'not_configured'});
+    if(new URL(request.url).pathname!=='/v1/lastfm' || request.method!=='POST') return reply(404,{broker_error:'not_found'});
+    if(!/^application\/json(?:;|$)/i.test(request.headers.get('Content-Type')??'')) return reply(415,{broker_error:'json_required'});
+    if(!HEX.test(env.LASTFM_API_KEY??'') || !HEX.test(env.LASTFM_API_SECRET??'') || !gate) return reply(503,{broker_error:'not_configured'});
     let params;
     try { params=validatedParams(JSON.parse(await readLimited(request.body,4096)),Math.floor(clock()/1000)); }
-    catch { return reply(400,{error:'invalid_request'}); }
+    catch { return reply(400,{broker_error:'invalid_request'}); }
     // Gate must enforce both abuse limits and a strict atomic daily forwarding allowance. Never fail open.
-    try { if(!await gate(request,params)) return reply(429,{error:'limited'}); }
-    catch { return reply(503,{error:'limiter_unavailable'}); }
+    try { if(!await gate(request,params)) return reply(429,{broker_error:'limited'}); }
+    catch { return reply(503,{broker_error:'limiter_unavailable'}); }
     const args={...params,api_key:env.LASTFM_API_KEY};
     const body=new URLSearchParams({...args,api_sig:signature(args,env.LASTFM_API_SECRET),format:'json'});
     try {
@@ -74,6 +74,6 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
       if(params.method==='auth.getToken' && safe.token)
         safe.authorizationUrl='https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+safe.token;
       return reply(response.status,safe);
-    } catch { return reply(502,{error:'upstream_outcome_unknown'}); }
+    } catch { return reply(502,{broker_error:'upstream_outcome_unknown'}); }
   };
 }

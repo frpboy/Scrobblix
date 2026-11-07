@@ -80,6 +80,8 @@ public sealed class LastFmScrobbleProvider : IScrobbleProvider
         {
             using var response = await PostAsync(parameters, cancellationToken);
             var payload = await ReadBoundedAsync(response, cancellationToken);
+            if (TryReadBrokerRejection(response, payload, out var brokerRejection)) return brokerRejection;
+
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapError(apiError), response);
             if (hasApiError || payload.Length > 65536)
@@ -132,6 +134,8 @@ public sealed class LastFmScrobbleProvider : IScrobbleProvider
         {
             using var response = await PostAsync(parameters, cancellationToken);
             var payload = await ReadBoundedAsync(response, cancellationToken);
+            if (TryReadBrokerRejection(response, payload, out var brokerRejection)) return brokerRejection;
+
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
@@ -178,6 +182,8 @@ public sealed class LastFmScrobbleProvider : IScrobbleProvider
         {
             using var response = await PostAsync(parameters, cancellationToken);
             var payload = await ReadBoundedAsync(response, cancellationToken);
+            if (TryReadBrokerRejection(response, payload, out var brokerRejection)) return brokerRejection;
+
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
@@ -350,6 +356,30 @@ public sealed class LastFmScrobbleProvider : IScrobbleProvider
         return delay.Value > TimeSpan.FromHours(24)
             ? TimeSpan.FromHours(24)
             : delay.Value;
+    }
+
+    private bool TryReadBrokerRejection(HttpResponseMessage response, string payload, out ProviderSubmissionResult result)
+    {
+        result=new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
+        if (brokerEndpoint is null) return false;
+        try
+        {
+            using var document=JsonDocument.Parse(payload);
+            var root=document.RootElement;
+            if(root.ValueKind != JsonValueKind.Object || !root.TryGetProperty("broker_error",out var marker)) return false;
+            // Only exact method-owned pre-forward rejections establish that no append-only request was sent.
+            // Mismatched status, mixed payload or an unknown marker remain held, never retried automatically.
+            if(root.EnumerateObject().Count()!=1 || marker.ValueKind!=JsonValueKind.String) return true;
+            result=(response.StatusCode,marker.GetString()) switch
+            {
+                (HttpStatusCode.TooManyRequests,"limited") => new(false,ReasonCodes.Provider.RateLimited,true,GetRetryAfter(response)),
+                (HttpStatusCode.ServiceUnavailable,"not_configured" or "limiter_unavailable") => new(false,ReasonCodes.Provider.TemporaryUnavailable,true),
+                (HttpStatusCode.BadRequest,"invalid_request") => new(false,ReasonCodes.Provider.ResponseInvalid,false),
+                _ => result
+            };
+            return true;
+        }
+        catch(JsonException) { return false; }
     }
 
     private static bool TryReadApiError(string payload, out int errorCode, out bool hasApiError)
