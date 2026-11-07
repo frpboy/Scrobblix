@@ -24,6 +24,7 @@ class ListenerLifecycleTest {
         // Android 8 predates notification shell allow_listener. This runs only on
         // an isolated instrumentation emulator, preserving its original grant list.
         val originalListeners=shell("settings get secure enabled_notification_listeners").let { if(it=="null") "" else it }
+        require(originalListeners.all { it.isLetterOrDigit() || it in "._/:-$" })
         fun access(enabled:Boolean) {
             if(android.os.Build.VERSION.SDK_INT>=28) {
                 val output=shell("cmd notification ${if(enabled) "allow_listener" else "disallow_listener"} $component")
@@ -33,7 +34,9 @@ class ListenerLifecycleTest {
                 if(enabled) entries.add(component)
                 val value=entries.joinToString(":")
                 if(value.isEmpty()) shell("settings delete secure enabled_notification_listeners")
-                else shell("settings put secure enabled_notification_listeners '$value'")
+                else shell("settings put secure enabled_notification_listeners $value")
+                assertEquals("Legacy shell stored exact component list",value,
+                    shell("settings get secure enabled_notification_listeners").let { if(it=="null") "" else it })
             }
         }
         fun until(timeout:Long=15000,condition:()->Boolean) {
@@ -74,7 +77,7 @@ class ListenerLifecycleTest {
             store.disconnect();session.release();access(false)
             if(android.os.Build.VERSION.SDK_INT<28) {
                 if(originalListeners.isEmpty()) shell("settings delete secure enabled_notification_listeners")
-                else shell("settings put secure enabled_notification_listeners '$originalListeners'")
+                else shell("settings put secure enabled_notification_listeners $originalListeners")
             }
             // Only exact synthetic-test rows. No production-history cleanup route.
             store.sql.execute("DELETE FROM android_actions WHERE account=?",listOf("synthetic-runtime"))
