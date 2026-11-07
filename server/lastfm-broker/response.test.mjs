@@ -34,3 +34,24 @@ test('session credentials preserve bounded opaque URL-safe bytes, never coerce o
  for(const key of [null,{},['a'.repeat(32)],'a'.repeat(31),'a'.repeat(33),'a'.repeat(32)+'\n','+'.repeat(32),'/'.repeat(32),'é'.repeat(32),' '.repeat(32)])
   assert.throws(()=>safe('auth.getSession',{session:{name:'Synthetic',key}}));
 });
+
+test('optional empty album fields may omit JSON text without hiding acceptance or ignored status',()=>{
+ for(const accepted of [true,false]) for(const array of [true,false]) {
+  const row={artist:{corrected:'0','#text':'Synthetic Artist'},track:{corrected:'0','#text':'Synthetic Track'},album:{corrected:'0',debug:'strip'},albumArtist:{corrected:'0'},ignoredMessage:{code:accepted?'0':'1','#text':''},timestamp:'1794078600'};
+  const payload={scrobbles:{'@attr':{accepted:accepted?1:0,ignored:accepted?0:1},scrobble:array?[row]:row}};
+  const result=safe('track.scrobble',payload);
+  assert.deepEqual(result.scrobbles.scrobble.album,{'#text':'',corrected:'0'});
+  assert.deepEqual(result.scrobbles.scrobble.albumArtist,{'#text':'',corrected:'0'});
+  assert.equal(result.scrobbles.scrobble.ignoredMessage.code,accepted?'0':'1');
+  assert.equal(result.scrobbles['@attr'].accepted,accepted?1:0);
+  assert.deepEqual(safe('track.updateNowPlaying',{nowplaying:row}).nowplaying.album,{'#text':'',corrected:'0'});
+ }
+});
+test('empty optional metadata compatibility does not coerce, invent required text, or bypass result validation',()=>{
+ const row={artist:{corrected:'0','#text':'Synthetic Artist'},track:{corrected:'0','#text':'Synthetic Track'},album:{corrected:'0'},ignoredMessage:{code:'0'}};
+ for(const album of [null,[],{'#text':null},{'#text':123},{'#text':[]},{'#text':'x'.repeat(1025)},{'#text':'x\n'},{corrected:2},{corrected:{}}])
+  assert.throws(()=>safe('track.updateNowPlaying',{nowplaying:{...row,album}}));
+ for(const key of ['artist','track'])assert.throws(()=>safe('track.updateNowPlaying',{nowplaying:{...row,[key]:{corrected:'0'}}}));
+ for(const ignoredMessage of [null,{},[],{code:6},{code:null}])assert.throws(()=>safe('track.updateNowPlaying',{nowplaying:{...row,ignoredMessage}}));
+ for(const attrs of [{accepted:0,ignored:0},{accepted:1,ignored:1},{}])assert.throws(()=>safe('track.scrobble',{scrobbles:{'@attr':attrs,scrobble:row}}));
+});

@@ -152,3 +152,9 @@ test('opaque session credentials survive track forwarding byte-exact and remain 
  for(const sk of [null,{},['a'.repeat(32)],'a'.repeat(31),'a'.repeat(33),'a'.repeat(32)+'\n','+'.repeat(32),'/'.repeat(32),'é'.repeat(32),' '.repeat(32)])
   assert.throws(()=>validatedParams({method:'track.love',sk,artist:'Synthetic',track:'Synthetic'},0));
 });
+
+test('accepted scrobble with empty optional album metadata returns evidence once, never a false upstream error',async()=>{
+ let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;return Response.json({scrobbles:{'@attr':{accepted:1,ignored:0},scrobble:{artist:{corrected:'0','#text':'Synthetic Artist'},track:{corrected:'0','#text':'Synthetic Track'},album:{corrected:'0'},albumArtist:{corrected:'0'},ignoredMessage:{code:'0'},timestamp:'1794078600'}}});}});
+ const response=await h(request({method:'track.scrobble',sk:'Zg_-'.repeat(8),artist:'Synthetic Artist',track:'Synthetic Track',timestamp:1794078600}),env);
+ assert.equal(response.status,200);assert.equal(calls,1);const body=await response.json();assert.equal(body.scrobbles['@attr'].accepted,1);assert.equal(body.scrobbles.scrobble.ignoredMessage.code,'0');
+});

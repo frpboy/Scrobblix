@@ -12,7 +12,11 @@ function item(value,scrobble){
  for(const key of ['artist','track','album','albumArtist']) if(value[key]!==undefined) {
   const v=value[key];
   if(typeof v==='string') {if(!text(v,1024))return invalid();result[key]=v;}
-  else {if(!plain(v) || !text(v['#text'],1024))return invalid();result[key]={'#text':v['#text']};
+  else {
+   const optional=key==='album' || key==='albumArtist';
+   if(!plain(v) || (!Object.hasOwn(v,'#text') && !optional))return invalid();
+   const valueText=Object.hasOwn(v,'#text')?v['#text']:'';
+   if(!text(valueText,1024))return invalid();result[key]={'#text':valueText};
    if(v.corrected!==undefined)result[key].corrected=numeric(v.corrected,1);}
  }
  const ignored=value.ignoredMessage;
