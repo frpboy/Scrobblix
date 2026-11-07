@@ -17,7 +17,7 @@ class AppRuntimeTest {
     @get:Rule val ui=createAndroidComposeRule<MainActivity>()
     private fun capture(name:String) {
         ui.activity.runOnUiThread { ui.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-        ui.waitForIdle()
+        ui.waitForIdle();Thread.sleep(1000)
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         // Synthetic fresh-profile test capture only; ordinary app keeps FLAG_SECURE.
         instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/scrobblix-$name.png").use {
@@ -87,6 +87,39 @@ class AppRuntimeTest {
         store.sql.execute("DELETE FROM android_actions WHERE account=?",listOf("synthetic-account"))
         store.sql.execute("DELETE FROM android_plays WHERE id=?",listOf("synthetic-preserve"))
         store.setSourceAllowed(player,true)
+    }
+
+    @Test fun privateApiConfigurationEncryptsAndReopensWithoutBundledSecrets() {
+        val context=ui.activity.applicationContext
+        val config=ApiConfigurationStore(context)
+        val key="d".repeat(32);val secret="e".repeat(32)
+        config.write(key,secret)
+        assertEquals(key to secret,ApiConfigurationStore(context).read())
+        val directory=java.io.File(context.noBackupFilesDir,"scrobblix-session-secrets")
+        directory.listFiles()!!.forEach { file ->
+            val bytes=file.readBytes().toString(Charsets.ISO_8859_1)
+            assertFalse(bytes.contains(key));assertFalse(bytes.contains(secret))
+        }
+        dev.scrobblix.platform.SessionSecretStore(context).remove("lastfm-api-config","device")
+        assertNull(config.read())
+    }
+
+    @Test fun privateApiSetupUiStaysLocalAndPausesTracking() {
+        val store=(ui.activity.application as ScrobblixApp).store
+        try {
+            ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+            ui.onNodeWithText("Set up your own Last.fm API app").performScrollTo().performClick()
+            ui.onNodeWithText("Your API key").performScrollTo().performTextInput("d".repeat(32))
+            ui.onNodeWithText("Your API shared secret").performScrollTo().performTextInput("e".repeat(32))
+            ui.onNodeWithText("Save private API configuration").performScrollTo().performClick()
+            ui.waitUntil(10000) { ApiConfigurationStore(ui.activity).read()!=null }
+            ui.onNodeWithText("Connect Last.fm").performScrollTo().assertIsDisplayed()
+            assertFalse(store.tracking());assertNull(store.account())
+            capture("private-config-settings")
+        } finally {
+            dev.scrobblix.platform.SessionSecretStore(ui.activity).remove("lastfm-api-config","device")
+            store.disconnect()
+        }
     }
 
 }

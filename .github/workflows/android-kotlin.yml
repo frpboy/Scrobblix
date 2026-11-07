@@ -73,14 +73,14 @@ jobs:
             exit 1
           fi
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
       - name: Preserve app pixels and test-only APK
         if: always()
         shell: bash
         run: |
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

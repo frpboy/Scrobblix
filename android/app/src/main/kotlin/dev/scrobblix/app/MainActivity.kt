@@ -43,6 +43,10 @@ fun AppScreen(store:AppStore,api:LastFmApi?=LastFmApi.configured(store.context))
     var states by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var apiRevision by remember { mutableStateOf(0) }
+    var apiKey by remember { mutableStateOf("") }
+    var apiSecret by remember { mutableStateOf("") }
+    var configure by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }
     val scope=rememberCoroutineScope()
@@ -97,8 +101,26 @@ fun AppScreen(store:AppStore,api:LastFmApi?=LastFmApi.configured(store.context))
                     Text("Connected as $account")
                     Button(onClick={scope.launch { withContext(Dispatchers.IO) { store.disconnect() };account=null;tracking=false;message="Disconnected locally. History and queue are preserved. Revoke the session in Last.fm settings if needed." }}) { Text("Disconnect Last.fm") }
                 } else {
-                    val configured=api
-                    if(configured==null) Text("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.")
+                    val configured=remember(api,apiRevision) { api ?: LastFmApi.configured(context) }
+                    if(configured==null) {
+                        Text("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.")
+                        TextButton(onClick={configure=!configure}) { Text("Set up your own Last.fm API app") }
+                        if(configure) {
+                            Text("Use only API credentials for an application you own or are authorized to use. This stores them on this device, not in the APK. A public shared-app setup needs separate provider approval and disclosures. Changing the API app disconnects the local session, keeps history/queue and pauses tracking.")
+                            OutlinedTextField(value=apiKey,onValueChange={apiKey=it.take(64)},label={Text("Your API key")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
+                            OutlinedTextField(value=apiSecret,onValueChange={apiSecret=it.take(64)},label={Text("Your API shared secret")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
+                            Button(enabled=!busy && apiKey.matches(Regex("[a-fA-F0-9]{32}")) && apiSecret.matches(Regex("[a-fA-F0-9]{32}")),onClick={
+                                val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true
+                                scope.launch {
+                                    message=try { withContext(Dispatchers.IO) {
+                                        store.disconnect();ApiConfigurationStore(context).write(keyInput,secretInput)
+                                    };apiRevision++;"API app saved on this device. Sign in to Last.fm next." }
+                                    catch(_:Exception) { "Could not save API configuration. Reconnect and try again." }
+                                    busy=false
+                                }
+                            }) { Text("Save private API configuration") }
+                        }
+                    }
                     else {
                         Text("Sign in over HTTPS using Last.fm's mobile authentication. Your password is sent to Last.fm once and is not saved. The session key is encrypted with Android Keystore.")
                         OutlinedTextField(value=username,onValueChange={username=it},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)

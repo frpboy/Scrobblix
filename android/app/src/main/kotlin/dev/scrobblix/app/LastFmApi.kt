@@ -16,7 +16,8 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             // Supplied as private generated resources for a registered API application.
             fun value(name:String):String { val id=context.resources.getIdentifier(name,"string",context.packageName)
                 return if(id==0) "" else context.getString(id) }
-            val key=value("lastfm_api_key");val secret=value("lastfm_api_secret")
+            val saved=ApiConfigurationStore(context).read()
+            val key=saved?.first ?: value("lastfm_api_key");val secret=saved?.second ?: value("lastfm_api_secret")
             return if(key.matches(Regex("[a-fA-F0-9]{32}")) && secret.matches(Regex("[a-fA-F0-9]{32}"))) LastFmApi(key,secret) else null
         }
         internal fun signature(values:Map<String,String>,secret:String):String = MessageDigest.getInstance("MD5")
