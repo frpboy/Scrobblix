@@ -106,8 +106,12 @@ class AuthUiTest {
             ui.onNodeWithText("Authorize in browser").performScrollTo().performClick()
             ui.waitUntil(10000) { launched }
             ui.onNodeWithText("Finish browser connection").assertExists()
+            // Drain the launch coroutine/recomposition before taking the saved-state snapshot.
+            ui.waitForIdle()
             restoration.emulateSavedInstanceStateRestore()
             ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+            ui.waitForIdle()
+            println("RESTORED_SYNTHETIC_UI="+ui.onRoot(useUnmergedTree=true).printToString())
             ui.onNodeWithText("Finish browser connection").assertDoesNotExist()
             ui.onNodeWithText("The previous browser connection cannot be resumed. No connection is confirmed. Your history and queue are unchanged. Start a new authorization only when you are ready.").performScrollTo().assertIsDisplayed()
             assertEquals(1,begins.get());assertEquals(0,exchanges.get())
