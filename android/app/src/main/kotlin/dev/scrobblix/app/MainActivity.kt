@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
@@ -44,6 +45,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var apiRevision by remember { mutableStateOf(0) }
     var browserAuthorization by remember { mutableStateOf<LastFmApi.BrowserAuthorization?>(null) }
     var browserStartedAt by remember { mutableStateOf(0L) }
+    var browserFlowNeedsRestart by rememberSaveable { mutableStateOf(false) }
     var apiKey by remember { mutableStateOf("") }
     var apiSecret by remember { mutableStateOf("") }
     var configure by remember { mutableStateOf(false) }
@@ -68,6 +70,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
             "Listen" -> {
                 Text(if(tracking) "Tracking is on" else "Tracking is paused",style=MaterialTheme.typography.headlineSmall)
                 Text("With your permission, Scrobblix reads track details from supported media sessions. It does not read notification message text or control playback.")
+                Text("Android notification access is broad and can expose notification information. Scrobblix uses it only to read music playback from media sessions. You can leave access off or revoke it in Android settings.")
                 Text(if(access) "Media access is enabled" else "Media access is off")
                 Button(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}) { Text("Review media access") }
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
@@ -125,35 +128,49 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     if(configured!=null) {
                         if(configured.isBroker) Text("Connect without developer API keys. The Scrobblix connection service handles session keys and track details in transit to Last.fm; local history stays on this device.")
                         Text("Recommended: authorize Scrobblix in your browser. Your Last.fm password stays on Last.fm; the returned session key is encrypted on this device.")
+                        if(browserFlowNeedsRestart && browserAuthorization==null && !busy) Text("The previous browser connection cannot be resumed. No connection is confirmed. Your history and queue are unchanged. Start a new authorization only when you are ready.")
                         Button(enabled=!busy,onClick={
-                            busy=true;browserAuthorization=null
+                            busy=true;browserAuthorization=null;browserFlowNeedsRestart=false
                             scope.launch {
                                 message=try {
                                     val authorization=withContext(Dispatchers.IO) { configured.beginBrowserAuthorization() }
-                                    browserAuthorization=authorization;browserStartedAt=android.os.SystemClock.elapsedRealtime()
+                                    browserAuthorization=authorization;browserStartedAt=android.os.SystemClock.elapsedRealtime();browserFlowNeedsRestart=true
                                     browserLauncher(authorization.url)
                                     "Approve access on Last.fm, return here and finish connecting within 60 minutes."
                                 } catch(_:Exception) { browserAuthorization=null;"Could not open Last.fm authorization. Check your browser/network and try again." }
                                 busy=false
                             }
                         }) { Text("Authorize in browser") }
+                        if(browserAuthorization!=null) Text("Browser approval is only the first step. After approving, return here and tap Finish browser connection. Tracking remains under your control.")
                         if(browserAuthorization!=null) Button(enabled=!busy,onClick={
                             val authorization=browserAuthorization!!
                             if(android.os.SystemClock.elapsedRealtime()-browserStartedAt>=3600000) {
-                                browserAuthorization=null;message="Authorization expired. Start again."
+                                browserAuthorization=null;browserFlowNeedsRestart=true;message="Authorization expired. No connection is confirmed. Start a new authorization when ready."
                             } else {
-                                busy=true
+                                // A request can consume the token even when its response is lost.
+                                // Never offer an automatic retry with this one-use token.
+                                busy=true;browserAuthorization=null
                                 scope.launch {
-                                    message=try {
-                                        withContext(Dispatchers.IO) { val login=configured.completeBrowserAuthorization(authorization);store.connect(login.username,login.sessionKey) }
-                                        browserAuthorization=null;account=store.account()
-                                        "Last.fm connected. Turn on tracking to scrobble future listening."
-                                    } catch(_:Exception) { "Access is not approved yet, expired, or unavailable. Approve in Last.fm or start again." }
+                                    val login=try {
+                                        withContext(Dispatchers.IO) { configured.completeBrowserAuthorization(authorization) }
+                                    } catch(_:Exception) {
+                                        message="Could not confirm the Last.fm session exchange. The token will not be retried. Your history and queue are unchanged; no new connection is confirmed."
+                                        null
+                                    }
+                                    if(login!=null) {
+                                        message=try {
+                                            withContext(Dispatchers.IO) { store.connect(login.username,login.sessionKey) }
+                                            browserFlowNeedsRestart=false;account=store.account()
+                                            "Last.fm connected. Turn on tracking to scrobble future listening."
+                                        } catch(_:Exception) {
+                                            "Last.fm returned a session, but saving the local connection failed. Do not assume it is connected. Your history and queue are preserved; this token will not be retried."
+                                        }
+                                    }
                                     busy=false
                                 }
                             }
                         }) { Text("Finish browser connection") }
-                        Text("Last.fm browser approval does not finish the connection inside Scrobblix. Return here and tap Finish browser connection; the account is connected only after this step succeeds.")
+                        if(browserAuthorization==null) Text("Last.fm browser approval does not finish the connection inside Scrobblix. Return here and tap Finish browser connection; the account is connected only after this step succeeds.")
                         if(configured.isBroker) Text("The Scrobblix connection service handles session keys and track details in transit to Last.fm. Local history stays on this device. Your password stays on Last.fm.")
                         if(!configured.isBroker) {
                         Text("Alternative: sign in directly below.")

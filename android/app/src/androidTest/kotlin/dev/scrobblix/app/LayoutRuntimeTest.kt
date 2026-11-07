@@ -3,7 +3,6 @@ package dev.scrobblix.app
 import android.content.pm.ActivityInfo
 import android.content.res.Configuration
 import androidx.lifecycle.Lifecycle
-import android.view.WindowManager
 import androidx.compose.ui.test.*
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.test.platform.app.InstrumentationRegistry
@@ -32,7 +31,7 @@ class LayoutRuntimeTest {
         ui.waitForIdle()
     }
     private fun capture(name:String) {
-        ui.activity.runOnUiThread { ui.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+        org.junit.Assert.assertEquals(0,ui.activity.window.attributes.flags and android.view.WindowManager.LayoutParams.FLAG_SECURE)
         ui.waitForIdle();Thread.sleep(1500)
         shell("screencap -p /sdcard/Download/scrobblix-$name.png")
     }

@@ -16,10 +16,10 @@ import java.io.File
 class AppRuntimeTest {
     @get:Rule val ui=createAndroidComposeRule<MainActivity>()
     private fun capture(name:String) {
-        ui.activity.runOnUiThread { ui.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
+        assertEquals(0,ui.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE)
         ui.waitForIdle();Thread.sleep(1000)
         val instrumentation=InstrumentationRegistry.getInstrumentation()
-        // Synthetic fresh-profile test capture only; ordinary app keeps FLAG_SECURE.
+        // Owner requested screenshot support; verify no test-only flag override is needed.
         instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/scrobblix-$name.png").use {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
         }
@@ -45,6 +45,7 @@ class AppRuntimeTest {
         assertFalse(store.tracking())
         assertNull(store.account())
         ui.activityRule.scenario.recreate()
+        assertEquals(0,ui.activity.window.attributes.flags and WindowManager.LayoutParams.FLAG_SECURE)
         assertFalse(store.tracking())
     }
     @Test fun providerErrorsAndAmbiguousAcceptanceStayConservative() {
