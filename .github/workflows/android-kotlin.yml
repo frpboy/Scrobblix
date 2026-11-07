@@ -35,10 +35,18 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           android/gradlew -p android :core:test :platform:assembleDebug :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: Require core test XML evidence
+        if: always()
+        shell: bash
+        run: find android/core/build/test-results/test -type f -name 'TEST-*.xml' -print -quit | grep -q .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
         with:
+          if-no-files-found: error
           name: android-unsigned-release-candidate
-          path: android/app/build/outputs/apk/release/*.apk
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/core/build/test-results/test
   android-sqlite-runtime:
     strategy:
       fail-fast: false
@@ -117,6 +125,13 @@ jobs:
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
+      - name: Require both instrumentation XML evidence sets
+        if: always()
+        shell: bash
+        run: |
+          for module in app platform; do
+            find "android/$module/build/outputs/androidTest-results" -type f -name 'TEST-*.xml' -print -quit | grep -q . || exit 1
+          done
       - name: Preserve app pixels and test-only APK
         if: always()
         shell: bash
@@ -132,6 +147,7 @@ jobs:
             android-evidence
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/androidTest-results
+            android/platform/build/outputs/androidTest-results
 
   disposable-signed-update:
     if: github.event_name == 'workflow_dispatch' && inputs.approved_rehearsal
