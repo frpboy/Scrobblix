@@ -1,0 +1,11 @@
+{
+  "name": "scrobblix-lastfm-broker",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-11-07",
+  "workers_dev": true,
+  "vars": { "DAILY_FORWARD_LIMIT": "5000" },
+  "observability": { "enabled": false, "logs": { "enabled": false, "invocation_logs": false } },
+  "durable_objects": { "bindings": [{ "name": "FORWARD_BUDGET", "class_name": "ScrobblixBudget" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["ScrobblixBudget"] }],
+  "ratelimits": [{ "name": "PER_IP", "namespace_id": "133001", "simple": { "limit": 30, "period": 60 } }]
+}
