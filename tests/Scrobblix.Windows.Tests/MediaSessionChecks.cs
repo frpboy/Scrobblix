@@ -53,13 +53,20 @@ internal static class MediaSessionChecks
             while (DateTime.UtcNow < deadline)
             {
                 observation = await source.GetCurrentAsync(CancellationToken.None);
-                if (observation?.PlaybackState == Scrobblix.Domain.Playback.PlayState.Paused) break;
+                if (observation?.Title == "Scrobblix synthetic collector fixture" &&
+                    observation.PlaybackState == Scrobblix.Domain.Playback.PlayState.Paused) break;
                 await Task.Delay(250);
             }
-            Check.True(observation?.PlaybackState == Scrobblix.Domain.Playback.PlayState.Paused, "Actual collector reads native Paused state");
+            Check.True(observation?.Title == "Scrobblix synthetic collector fixture" &&
+                observation.PlaybackState == Scrobblix.Domain.Playback.PlayState.Paused, "Actual collector reads native Paused state");
             controls.IsEnabled = false;
         }
-        finally { Directory.Delete(directory,true); }
+        finally
+        {
+            try { Directory.Delete(directory, true); }
+            catch (IOException) { Console.WriteLine("Synthetic media cleanup deferred: file still in use"); }
+            catch (UnauthorizedAccessException) { Console.WriteLine("Synthetic media cleanup deferred: access denied"); }
+        }
     }
     private sealed class Clock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
 }
