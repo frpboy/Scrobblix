@@ -15,7 +15,7 @@ class HeldReconciliationTest {
             return try{read(d)}finally{d.connection.close()}
         }
         val lock=Any()
-        fun authority(driver:QueueSqlDriver)=ConnectionAuthority(driver,{fresh{ConnectionSchema.read(it)}},lock,{ids ->fresh{driver ->driver.transaction {ConnectionAuthority.readHeldState(driver,ids)}}})
+        fun authority(driver:QueueSqlDriver)=ConnectionAuthority(driver,{fresh{ConnectionSchema.read(it)}},lock,{ids ->fresh{driver ->ConnectionAuthority.readHeldState(driver,ids)}})
         try {
             LocalSchema.initialize(db,"account")
             val a=authority(db);assertTrue(a.connect("account",generation,0) is ConnectionCommit.Committed)
@@ -144,6 +144,20 @@ class HeldReconciliationTest {
             val columns=original.keys.filter{it!="id"}
             db.execute("UPDATE android_actions SET "+columns.joinToString(","){"$it=?"},columns.map{original[it]})
         }
+    }
+
+    @Test fun confirmationUsesExactlyOneSelectAndNoTransactionOrMutation()=scenario {db,a,_ ->
+        held(db,"one");val review=a.reviewHeld()!!;var reads=0
+        val readonly=object:QueueSqlDriver {
+            override fun query(sql:String,args:List<Any?>):List<Map<String,String?>> {reads++;assertTrue(sql.trimStart().startsWith("SELECT"));return db.query(sql,args)}
+            override fun execute(sql:String,args:List<Any?>):Int=error("No mutation allowed")
+            override fun <T> transaction(block:()->T):T=error("No explicit transaction allowed")
+        }
+        val state=ConnectionAuthority.readHeldState(readonly,listOf("one"))
+        assertEquals(1,reads);assertEquals(review.snapshot,state.snapshot);assertEquals(review.rows,state.rows)
+        db.execute("DELETE FROM android_actions")
+        val missing=ConnectionAuthority.readHeldState(readonly,listOf("one"))
+        assertEquals(review.snapshot,missing.snapshot);assertTrue(missing.rows.isEmpty())
     }
 
 }

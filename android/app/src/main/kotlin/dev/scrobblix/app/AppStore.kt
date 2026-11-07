@@ -78,7 +78,7 @@ class AppStore(val context:Context,
         try { ConnectionSchema.read(AndroidQueueSqlDriver(freshDb)) } finally {freshDb.close()}
     },authorityCoordinator,{ids ->
         val freshDb=SQLiteDatabase.openDatabase(context.getDatabasePath("listening.db").path,null,SQLiteDatabase.OPEN_READONLY)
-        try {val driver=AndroidQueueSqlDriver(freshDb);driver.transaction {ConnectionAuthority.readHeldState(driver,ids)}}finally{freshDb.close()}
+        try {ConnectionAuthority.readHeldState(AndroidQueueSqlDriver(freshDb),ids)}finally{freshDb.close()}
     })
     private var setupRevision=0L
     private var setupPending=false

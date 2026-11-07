@@ -29,6 +29,9 @@ object ConnectionSchema {
     fun read(db:QueueSqlDriver):ConnectionSnapshot {
         check(db.query("SELECT initialized FROM android_connection_meta WHERE slot=1").single()["initialized"]=="1")
         val r=db.query("SELECT revision,account,credential_kind,credential_ref,resume_consent_required FROM android_connection WHERE slot=1").single()
+        return decode(r)
+    }
+    internal fun decode(r:Map<String,String?>):ConnectionSnapshot {
         val revision=r["revision"]!!.toLong();check(revision>0)
         val account=r["account"];val kind=r["credential_kind"];val ref=r["credential_ref"]
         check(if(account==null) kind==null && ref==null else validAccount(account) && ((kind=="Legacy" && ref==account) || (kind=="Generation" && ref!=null && validGeneration(ref))))
@@ -207,11 +210,28 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
                 (get("review_duration_ms")==null || number("review_duration_ms",1,Int.MAX_VALUE.toLong())!=null) &&
                 text("review_artist",true) && text("review_title",true) && text("review_album",false)
         }
-        /** Caller owns one read transaction when using an independent fresh handle. */
+        /** One bounded SELECT gives authority, sentinel and every requested row the same
+         * implicit SQLite read snapshot, without BEGIN EXCLUSIVE on Android26 readonly handles.
+         */
         fun readHeldState(db:QueueSqlDriver,ids:List<String>):HeldState {
-            val snapshot=ConnectionSchema.read(db)
-            val rows=ids.mapNotNull {id -> db.query("$HELD_COLUMNS WHERE a.id=?",listOf(id)).singleOrNull()?.let(::heldRow)}
-            return HeldState(snapshot,java.util.Collections.unmodifiableList(rows))
+            require(ids.isNotEmpty() && ids.size<=HELD_BATCH_LIMIT && ids.distinct().size==ids.size)
+            val rows=db.query("""SELECT c.revision AS snapshot_revision,c.account AS snapshot_account,
+                c.credential_kind AS snapshot_credential_kind,c.credential_ref AS snapshot_credential_ref,
+                c.resume_consent_required AS snapshot_resume_consent_required,m.initialized AS snapshot_initialized,
+                a.*,p.artist AS review_artist,p.title AS review_title,p.album AS review_album,
+                p.started_ms AS review_started_ms,p.duration_ms AS review_duration_ms,p.confirmed_ms AS review_confirmed_ms
+                FROM android_connection c JOIN android_connection_meta m ON m.slot=c.slot
+                LEFT JOIN android_actions a ON a.id IN (${ids.joinToString(","){"?"}})
+                LEFT JOIN android_plays p ON p.id=a.play_id WHERE c.slot=1""",ids)
+            check(rows.isNotEmpty())
+            val keys=listOf("revision","account","credential_kind","credential_ref","resume_consent_required")
+            val first=rows.first()
+            check(first["snapshot_initialized"]=="1")
+            val snapshot=ConnectionSchema.decode(keys.associateWith {first["snapshot_$it"]})
+            check(rows.all {row -> row["snapshot_initialized"]=="1" && keys.all{row["snapshot_$it"]==first["snapshot_$it"]}})
+            val observed=rows.filter{it["id"]!=null}.associate {row -> row.getValue("id")!! to heldRow(row.filterKeys{!it.startsWith("snapshot_")})}
+            check(observed.size==rows.count{it["id"]!=null})
+            return HeldState(snapshot,java.util.Collections.unmodifiableList(ids.mapNotNull{observed[it]}))
         }
     }
     fun reviewHeld():HeldReview?=synchronized(lock) {

@@ -62,7 +62,8 @@ class HeldReconciliationAppTest {
         val review=store.reviewHeld()!!
         android.database.sqlite.SQLiteDatabase.openDatabase(context.getDatabasePath("listening.db").path,null,android.database.sqlite.SQLiteDatabase.OPEN_READONLY).use {db ->
             val driver=dev.scrobblix.platform.AndroidQueueSqlDriver(db)
-            val actual=driver.transaction {dev.scrobblix.core.ConnectionAuthority.readHeldState(driver,review.rows.map{it.id})}
+            val actual=dev.scrobblix.core.ConnectionAuthority.readHeldState(driver,review.rows.map{it.id})
+            assertTrue(db.isReadOnly)
             assertEquals(review.snapshot,actual.snapshot);assertEquals(review.rows,actual.rows)
         }
     }
