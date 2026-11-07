@@ -1,0 +1,24 @@
+{
+  "sourceSha": "d64b16bf9686f3d5f7afe84cf5766fc3f90c1595",
+  "branch": "security/pipe-credential-scans",
+  "scannedAt": "2026-11-07T07:20:00+05:30",
+  "tools": {
+    "gitleaks": "8.30.1",
+    "syft": "1.57.0",
+    "dotnet": "10.0.403",
+    "node": "v22.23.4",
+    "osv": "api.osv.dev/v1/querybatch"
+  },
+  "coverage": {
+    "gitHistory": "1175 commits across all branch, tag and pull-request refs, redacted report",
+    "nuget": "dotnet list package --vulnerable --include-transitive over all 9 solution projects after a full EnableWindowsTargeting restore",
+    "npm": "npm audit over the full browser-extension lockfile (23 dependencies) plus an OSV cross-check",
+    "sbom": "syft dir scan, CycloneDX 1.7"
+  },
+  "limitations": [
+    "OSV checks exact package identities, not runtime behavior",
+    "syft catalogued the restored NuGet graph and GitHub Actions pins but not the full npm transitive tree or the WindowsAppSDK bundle contents; the npm tree is covered by npm audit/OSV and the NuGet graph by dotnet list package",
+    "vulnerability databases reflect their state at scan time",
+    "no independent official six-phase audit validators (#78) and no live-provider qualification (#17) are claimed"
+  ]
+}

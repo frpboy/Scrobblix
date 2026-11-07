@@ -1,0 +1,16 @@
+  Determining projects to restore...
+  Restored /home/sandbox/scrobblix/tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj (in 77 ms).
+  8 of 9 projects are up-to-date for restore.
+
+The following sources were used:
+   https://api.nuget.org/v3/index.json
+
+The given project `Scrobblix.Application` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Desktop` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Domain` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Infrastructure` has no vulnerable packages given the current sources.
+The given project `Scrobblix.NativeHost` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Windows` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Domain.Tests` has no vulnerable packages given the current sources.
+The given project `Scrobblix.PipeClient` has no vulnerable packages given the current sources.
+The given project `Scrobblix.Windows.Tests` has no vulnerable packages given the current sources.
