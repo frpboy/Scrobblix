@@ -104,19 +104,19 @@ internal static class PipeSecurityChecks
                 "Differential proof: the retired basename-only rule accepted this exact spoof, the current rule rejects it");
 
             // Scenario 1: arbitrary same-user process (this test host) connects directly.
-            var scenario = await RunScenarioAsync(expectedHost, pipe => ConnectInProcessAsync(pipe));
+            var scenario = await RunScenarioAsync(expectedHost, pipe => { Task.Run(() => ConnectInProcessAsync(pipe)); return null; });
             Check.True(!scenario.Accepted && scenario.Reason == "client_image_not_registered_native_host",
                 "Same-user arbitrary client rejected as non-native-host (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Rejected same-user client had zero payload bytes read (reject-before-persistence)");
 
             // Scenario 2: image at the registered native-host path, launched by a non-browser parent.
-            scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartDirect(expectedHost, pipe)));
+            scenario = await RunScenarioAsync(expectedHost, pipe => StartDirect(expectedHost, pipe));
             Check.True(!scenario.Accepted && scenario.Reason == "native_host_parent_not_supported_browser",
                 "Registered-path host launched by non-browser parent rejected (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Direct-invocation client had zero payload bytes read");
 
             // Scenario 3: registered-path host launched by a renamed fake chrome.exe parent.
-            scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartViaCmdCopy(fakeBrowser, expectedHost, pipe)));
+            scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(fakeBrowser, expectedHost, pipe));
             Check.True(!scenario.Accepted && scenario.Reason == "native_host_parent_not_supported_browser",
                 "Renamed fake chrome.exe parent rejected (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Fake-browser-parent client had zero payload bytes read");
@@ -128,7 +128,7 @@ internal static class PipeSecurityChecks
                 File.Copy(cmdExe, vendorChrome);
                 try
                 {
-                    scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartViaCmdCopy(vendorChrome, expectedHost, pipe)));
+                    scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(vendorChrome, expectedHost, pipe));
                     Check.True(scenario.Accepted && scenario.Reason == "accepted",
                         "Positive control: vendor-install-location browser parent accepted");
                     Check.True(scenario.PayloadBytes > 0, "Positive control payload read after acceptance");
@@ -165,10 +165,10 @@ internal static class PipeSecurityChecks
         Console.WriteLine("Pipe authorization checks complete. Boundary: same-user spoofing resistance plus OS cross-user isolation; not cryptographic caller authentication.");
     }
 
-    private static async Task<ServerOutcome> RunScenarioAsync(string expectedHostPath, Func<string, Task<Process?>> clientStarter)
+    private static Task<ServerOutcome> RunScenarioAsync(string expectedHostPath, Func<string, Process?> clientStarter)
     {
         var pipeName = "scrobblix.test." + Guid.NewGuid().ToString("N");
-        await using var server = new NamedPipeServerStream(
+        using var server = new NamedPipeServerStream(
             pipeName,
             PipeDirection.In,
             1,
@@ -177,59 +177,131 @@ internal static class PipeSecurityChecks
 
         AssertPipeAclCurrentUserOnly(server);
 
-        using var connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-        var waitForConnection = server.WaitForConnectionAsync(connectTimeout.Token);
-        var process = await clientStarter(pipeName);
-        Console.WriteLine("  scenario client started for " + pipeName + "; awaiting server accept");
-        await waitForConnection;
-        Console.WriteLine("  server accepted a connection for " + pipeName);
-
-        var accepted = NamedPipePeerVerifier.IsTrustedBrowserNativeHost(
-            server.SafePipeHandle.DangerousGetHandle(), expectedHostPath, out var reason);
-        var payloadBytes = 0;
-        string? browserInstanceId = null;
-        if (accepted)
+        // The server runs on a dedicated thread with synchronous blocking pipe calls; the
+        // async overlapped accept proved unreliable on the hosted runner (the accept never
+        // completed and even timeout tokens stayed pending). A hard watchdog disposes the
+        // server to unblock the thread and fails the scenario loudly instead of hanging.
+        using var completed = new ManualResetEventSlim();
+        ServerOutcome? outcome = null;
+        Exception? serverError = null;
+        var serverThread = new Thread(() =>
         {
-            var header = new byte[sizeof(int)];
-            if (await ReadExactAsync(server, header))
+            try
             {
-                var length = BinaryPrimitives.ReadInt32LittleEndian(header);
-                if (length is > 0 and <= 256 * 1024)
+                server.WaitForConnection();
+                Console.WriteLine("  server accepted a connection for " + pipeName);
+                var accepted = NamedPipePeerVerifier.IsTrustedBrowserNativeHost(
+                    server.SafePipeHandle.DangerousGetHandle(), expectedHostPath, out var reason);
+                Console.WriteLine("  peer verdict for " + pipeName + ": accepted=" + accepted + " reason=" + reason);
+                var payloadBytes = 0;
+                string? browserInstanceId = null;
+                if (accepted)
                 {
-                    var buffer = new byte[length];
-                    if (await ReadExactAsync(server, buffer))
+                    var header = new byte[sizeof(int)];
+                    if (ReadExact(server, header))
                     {
-                        payloadBytes = length;
-                        using var document = JsonDocument.Parse(buffer);
-                        if (document.RootElement.TryGetProperty("browserInstanceId", out var idElement))
+                        var length = BinaryPrimitives.ReadInt32LittleEndian(header);
+                        if (length is > 0 and <= 256 * 1024)
                         {
-                            browserInstanceId = idElement.GetString();
+                            var buffer = new byte[length];
+                            if (ReadExact(server, buffer))
+                            {
+                                payloadBytes = length;
+                                using var document = JsonDocument.Parse(buffer);
+                                if (document.RootElement.TryGetProperty("browserInstanceId", out var idElement))
+                                {
+                                    browserInstanceId = idElement.GetString();
+                                }
+                            }
                         }
                     }
                 }
+
+                outcome = new ServerOutcome(accepted, reason, payloadBytes, browserInstanceId);
             }
+            catch (Exception exception)
+            {
+                serverError = exception;
+            }
+            finally
+            {
+                completed.Set();
+            }
+        })
+        {
+            IsBackground = true,
+        };
+        serverThread.Start();
+
+        Process? process = null;
+        Exception? clientError = null;
+        try
+        {
+            process = clientStarter(pipeName);
+            Console.WriteLine("  scenario client started for " + pipeName);
+        }
+        catch (Exception exception)
+        {
+            clientError = exception;
+        }
+
+        if (!completed.Wait(TimeSpan.FromSeconds(60)))
+        {
+            try { server.Dispose(); } catch (ObjectDisposedException) { }
+            throw new InvalidOperationException("FAIL scenario timed out waiting for the server verdict on " + pipeName
+                + (clientError is null ? string.Empty : " (client error: " + clientError.GetType().Name + ")"));
+        }
+
+        if (clientError is not null)
+        {
+            throw new InvalidOperationException("FAIL scenario client failed for " + pipeName, clientError);
+        }
+
+        if (serverError is not null)
+        {
+            throw new InvalidOperationException("FAIL scenario server failed for " + pipeName + ": " + serverError.Message, serverError);
         }
 
         if (process is not null)
         {
             try
             {
-                await process.WaitForExitAsync().WaitAsync(TimeSpan.FromSeconds(10));
-                var output = await process.StandardOutput.ReadToEndAsync();
+                if (!process.WaitForExit((int)TimeSpan.FromSeconds(15).TotalMilliseconds))
+                {
+                    process.Kill(entireProcessTree: true);
+                }
+
+                var output = process.StandardOutput.ReadToEnd();
                 if (!string.IsNullOrWhiteSpace(output))
                 {
                     Console.WriteLine("  client: " + output.Trim());
                 }
             }
-            catch (TimeoutException)
+            catch (InvalidOperationException)
             {
-                try { process.Kill(entireProcessTree: true); } catch (InvalidOperationException) { }
             }
 
             process.Dispose();
         }
 
-        return new ServerOutcome(accepted, reason, payloadBytes, browserInstanceId);
+        return Task.FromResult(outcome!);
+    }
+
+    private static bool ReadExact(Stream stream, byte[] buffer)
+    {
+        var offset = 0;
+        while (offset < buffer.Length)
+        {
+            var read = stream.Read(buffer, offset, buffer.Length - offset);
+            if (read == 0)
+            {
+                return false;
+            }
+
+            offset += read;
+        }
+
+        return true;
     }
 
     private static void AssertPipeAclCurrentUserOnly(NamedPipeServerStream server)
@@ -271,24 +343,24 @@ internal static class PipeSecurityChecks
         }
     }
 
-    private static async Task<Process?> ConnectInProcessAsync(string pipeName)
+    private static Process? ConnectInProcessAsync(string pipeName)
     {
-        var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
-        await client.ConnectAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
+        var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out);
+        client.Connect((int)TimeSpan.FromSeconds(10).TotalMilliseconds);
         var payload = Encoding.UTF8.GetBytes(
             "{\"protocolVersion\":1,\"messageId\":\"forged-inproc-1\",\"type\":\"playback.observation.v1\","
             + "\"browserInstanceId\":\"forged-instance-id\",\"siteOrigin\":\"https://music.example\","
             + "\"sequenceNumber\":1,\"artist\":\"synthetic-artist\",\"title\":\"synthetic-title\"}");
         // Stay connected while the server verifies the peer: a client that connects and
-        // disconnects inside the accept race can leave WaitForConnectionAsync pending.
-        await Task.Delay(TimeSpan.FromSeconds(2));
+        // disconnects inside the accept race can leave the server accept pending.
+        Thread.Sleep(TimeSpan.FromSeconds(2));
         try
         {
             var header = new byte[sizeof(int)];
             BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
-            await client.WriteAsync(header);
-            await client.WriteAsync(payload);
-            await client.FlushAsync();
+            client.Write(header);
+            client.Write(payload);
+            client.Flush();
         }
         catch (IOException)
         {
@@ -326,23 +398,6 @@ internal static class PipeSecurityChecks
         start.ArgumentList.Add("/c");
         start.ArgumentList.Add("\"" + hostPath + "\" \"" + pipeName + "\"");
         return Process.Start(start)!;
-    }
-
-    private static async Task<bool> ReadExactAsync(Stream stream, byte[] buffer)
-    {
-        var offset = 0;
-        while (offset < buffer.Length)
-        {
-            var read = await stream.ReadAsync(buffer.AsMemory(offset));
-            if (read == 0)
-            {
-                return false;
-            }
-
-            offset += read;
-        }
-
-        return true;
     }
 
     private static void TryDelete(string path)
