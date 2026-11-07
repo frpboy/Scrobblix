@@ -88,7 +88,8 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         connectionHealth=store.healthFor(connection);tracking=store.tracking();sources=store.knownSources()
         val polledQueueEpoch=queueEpoch
         val polledHistoryEpoch=historyEpoch
-        try {
+        // Do not let a dependent diagnostic read replace a known authority failure.
+        if(!storageUnavailable)try {
             val recent=historyReader()
             val readings=recent to queueReader(false)
             val verified=withContext(Dispatchers.IO){store.accountState() to store.authority.snapshot()}

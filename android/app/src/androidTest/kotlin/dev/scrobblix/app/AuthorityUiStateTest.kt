@@ -109,8 +109,13 @@ class AuthorityUiStateTest {
         val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
         try {
             store.sql.execute("DELETE FROM android_connection")
-            show(store);settings()
+            val dependentReads=java.util.concurrent.atomic.AtomicInteger()
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser launch allowed")},
+                historyReader={dependentReads.incrementAndGet();throw java.io.IOException("synthetic unavailable authority read")},
+                queueReader={_ ->dependentReads.incrementAndGet();throw java.io.IOException("synthetic unavailable authority read")})}}
+            settings()
             ui.waitUntil(10000){ui.onAllNodesWithText("Local connection storage unavailable. Delivery is paused.").fetchSemanticsNodes().size==1}
+            ui.waitForIdle();assertEquals(0,dependentReads.get())
             ui.onNodeWithText("Local connection storage unavailable. Delivery is paused.").performScrollTo().assertIsDisplayed()
             ui.onNodeWithText("Authorize in browser").assertDoesNotExist()
             ui.onNodeWithText("Disconnect Last.fm").assertDoesNotExist()
