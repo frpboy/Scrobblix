@@ -1,0 +1,10 @@
+name	artist	title	durationMs	confirmedMs	eligible	thresholdMs	reason
+standard-half	Artist	Title	300000	150000	true	150000	
+just-before	Artist	Title	300000	149999	false	150000	playback.insufficient_confirmed_time
+four-minute-cap	Artist	Title	900000	240000	true	240000	
+unknown-duration	Artist	Title	~	500000	false	~	playback.duration_unknown
+exact30sec	Artist	Title	30000	50000	false	~	playback.track_too_short
+above30sec	Artist	Title	30001	15000	true	15000	
+zero-duration	Artist	Title	0	50000	false	~	metadata.invalid_duration
+missing-artist		Title	300000	150000	false	~	metadata.missing_artist
+missing-title	Artist		300000	150000	false	~	metadata.missing_title

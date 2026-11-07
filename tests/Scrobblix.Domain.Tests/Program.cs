@@ -139,6 +139,17 @@ Parallel.For(0, 5000, value =>
 Assert(concurrentJobTracker.PendingCount <= 64 && concurrentJobTracker.CompletedCount <= 128,
     "Concurrent metadata scheduling never exceeds the configured pending or completed bounds.");
 
+foreach (var fixture in File.ReadLines(Path.Combine(AppContext.BaseDirectory, "scrobble-eligibility.tsv")).Skip(1))
+{
+    var fields = fixture.Split('\t');
+    var duration = fields[3] == "~" ? (int?)null : int.Parse(fields[3], System.Globalization.CultureInfo.InvariantCulture);
+    var decision = ScrobbleEligibility.Evaluate(fields[1], fields[2], duration,
+        long.Parse(fields[4], System.Globalization.CultureInfo.InvariantCulture));
+    Assert(decision.IsEligible == bool.Parse(fields[5])
+        && decision.ThresholdMilliseconds == (fields[6] == "~" ? (int?)null : int.Parse(fields[6], System.Globalization.CultureInfo.InvariantCulture))
+        && (decision.ReasonCode ?? "") == fields[7], "Shared Android/Windows fixture: " + fields[0]);
+}
+
 var standardTrack = ScrobbleEligibility.Evaluate("Artist", "Track", 300_000, 150_000);
 
 var trayConnected = new TrayMenuStatus(
