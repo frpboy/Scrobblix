@@ -22,6 +22,10 @@ The register's historical base and `docs/security/audit-2026-11-06/README.md` ta
 
 The artwork historical finding [PR2 thread](https://github.com/frpboy/Scrobblix/pull/2#discussion_r4347270483) is now covered by134's scoped source/tests/pixels. Aggregate cache [PR1 thread](https://github.com/frpboy/Scrobblix/pull/1#discussion_r4337538985) remains unresolved under122; per-file byte/pixel bounds do not cap total cache disk or key-map growth. Other historical threads retain their original evidence/status until individually revalidated.
 
+## Later governance update
+
+After the main3f158e6 reconciliation, owner approved protection. It is now configured/read back; see [Governance](../../GOVERNANCE.md). The earlier protected=false/404 below is historical, not current configuration.
+
 ## Open gates, prioritized
 
 1. **[74 Windows IPC authorization](https://github.com/frpboy/Scrobblix/issues/74): next unblocked safety gate.** Test dummy observations with same-user unauthorized/direct-host/fake-browser-parent/forged-identity clients and assert rejection before persistence. Ordinary startup proves a usable hosted Windows route, not pipe ACL/identity enforcement. No production account or new machine is needed to begin synthetic isolated tests. A failure would require a focused fix before release, not a claim that a basename or payload authenticates a browser.

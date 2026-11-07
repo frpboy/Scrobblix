@@ -476,5 +476,22 @@
     "nextGate": "74 synthetic isolated Windows IPC caller/ACL enforcement; no production account needed to begin",
     "historicalEvidencePreserved": true,
     "releaseReady": false
+  },
+  "protectionUpdate": {
+    "date": "2026-11-07",
+    "protected": true,
+    "requiredContext": "build-and-test",
+    "appId": 15368,
+    "strict": true,
+    "prRequired": true,
+    "independentApprovalCount": 0,
+    "reviewStillRequired": true,
+    "conversationResolution": true,
+    "linearHistory": true,
+    "enforceAdmins": true,
+    "forcePush": false,
+    "deletion": false,
+    "url": "https://api.github.com/repos/frpboy/Scrobblix/branches/main/protection",
+    "historicalReadbacksPreserved": true
   }
 }
