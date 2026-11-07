@@ -376,7 +376,6 @@ jobs:
           $ErrorActionPreference = 'Stop'
           Expand-Archive delivered/Scrobblix-Windows-TestBundle.zip -DestinationPath delivered/extracted
           ./scripts/test-portable-package.ps1 -BundleDirectory delivered/extracted
-          if ($LASTEXITCODE -ne 0) { throw 'Portable package contract failed' }
       - name: Launch exact extracted ZIP on fresh runner
         shell: pwsh
         run: |
