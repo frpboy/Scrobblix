@@ -45,32 +45,10 @@ internal static class PipeSecurityChecks
 
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var tempRoot = Path.Combine(Path.GetTempPath(), "scrobblix-pipe-test-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempRoot);
-
-        // Stage the synthetic client at the exact path production expects for the native host.
         var stagedHostDir = Path.Combine(localAppData, "Scrobblix", "NativeHost");
         var stagedHost = Path.Combine(stagedHostDir, "Scrobblix.NativeHost.exe");
         var cleanupStagedHost = false;
-        string expectedHost;
-        if (File.Exists(stagedHost))
-        {
-            expectedHost = Path.Combine(tempRoot, "Scrobblix.NativeHost.exe");
-            Console.WriteLine("NOTE default native-host path already exists; using alternate expected path for this run.");
-        }
-        else
-        {
-            Directory.CreateDirectory(stagedHostDir);
-            expectedHost = stagedHost;
-            cleanupStagedHost = true;
-        }
-
-        File.Copy(clientSource, expectedHost, overwrite: false);
-
-        var spoofDir = Path.Combine(tempRoot, "spoof");
-        Directory.CreateDirectory(spoofDir);
-        var fakeBrowser = Path.Combine(spoofDir, "chrome.exe");
-        File.Copy(clientSource, fakeBrowser);
-
+        var expectedHost = stagedHost;
         var userChromeDir = Path.Combine(localAppData, "Google", "Chrome", "Application");
         var vendorChrome = Path.Combine(userChromeDir, "chrome.exe");
         var positiveControlAvailable = !File.Exists(vendorChrome);
@@ -78,6 +56,27 @@ internal static class PipeSecurityChecks
 
         try
         {
+            Directory.CreateDirectory(tempRoot);
+
+            // Stage the synthetic client at the exact path production expects for the native host.
+            if (File.Exists(stagedHost))
+            {
+                expectedHost = Path.Combine(tempRoot, "Scrobblix.NativeHost.exe");
+                Console.WriteLine("NOTE default native-host path already exists; using alternate expected path for this run.");
+            }
+            else
+            {
+                Directory.CreateDirectory(stagedHostDir);
+                cleanupStagedHost = true;
+            }
+
+            File.Copy(clientSource, expectedHost, overwrite: false);
+
+            var spoofDir = Path.Combine(tempRoot, "spoof");
+            Directory.CreateDirectory(spoofDir);
+            var fakeBrowser = Path.Combine(spoofDir, "chrome.exe");
+            File.Copy(clientSource, fakeBrowser);
+
             // Pure-path authorization predicate checks.
             var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
             Check.True(

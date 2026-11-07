@@ -15,10 +15,13 @@ public static class DiagnosticMessageSanitizer
             .Replace('\n', ' ')
             .Replace('\t', ' ');
         // Tolerate JSON-style carriage too: "sessionKey":"value" has a quote between the
-        // key and the separator, and the value itself may be quoted. The #75 canary tests
+        // key and the separator, and the value itself may be quoted. Quoted values keep
+        // their closing quote optional so an unterminated quote redacts to the end instead
+        // of leaking, and unquoted values keep the historical permissive character set so
+        // brace- or quote-containing values are still consumed whole. The #75 canary tests
         // pin every one of these forms.
         normalized = Regex.Replace(normalized,
-            "(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)[\"']?\\s*[=:]\\s*(?:\"(?:\\\\.|[^\"\\\\])*\"|'(?:\\\\.|[^'\\\\])*'|[^&\\s,;\"'}]+)",
+            "(?i)(api[_-]?key|api[_-]?sig|shared[_-]?secret|password|session[_-]?key|token|sk)[\"']?\\s*[=:]\\s*(?:\"(?:\\\\.|[^\"\\\\])*\"?|'(?:\\\\.|[^'\\\\])*'?|[^&\\s,;]+)",
             "$1=[REDACTED]");
         normalized = Regex.Replace(normalized,
             @"(?i)https://www\.last\.fm/api/auth/\?[^\s]+",

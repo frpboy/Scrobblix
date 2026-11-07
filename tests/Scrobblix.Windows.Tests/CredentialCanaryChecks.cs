@@ -1,4 +1,6 @@
 using System.Globalization;
+using System.IO.Compression;
+using System.Text;
 using Scrobblix.Application.Providers;
 using Scrobblix.Infrastructure.Diagnostics;
 using Scrobblix.Infrastructure.Storage;
@@ -25,23 +27,35 @@ internal static class CredentialCanaryChecks
             + Check.CanaryFingerprint(canaryApiSecret) + ", "
             + Check.CanaryFingerprint(canarySessionKey));
 
-        // 1. Credential Locker is the source of truth: roundtrip and removal work.
+        // 1. Credential Locker is the source of truth: roundtrip, isolation while the entry exists,
+        // and removal work. The delete runs in a finally so a failed check never leaves a
+        // synthetic entry behind in the real Locker.
         var credentialStore = new WindowsCredentialStore();
         var resource = "scrobblix.test.canary." + Guid.NewGuid().ToString("N");
         await credentialStore.StoreAsync(resource, "synthetic-user", canarySessionKey, CancellationToken.None);
-        Check.True(
-            string.Equals(
-                await credentialStore.GetAsync(resource, "synthetic-user", CancellationToken.None),
-                canarySessionKey,
-                StringComparison.Ordinal),
-            "Credential Locker roundtrip returns the stored synthetic secret");
-        await credentialStore.DeleteAsync(resource, "synthetic-user", CancellationToken.None);
-        Check.True(
-            await credentialStore.GetAsync(resource, "synthetic-user", CancellationToken.None) is null,
-            "Credential Locker delete removes the synthetic secret");
-        Check.True(
-            await credentialStore.GetAsync(resource, "other-user", CancellationToken.None) is null,
-            "Credential Locker isolates per resource and user name");
+        try
+        {
+            Check.True(
+                string.Equals(
+                    await credentialStore.GetAsync(resource, "synthetic-user", CancellationToken.None),
+                    canarySessionKey,
+                    StringComparison.Ordinal),
+                "Credential Locker roundtrip returns the stored synthetic secret");
+            Check.True(
+                await credentialStore.GetAsync(resource, "other-user", CancellationToken.None) is null,
+                "Credential Locker isolates per user name while the entry exists");
+            Check.True(
+                await credentialStore.GetAsync(resource + ".other", "synthetic-user", CancellationToken.None) is null,
+                "Credential Locker isolates per resource while the entry exists");
+            await credentialStore.DeleteAsync(resource, "synthetic-user", CancellationToken.None);
+            Check.True(
+                await credentialStore.GetAsync(resource, "synthetic-user", CancellationToken.None) is null,
+                "Credential Locker delete removes the synthetic secret");
+        }
+        finally
+        {
+            await credentialStore.DeleteAsync(resource, "synthetic-user", CancellationToken.None);
+        }
 
         // 2. The diagnostic sanitizer redacts every documented credential carriage form.
         var formats = new (string Label, Func<string, string> Render)[]
@@ -57,6 +71,10 @@ internal static class CredentialCanaryChecks
             ("sk=value", c => "sk=" + c),
             ("authorization URL", c => "https://www.last.fm/api/auth/?api_key=placeholder&token=" + c),
             ("JSON pair", c => "{\"sessionKey\":\"" + c + "\"}"),
+            ("JSON single-quoted pair", c => "{'sessionKey':'" + c + "'}"),
+            ("unterminated single-quoted value", c => "password='" + c),
+            ("unterminated double-quoted value", c => "token=\"" + c),
+            ("brace-terminated unquoted value", c => "password=abc}" + c),
             ("track metadata artist", c => "artist=" + c + "; title=ok"),
             ("quoted track metadata", c => "title:\"" + c + "\""),
         };
@@ -81,11 +99,13 @@ internal static class CredentialCanaryChecks
 
         var root = Path.Combine(Path.GetTempPath(), "scrobblix-credential-test-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
+        var artifactsRemoved = false;
         try
         {
             // 3. The listening database stores the credential RESOURCE NAME, never a secret.
             var databasePath = Path.Combine(root, "scrobblix.db");
-            var connectionString = "Data Source=" + databasePath;
+            // Pooling is disabled so no pooled connection keeps the file open during cleanup.
+            var connectionString = "Data Source=" + databasePath + ";Pooling=False";
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
             var accountStore = new SqliteProviderAccountStore(connectionString);
@@ -98,8 +118,21 @@ internal static class CredentialCanaryChecks
                     true,
                     DateTimeOffset.UtcNow),
                 CancellationToken.None);
-            Check.True(true, "Provider account persisted with credential resource name only");
+            var persisted = await accountStore.GetConnectedAsync("lastfm", CancellationToken.None);
+            Check.True(
+                persisted is not null
+                    && persisted.CredentialResource == "scrobblix.lastfm.session:synthetic-user"
+                    && !canaries.Any(c => persisted.CredentialResource.Contains(c, StringComparison.Ordinal)),
+                "Provider account read-back carries the credential resource name only");
             Check.AssertFileExcludes(databasePath, canaries);
+
+            // Positive control: the byte scan must detect a canary seeded into a database file.
+            var poisonedDatabasePath = Path.Combine(root, "poisoned.db");
+            File.Copy(databasePath, poisonedDatabasePath, overwrite: true);
+            await File.AppendAllTextAsync(poisonedDatabasePath, canarySessionKey);
+            Check.True(
+                ThrowsOnScan(() => Check.AssertFileExcludes(poisonedDatabasePath, canaries)),
+                "Positive control: the database byte scan detects a seeded canary");
 
             // 4. Backups contain only the database and manifest and carry no secret bytes.
             var backupPath = Path.Combine(root, "scrobblix-backup.zip");
@@ -108,6 +141,19 @@ internal static class CredentialCanaryChecks
                 backupPath,
                 canaries,
                 ["manifest.json", "scrobblix.db"]);
+
+            // Positive control: the archive scan must detect a canary seeded into an entry.
+            var poisonedZipPath = Path.Combine(root, "poisoned.zip");
+            using (var poison = ZipFile.Open(poisonedZipPath, ZipArchiveMode.Create))
+            {
+                var entry = poison.CreateEntry("notes.txt");
+                await using var entryStream = entry.Open();
+                await entryStream.WriteAsync(Encoding.UTF8.GetBytes(canaryApiKey));
+            }
+
+            Check.True(
+                await ThrowsOnScanAsync(() => Check.AssertZipExcludesAsync(poisonedZipPath, canaries, null)),
+                "Positive control: the archive byte scan detects a seeded canary");
 
             // 5. Support bundles built from hostile logs export no secret bytes.
             var logDirectory = Path.Combine(root, "logs");
@@ -133,11 +179,43 @@ internal static class CredentialCanaryChecks
         }
         finally
         {
-            try { Directory.Delete(root, recursive: true); }
+            try
+            {
+                Directory.Delete(root, recursive: true);
+                artifactsRemoved = true;
+            }
             catch (IOException) { }
             catch (UnauthorizedAccessException) { }
         }
 
-        Console.WriteLine("Credential canary checks complete. Test artifacts removed; Credential Locker test entries deleted.");
+        Console.WriteLine(artifactsRemoved
+            ? "Credential canary checks complete. Test artifacts removed; Credential Locker test entries deleted."
+            : "Credential canary checks complete. WARNING: temp artifacts remain at " + root + "; Credential Locker test entries deleted.");
+    }
+
+    private static bool ThrowsOnScan(Action scan)
+    {
+        try
+        {
+            scan();
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
+    }
+
+    private static async Task<bool> ThrowsOnScanAsync(Func<Task> scan)
+    {
+        try
+        {
+            await scan();
+            return false;
+        }
+        catch (InvalidOperationException)
+        {
+            return true;
+        }
     }
 }

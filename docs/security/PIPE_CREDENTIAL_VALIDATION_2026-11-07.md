@@ -53,17 +53,20 @@ the regression tests can prove the spoof it accepted is now rejected.
 | 1 | Arbitrary same-user process (test host) connects and writes a forged observation | rejected `client_image_not_registered_native_host` | 0 payload bytes read |
 | 2 | Executable at the registered native-host path, launched by a non-browser parent | rejected `native_host_parent_not_supported_browser` | 0 payload bytes read |
 | 3 | Same, launched by a renamed copy of `cmd.exe` named `chrome.exe` in a temp directory | rejected `native_host_parent_not_supported_browser` | 0 payload bytes read; differential proof that the retired basename rule accepted this exact spoof |
-| 4 | Same, launched by a browser-shaped parent in a real vendor install directory | accepted | payload read; forged `browserInstanceId` observed as opaque data |
+| 4 | Same, launched by a browser-shaped parent in a real vendor install directory | accepted | payload read; forged `browserInstanceId` observed as opaque data. Conditional: skipped with a NOTE when a real user-level Chrome install already occupies the vendor path; exercised in CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/42336892433) |
 
 The effective pipe ACL is enumerated on every run: no allow entries for Everyone,
-Authenticated Users, BUILTIN\Users, Anonymous, or Network, and an explicit allow for the
-current user.
+Authenticated Users, BUILTIN\Users, Anonymous, or Network, and every allow entry is the
+current user or an owner-equivalent principal (SYSTEM, Administrators, CREATOR OWNER or
+OWNER RIGHTS). On the hosted CI runner the user is an administrator, so the observed DACL
+carries BUILTIN\Administrators.
 
 ## #75 credential redaction
 
 Canary values (`sxcanary-*` GUIDs generated per run, only SHA-256 fingerprints printed)
-are exercised through the real paths and every produced artifact is scanned for the exact
-canary bytes:
+are exercised through the real credential-store, sanitizer, persistence and support-bundle
+paths, and every produced artifact is scanned for the exact canary bytes (with
+seeded-canary positive controls proving the byte scans can detect one):
 
 ### Finding fixed by this validation
 
@@ -75,11 +78,11 @@ behavior the existing domain tests pin.
 
 | Boundary | Test |
 |---|---|
-| Credential Locker (`PasswordVault`) | store/retrieve/delete roundtrip; per resource+user isolation; test entries removed |
+| Credential Locker (`PasswordVault`) | store/retrieve/delete roundtrip; per resource+user isolation checked while the entry exists; delete runs even when a check fails |
 | Diagnostic sanitizer | `apiKey`, `api_key`, `api_sig`, `shared_secret`, `password`, `session_key`/`sessionKey`, `token`, `sk` name/value forms, the Last.fm authorization URL, JSON pairs, and track-metadata fields are all redacted |
 | Sanitizer contract limit | pinned by test: an unstructured bare value is NOT scrubbed - raw secrets must never reach the logger; the sanitizer strips recognized carriage forms only |
-| SQLite database | provider account rows carry the credential resource NAME; database bytes scanned for canaries |
-| Backup archive | contains exactly `scrobblix.db` + `manifest.json`; all entry bytes scanned |
+| SQLite database | account persisted through the real store and read back: the row carries the credential resource NAME only; database bytes scanned for canaries; seeded-canary positive control proves the scan detects one |
+| Backup archive | contains exactly `scrobblix.db` + `manifest.json`; all entry bytes scanned; seeded-canary positive control proves the archive scan detects one |
 | Support bundle | built from hostile log files embedding canaries in many field shapes; all entry bytes scanned |
 
 ## Results
@@ -92,9 +95,12 @@ CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/4233689243
   positive control accepted on scenario 4), the differential proof against the retired
   basename rule passed, and the effective pipe DACL carried no broad principal on any
   scenario.
-- #75: Credential Locker roundtrip, delete and per-resource isolation passed; the
-  sanitizer redacted every canary in every carriage form including JSON pairs; the
-  database, backup archive and hostile-log support bundle byte scans found no canary.
+- #75: Credential Locker roundtrip, delete and per resource+user isolation (checked
+  while the entry existed) passed; the sanitizer redacted every canary in every carriage
+  form including JSON pairs and unterminated quoted values; the account read-back carried
+  only the credential resource name; the database, backup archive and hostile-log support
+  bundle byte scans found no canary, with seeded-canary positive controls proving the
+  database and archive scans can detect one.
 - #76: the refreshed scans in `scans-2026-11-07/` cover the validating head; gitleaks
   was re-run after the final code commit (1186 commits across all refs, redacted report)
   and found no leaks. The post-`b72e0eb` commits touch no manifest or lockfile, so the
