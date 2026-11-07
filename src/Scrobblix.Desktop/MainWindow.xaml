@@ -284,10 +284,10 @@
                     </StackPanel>
                 </Border>
                 <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
-                    <StackPanel Spacing="10">
+                    <StackPanel x:Name="LastFmConnectionPanel" Spacing="10">
                         <TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="LastFmCredentialsStatusText" Text="Checking Last.fm connection service." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
-                        <Expander Header="Advanced: use your own Last.fm API app" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                        <Expander x:Name="OwnLastFmApiExpander" Header="Advanced: use your own Last.fm API app" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
                             <StackPanel Spacing="10">
                                 <TextBlock Text="Optional. Use an API application you own or are authorized to use. Existing saved API credentials keep their direct Last.fm connection. The key and shared secret stay in Windows Credential Locker." TextWrapping="Wrap" />
                                 <TextBox x:Name="LastFmApiKeyInput" Header="API key" PlaceholderText="Your Last.fm API key" MaxLength="128" />
