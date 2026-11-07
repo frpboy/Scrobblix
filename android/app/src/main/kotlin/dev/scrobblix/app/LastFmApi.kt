@@ -25,7 +25,8 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String):Scrobble
     data class Login(val username:String,val sessionKey:String) { override fun toString()="Login(redacted)" }
     fun login(username:String,password:String):Login {
         require(username.isNotBlank() && username.length<=255 && password.isNotEmpty())
-        val (_,body)=request(mapOf("method" to "auth.getMobileSession","username" to username,"password" to password))
+        val (status,body)=request(mapOf("method" to "auth.getMobileSession","username" to username,"password" to password))
+        check(status in 200..299 && !body.has("error")) { "Last.fm sign-in failed." }
         val session=body.optJSONObject("session") ?: throw IllegalStateException("Last.fm sign-in failed. Check credentials and try again.")
         val name=session.optString("name");val key=session.optString("key")
         check(name.isNotBlank() && name.length<=255 && name.none { it.isISOControl() } && key.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm sign-in response was not valid." }

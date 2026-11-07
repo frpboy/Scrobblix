@@ -20,6 +20,12 @@ class AppStore(val context:Context) {
     val history=ListeningHistory(sql,queue)
     val secrets=SessionSecretStore(context)
     init { history.initialize(); queue.recover(System.currentTimeMillis()) }
+    fun hasMediaAccess():Boolean {
+        val component=ComponentName(context,PlaybackListener::class.java)
+        return if(android.os.Build.VERSION.SDK_INT>=27) context.getSystemService(android.app.NotificationManager::class.java).isNotificationListenerAccessGranted(component)
+        else android.provider.Settings.Secure.getString(context.contentResolver,"enabled_notification_listeners")
+            ?.split(':')?.contains(component.flattenToString()) == true
+    }
     fun tracking()=preferences.getBoolean("tracking",false)
     fun account()=preferences.getString("account",null)
     fun setTracking(enabled:Boolean) {
@@ -79,7 +85,11 @@ class DeliveryWorker(context:Context,params:WorkerParameters):Worker(context,par
             val worker=QueueWorker(store.queue,store.history,api)
             repeat(20) {
                 if(!store.tracking() || store.account()!=name || isStopped) return Result.success()
-                if(!worker.process("lastfm",name,id.toString(),key.secret.toString(Charsets.UTF_8),System.currentTimeMillis())) return Result.success()
+                val processed=synchronized(store) {
+                    if(!store.tracking() || store.account()!=name || isStopped) false
+                    else worker.process("lastfm",name,id.toString(),key.secret.toString(Charsets.UTF_8),System.currentTimeMillis())
+                }
+                if(!processed) return Result.success()
             }
         } finally { key.secret.fill(0) }
         return Result.success()

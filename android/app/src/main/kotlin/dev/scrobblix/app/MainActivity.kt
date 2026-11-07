@@ -46,7 +46,7 @@ fun AppScreen(store:AppStore) {
     var message by remember { mutableStateOf("") }
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
-        access=context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(ComponentName(context,PlaybackListener::class.java))
+        access=store.hasMediaAccess()
         account=store.account();tracking=store.tracking()
         withContext(Dispatchers.IO) { history=store.recent();states=store.states() }
         delay(2000)
@@ -71,7 +71,7 @@ fun AppScreen(store:AppStore) {
                 }
                 Text(if(account==null) "Local history only. Connect Last.fm in Settings to scrobble future listening." else "Last.fm connected: $account")
                 if(!access && tracking) Text("Tracking waits for media access. Grant it in Android settings when you are ready.")
-                Text("Keep your player running. Android may pause collection in the background; a gap is never counted as listening.")
+                Text("Keep your player running. Android may pause collection in the background; a gap is never counted as listening. Pausing stops new work; a request already sent may still finish.")
             }
             "History" -> {
                 Text("Recent listening",style=MaterialTheme.typography.headlineSmall)
