@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { readFileSync } from "node:fs";
 import { CustomSiteAuthorization } from "../browser-extension/dist/custom-site-authorization.js";
 import { cleanupCustomSiteBrowserAccess } from "../browser-extension/dist/custom-site-cleanup.js";
@@ -55,8 +56,49 @@ assert.equal(isPlaybackObservation({ state: "playing", trackNumber: "3" }), fals
 assert.equal(isPlaybackObservation({ state: "playing", durationMilliseconds: -1 }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "http://example.com/art.jpg" }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://user:pass@example.com/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://127.0.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://localhost/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://foo.localhost/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://169.254.169.254/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://10.0.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://192.168.1.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://172.16.0.1/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://metadata.google.internal/art.jpg" }), false);
+assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://[::1]/art.jpg" }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://example.com/art.jpg" }), true);
 
+
+// Exercise both the worker validator and the emitted classic content-script helper.
+const observerOutput = readFileSync("browser-extension/dist/media-observer.js", "utf8");
+const helperStart = observerOutput.indexOf("function toHttpsArtworkUrl(");
+const helperEnd = observerOutput.indexOf("function findArtworkUrl(", helperStart);
+assert.ok(helperStart >= 0 && helperEnd > helperStart);
+const observerContext = vm.createContext({ URL, document: { baseURI: "https://public.example/player" } });
+vm.runInContext(observerOutput.slice(helperStart, helperEnd), observerContext);
+for (const url of [
+  "https://localhost./a", "https://x.local./a", "https://foo.localhost./a", "https://metadata.google.internal./a",
+  "https://[::]/a", "https://[0:0:0:0:0:0:0:1]/a", "https://[fc00::1]/a", "https://[fdff::1]/a",
+  "https://[fe80::1]/a", "https://[febf::1]/a", "https://[ff02::1]/a",
+  "https://[::ffff:127.0.0.1]/a", "https://[::ffff:10.1.2.3]/a", "https://[::ffff:c0a8:101]/a",
+  "https://127.1/a", "https://0x7f000001/a", "https://2130706433/a",
+  "https://100.64.0.1/a", "https://100.100.100.200/a", "https://100.127.255.254/a", "https://198.18.0.1/a", "https://198.19.255.254/a",
+  "https://[::ffff:100.100.100.200]/a", "https://[::ffff:198.18.0.1]/a",
+]) {
+  assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), false, url);
+  assert.equal(observerContext.toHttpsArtworkUrl(url), undefined, url);
+}
+for (const url of ["https://cdn.example/art.jpg", "https://[2606:4700:4700::1111]/a", "https://[::ffff:8.8.8.8]/a", "https://[fe7f::1]/a", "https://[fec0::1]/a"]) {
+  assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), true, url);
+  assert.equal(observerContext.toHttpsArtworkUrl(url), new URL(url).href, url);
+}
+
+// Rejected first metadata artwork must not hide a later usable public image.
+const finderEnd = observerOutput.indexOf("function send(", helperEnd);
+assert.ok(finderEnd > helperEnd);
+vm.runInContext(observerOutput.slice(helperEnd, finderEnd), observerContext);
+for (const first of ["https://100.100.100.200/a", "https://198.18.0.1/a"]) {
+  assert.equal(observerContext.findArtworkUrl({}, { artwork: [{ src: first }, { src: "https://cdn.example/fallback.jpg" }] }), "https://cdn.example/fallback.jpg");
+}
 
 const validCustomSender = { tab: { id: 2 }, url: "https://radio.example/player" };
 const customSite = {
