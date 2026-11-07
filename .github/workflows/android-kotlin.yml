@@ -8,6 +8,10 @@ on:
     paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
   workflow_dispatch:
     inputs:
+      approved_rehearsal:
+        description: 'Reviewed isolated disposable-certificate update rehearsal only'
+        type: boolean
+        default: false
       qualify_live_token_start:
         description: 'Manually approved fresh API26 token-start only, no consent/session/listening'
         type: boolean
@@ -125,6 +129,22 @@ jobs:
             android-evidence
             android/app/build/outputs/apk/debug/*.apk
             android/app/build/outputs/androidTest-results
+
+  disposable-signed-update:
+    if: github.event_name == 'workflow_dispatch' && inputs.approved_rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Disposable certificate update rehearsal only
+        shell: bash
+        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'
 
   live-token-start-only:
     if: github.event_name == 'workflow_dispatch' && inputs.qualify_live_token_start
