@@ -80,10 +80,10 @@ jobs:
           # ADB uses the emulator transport, not this guest IP output path.
           adb root
           adb wait-for-device
-          adb shell iptables -I OUTPUT 1 ! -o lo -j REJECT
-          adb shell ip6tables -I OUTPUT 1 ! -o lo -j REJECT
-          adb shell iptables -C OUTPUT ! -o lo -j REJECT
-          adb shell ip6tables -C OUTPUT ! -o lo -j REJECT
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
           if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
             # Synthetic test data only. Preserve exact test/runner failures in job logs.
             find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \;
