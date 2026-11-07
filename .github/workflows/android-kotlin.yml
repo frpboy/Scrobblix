@@ -76,6 +76,17 @@ jobs:
             adb logcat -d -b crash
             exit 1
           fi
+          # Actual process boundary with synthetic data only. Instrumentation is a
+          # separate invocation on each side of force-stop; verify PID and held ambiguity.
+          for phase in prepare verify; do
+            if [ "$phase" = verify ]; then adb shell am force-stop com.frpboy.scrobblix; fi
+            method=prepareBeforeProcessDeath
+            if [ "$phase" = verify ]; then method=verifyAfterProcessDeath; fi
+            result=$(adb shell am instrument -w -r -e processRecoveryPhase "$phase" -e class "dev.scrobblix.app.ProcessRecoveryTest#$method" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+            printf '%s\n' "$result"
+            printf '%s\n' "$result" | grep -F 'OK (1 test)'
+            if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
+          done
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
