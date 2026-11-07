@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD:android)" = da2ed6e2707cf541e93d5261afcfa943a845989e
+          test "$(git rev-parse HEAD:android)" = 293f40724096767110fafc6067b0a6d7a2354c56
           test -z "${SCROBBLIX_SIGNING_STORE:-}"
           test -z "${SCROBBLIX_SIGNING_PASSWORD_FILE:-}"
       - name: Run core, platform and ordinary app synthetic tests with provider egress blocked

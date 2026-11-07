@@ -78,7 +78,7 @@ class BrokerRuntimeTest {
         assertEquals(token,opaqueSession.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")).sessionKey)
         for(key in listOf(token+"\n",token.dropLast(1),"+".repeat(32),"/".repeat(32))) {
             val invalidSession=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key",key)) }
-            rejected=false;try { invalidSession.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
+            rejected=false;try { invalidSession.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(f:LastFmApi.BrowserExchangeFailure) { rejected=true;assertEquals("Last.fm session response format was invalid.",f.diagnostic) };assertTrue(rejected)
         }
     }
 
