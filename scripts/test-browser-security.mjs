@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import vm from "node:vm";
 import { readFileSync } from "node:fs";
 import { CustomSiteAuthorization } from "../browser-extension/dist/custom-site-authorization.js";
 import { cleanupCustomSiteBrowserAccess } from "../browser-extension/dist/custom-site-cleanup.js";
@@ -66,6 +67,28 @@ assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://meta
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://[::1]/art.jpg" }), false);
 assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: "https://example.com/art.jpg" }), true);
 
+
+// Exercise both the worker validator and the emitted classic content-script helper.
+const observerOutput = readFileSync("browser-extension/dist/media-observer.js", "utf8");
+const helperStart = observerOutput.indexOf("function toHttpsArtworkUrl(");
+const helperEnd = observerOutput.indexOf("function findArtworkUrl(", helperStart);
+assert.ok(helperStart >= 0 && helperEnd > helperStart);
+const observerContext = vm.createContext({ URL, document: { baseURI: "https://public.example/player" } });
+vm.runInContext(observerOutput.slice(helperStart, helperEnd), observerContext);
+for (const url of [
+  "https://localhost./a", "https://x.local./a", "https://foo.localhost./a", "https://metadata.google.internal./a",
+  "https://[::]/a", "https://[0:0:0:0:0:0:0:1]/a", "https://[fc00::1]/a", "https://[fdff::1]/a",
+  "https://[fe80::1]/a", "https://[febf::1]/a", "https://[ff02::1]/a",
+  "https://[::ffff:127.0.0.1]/a", "https://[::ffff:10.1.2.3]/a", "https://[::ffff:c0a8:101]/a",
+  "https://127.1/a", "https://0x7f000001/a", "https://2130706433/a",
+]) {
+  assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), false, url);
+  assert.equal(observerContext.toHttpsArtworkUrl(url), undefined, url);
+}
+for (const url of ["https://cdn.example/art.jpg", "https://[2606:4700:4700::1111]/a", "https://[::ffff:8.8.8.8]/a", "https://[fe7f::1]/a", "https://[fec0::1]/a"]) {
+  assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), true, url);
+  assert.equal(observerContext.toHttpsArtworkUrl(url), new URL(url).href, url);
+}
 
 const validCustomSender = { tab: { id: 2 }, url: "https://radio.example/player" };
 const customSite = {
