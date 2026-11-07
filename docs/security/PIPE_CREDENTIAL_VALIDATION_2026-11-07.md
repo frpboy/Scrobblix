@@ -26,6 +26,15 @@ Rejected peers are disconnected before a single payload byte is read, so no obse
 queue entry, or persistence side effect can result. `browserInstanceId` is payload data,
 never identity.
 
+### Finding fixed by this validation
+
+The scenario tests caught a live production defect on `main`: the verifier's `OpenProcess`
+P/Invoke carried a `[return: MarshalAs(UnmanagedType.Bool)]` attribute on a `SafeProcessHandle`
+return, an invalid combination that throws `MarshalDirectiveException` on every call. Any
+browser companion connection was therefore rejected by the catch-all listener path - the
+pipe failed closed for every client, trusted or not. The attribute is removed; the positive
+control scenario now proves the full accept chain end to end.
+
 ### What this boundary is NOT
 
 This is spoofing resistance, not cryptographic caller authentication. A same-user process

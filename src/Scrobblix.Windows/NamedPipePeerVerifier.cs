@@ -240,8 +240,10 @@ public static class NamedPipePeerVerifier
     [return: MarshalAs(UnmanagedType.Bool)]
     private static extern bool GetNamedPipeClientProcessId(IntPtr pipeHandle, out uint clientProcessId);
 
+    // The return value is a handle, not a boolean: a [return: MarshalAs(UnmanagedType.Bool)]
+    // attribute here throws MarshalDirectiveException on every call, which made the verifier
+    // fail closed (browser ingress unusable) until the #74 scenario tests caught it.
     [DllImport("kernel32.dll", EntryPoint = "OpenProcess", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
     private static extern SafeProcessHandle OpenProcess(uint desiredAccess, [MarshalAs(UnmanagedType.Bool)] bool inheritHandle, uint processId);
 
     [DllImport("kernel32.dll", EntryPoint = "QueryFullProcessImageNameW", CharSet = CharSet.Unicode, SetLastError = true)]
