@@ -68,6 +68,8 @@ jobs:
             adb logcat -d -b crash
             exit 1
           fi
+          mkdir -p android-evidence
+          adb pull /sdcard/Android/data/dev.scrobblix.preview/files android-evidence/
 
       - name: Preserve app pixels and test-only APK
         if: always()
