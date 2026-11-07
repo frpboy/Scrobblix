@@ -12,7 +12,8 @@ import java.util.concurrent.TimeUnit
 class ScrobblixApp:Application() {
     val store:AppStore by lazy { AppStore(this) }
 }
-class AppStore(val context:Context) {
+class AppStore(val context:Context):java.io.Closeable {
+    override fun close() { db.close() }
     val preferences=context.getSharedPreferences("controls",Context.MODE_PRIVATE)
     private val db=SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath("listening.db").apply { parentFile?.mkdirs() },null)
     val sql=AndroidQueueSqlDriver(db)

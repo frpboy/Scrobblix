@@ -9,7 +9,8 @@ import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
 /** Last.fm documented mobile auth. No password persistence, request logging or HTTP fallback. */
-class LastFmApi(private val apiKey:String,private val apiSecret:String):ScrobbleTransport {
+class LastFmApi(private val apiKey:String,private val apiSecret:String,
+    private val exchange:((Map<String,String>)->Pair<Int,JSONObject>)?=null):ScrobbleTransport {
     companion object {
         fun configured(context:Context):LastFmApi? {
             // Supplied as private generated resources for a registered API application.
@@ -35,6 +36,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String):Scrobble
     private fun request(values:Map<String,String>):Pair<Int,JSONObject> {
         val args=values+mapOf("api_key" to apiKey)
         val params=args+mapOf("api_sig" to signature(args,apiSecret),"format" to "json")
+        exchange?.let { return it(params) }
         val bytes=params.entries.joinToString("&") { URLEncoder.encode(it.key,"UTF-8")+"="+URLEncoder.encode(it.value,"UTF-8") }.toByteArray(Charsets.UTF_8)
         val connection=URL("https://ws.audioscrobbler.com/2.0/").openConnection() as HttpsURLConnection
         try {
