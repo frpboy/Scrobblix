@@ -201,18 +201,7 @@ jobs:
           }
 
       - name: Publish unpackaged Windows application
-        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --no-restore --output artifacts/Scrobblix/desktop
-
-      - name: Install matching official Windows App Runtime on ephemeral runner
-        shell: pwsh
-        run: |
-          $root = Join-Path $env:USERPROFILE '.nuget/packages/microsoft.windowsappsdk.runtime/2.6.4/tools/MSIX/win10-x64'
-          foreach ($name in @('Microsoft.WindowsAppRuntime.2.msix','Microsoft.WindowsAppRuntime.Singleton.2.msix','Microsoft.WindowsAppRuntime.Main.2.msix','Microsoft.WindowsAppRuntime.DDLM.2.msix')) {
-            $package = Join-Path $root $name
-            if (-not (Test-Path $package)) { throw "Restored official runtime package absent: $name" }
-            Add-AppxPackage -Path $package
-          }
-          Get-AppxPackage *WindowsAppRuntime* | Select-Object Name,Version,Architecture
+        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=false --output artifacts/Scrobblix/desktop
 
       - name: Qualify ordinary fresh-profile published startup
         run: ./scripts/test-ordinary-startup.ps1
@@ -227,7 +216,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish native messaging host
-        run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --no-restore --output artifacts/Scrobblix/native-host
+        run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/Scrobblix/native-host
 
       - name: Verify native-host malformed envelope recovery
         run: node scripts/test-native-host-framing.mjs artifacts/Scrobblix/native-host/Scrobblix.NativeHost.dll
@@ -257,14 +246,17 @@ jobs:
           @(
             'Scrobblix Windows development test bundle'
             ''
-            '1. Install the Microsoft Windows App Runtime version required by this build.'
-            '2. Launch Scrobblix.Desktop.exe from the desktop folder. The app is unpackaged and may require runtime prerequisites on a clean PC.'
+            '1. Windows x64 only. Extract ALL files to a new folder, then open desktop/Scrobblix.Desktop.exe. Do not run inside the ZIP or copy just the EXE. .NET and Windows App SDK runtimes are included.'
+            '2. Keep your existing app-data folder intact. This bundle does not reset settings/history. It is unsigned: do not disable security protections to run it. If blocked or still silent, report the exact message and Windows System type.'
             '3. Chromium: load browser-extension unpacked and register its ID with scripts/install-native-host.ps1 -ExtensionId <ID> -NativeHostPublishDirectory .\native-host. Firefox: load browser-extension-firefox as a temporary add-on, then register with -RegisterFirefox -NativeHostPublishDirectory .\native-host. The companion is optional for GSMTC playback.'
             '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
             '5. This is a CI verification bundle, not a signed installer or production release.'
           ) | Set-Content -Path "$bundle/README-TESTING.txt" -Encoding utf8
           $requiredFiles = @(
             "$bundle/desktop/Scrobblix.Desktop.exe",
+            "$bundle/desktop/Scrobblix.Desktop.pri",
+            "$bundle/desktop/coreclr.dll",
+            "$bundle/desktop/Microsoft.UI.Xaml.dll",
             "$bundle/native-host/Scrobblix.NativeHost.exe",
             "$bundle/browser-extension/manifest.json",
             "$bundle/browser-extension/popup.html",
@@ -364,3 +356,36 @@ jobs:
           path: artifacts/Scrobblix-BrowserCompanion.zip
           if-no-files-found: error
           retention-days: 14
+
+  portable-zip-startup:
+    # A new runner, no runtime installation step, and the exact final ZIP used for delivery.
+    needs: build-and-test
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Scrobblix-Windows-TestBundle
+          path: delivered
+      - name: Extract and verify delivered portable bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive delivered/Scrobblix-Windows-TestBundle.zip -DestinationPath delivered/extracted
+          ./scripts/test-portable-package.ps1 -BundleDirectory delivered/extracted
+          if ($LASTEXITCODE -ne 0) { throw 'Portable package contract failed' }
+      - name: Launch exact extracted ZIP on fresh runner
+        shell: pwsh
+        run: |
+          ./scripts/test-ordinary-startup.ps1 -AppDirectory delivered/extracted/desktop -RequirePrivateRuntime
+          Get-FileHash delivered/Scrobblix-Windows-TestBundle.zip -Algorithm SHA256 | Format-List | Out-String | Set-Content "$env:RUNNER_TEMP/scrobblix-ordinary-startup/tested-zip-sha256.txt"
+      - name: Preserve exact ZIP startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-zip-startup
+          path: ${{ runner.temp }}/scrobblix-ordinary-startup
+          if-no-files-found: error
