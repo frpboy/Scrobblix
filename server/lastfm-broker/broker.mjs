@@ -3,7 +3,8 @@ import {safeProviderResponse} from './response.mjs';
 
 const UPSTREAM = 'https://ws.audioscrobbler.com/2.0/';
 const HEX = /^[a-f0-9]{32}$/i;
-// Request tokens are opaque, not signatures or session keys. Strict URL-safe bounded alphabet.
+// Request tokens and session credentials are opaque, not MD5 signatures. Bounded URL-safe alphabet.
+const SESSION_KEY = /^[A-Za-z0-9_-]{32}$/;
 const REQUEST_TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const reply = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
@@ -26,7 +27,7 @@ export function validatedParams(input, nowSeconds) {
     result.token = input.token;
   }
   if (input.method.startsWith('track.')) {
-    if (!HEX.test(input.sk ?? '') || !text(input.artist,512) || !text(input.track,512)) throw new Error('invalid');
+    if (typeof input.sk!=='string' || input.sk.length!==32 || !SESSION_KEY.test(input.sk) || !text(input.artist,512) || !text(input.track,512)) throw new Error('invalid');
     Object.assign(result,{sk: input.sk,artist: input.artist,track: input.track});
     if (input.album !== undefined) { if (!text(input.album,512)) throw new Error('invalid'); result.album=input.album; }
     if (input.duration !== undefined) {

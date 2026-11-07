@@ -23,7 +23,14 @@ test('love success must be exact empty object, never fabricated from unknown res
  assert.throws(()=>safe('track.love',{unexpected:'value'}));assert.throws(()=>safe('unknown',{}));
 });
 
-test('opaque request tokens do not relax session keys',()=>{
+test('opaque request tokens and session keys retain distinct response fields',()=>{
  assert.deepEqual(safe('auth.getToken',{token:'Zg_-'.repeat(8)}),{token:'Zg_-'.repeat(8)});
- assert.throws(()=>safe('auth.getSession',{session:{name:'Synthetic',key:'Zg_-'.repeat(8)}}));
+ assert.deepEqual(safe('auth.getSession',{session:{name:'Synthetic',key:'Zg_-'.repeat(8)}}),{session:{name:'Synthetic',key:'Zg_-'.repeat(8)}});
+});
+
+test('session credentials preserve bounded opaque URL-safe bytes, never coerce or trim',()=>{
+ for(const key of ['a'.repeat(32),'Zg_-'.repeat(8),'_'.repeat(32),'-'.repeat(32)])
+  assert.equal(safe('auth.getSession',{session:{name:'Synthetic',key,subscriber:0}}).session.key,key);
+ for(const key of [null,{},['a'.repeat(32)],'a'.repeat(31),'a'.repeat(33),'a'.repeat(32)+'\n','+'.repeat(32),'/'.repeat(32),'é'.repeat(32),' '.repeat(32)])
+  assert.throws(()=>safe('auth.getSession',{session:{name:'Synthetic',key}}));
 });

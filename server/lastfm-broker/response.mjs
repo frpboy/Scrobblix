@@ -1,4 +1,4 @@
-const HEX=/^[a-f0-9]{32}$/i;
+const SESSION_KEY=/^[A-Za-z0-9_-]{32}$/;
 const REQUEST_TOKEN=/^[A-Za-z0-9_-]{32}$/;
 const plain=v=>v && typeof v==='object' && !Array.isArray(v);
 const text=(v,max)=>typeof v==='string' && v.length<=max && !/[\x00-\x1f\x7f]/.test(v);
@@ -35,7 +35,7 @@ export function safeProviderResponse(method,payload) {
   if(typeof payload.token!=='string' || payload.token.length!==32 || !REQUEST_TOKEN.test(payload.token))return invalid();return {token:payload.token};
  }
  if(method==='auth.getSession') {
-  const s=payload.session;if(!plain(s) || !text(s.name,255) || !s.name.trim() || !HEX.test(s.key??''))return invalid();
+  const s=payload.session;if(!plain(s) || !text(s.name,255) || !s.name.trim() || typeof s.key!=='string' || s.key.length!==32 || !SESSION_KEY.test(s.key))return invalid();
   const session={name:s.name,key:s.key};if(s.subscriber!==undefined)session.subscriber=numeric(s.subscriber,1);
   return {session};
  }

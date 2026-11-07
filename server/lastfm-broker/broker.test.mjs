@@ -103,7 +103,7 @@ test('opaque nonhex request tokens accepted, unsafe tokens rejected; no diagnost
   const reject=handler({gate:async()=>true,fetcher:async()=>Response.json({token:bad})});
   assert.deepEqual(await (await reject(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
  }
- assert.throws(()=>validatedParams({method:'track.love',sk:token,artist:'a',track:'b'},0));
+ assert.equal(validatedParams({method:'track.love',sk:token,artist:'a',track:'b'},0).sk,token);
 });
 
 // Full synthetic envelopes: no real session exchange or listening request.
@@ -137,4 +137,18 @@ test('request token type and exact length precede regex coercion and final-newli
   const malformed=await h(request({method:'auth.getToken'}),env);
   assert.equal(malformed.status,502);assert.deepEqual(await malformed.json(),{broker_error:'upstream_outcome_unknown'});
  }
+});
+
+test('opaque session credentials survive track forwarding byte-exact and remain signed',async()=>{
+ for(const sk of ['a'.repeat(32),'Zg_-'.repeat(8),'_'.repeat(32),'-'.repeat(32)]) {
+  let calls=0;
+  const h=handler({gate:async()=>true,fetcher:async(url,options)=>{
+   calls++;assert.equal(options.body.get('sk'),sk);assert.match(options.body.get('api_sig'),/^[a-f0-9]{32}$/);
+   return Response.json({});
+  }});
+  const r=await h(request({method:'track.love',sk,artist:'Synthetic',track:'Synthetic'}),env);
+  assert.equal(r.status,200);assert.equal(calls,1);
+ }
+ for(const sk of [null,{},['a'.repeat(32)],'a'.repeat(31),'a'.repeat(33),'a'.repeat(32)+'\n','+'.repeat(32),'/'.repeat(32),'é'.repeat(32),' '.repeat(32)])
+  assert.throws(()=>validatedParams({method:'track.love',sk,artist:'Synthetic',track:'Synthetic'},0));
 });
