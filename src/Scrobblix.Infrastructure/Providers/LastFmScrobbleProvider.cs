@@ -2,13 +2,40 @@ using System.Security.Cryptography;
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Net.Http.Json;
 using Scrobblix.Application.Providers;
 using Scrobblix.Domain.Diagnostics;
 
 namespace Scrobblix.Infrastructure.Providers;
 
-public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, string apiSecret) : IScrobbleProvider
+public sealed class LastFmScrobbleProvider : IScrobbleProvider
 {
+    private readonly HttpClient client;
+    private readonly string apiKey;
+    private readonly string apiSecret;
+    private readonly Uri? brokerEndpoint;
+
+    public LastFmScrobbleProvider(HttpClient client, string apiKey, string apiSecret)
+    {
+        this.client=client;this.apiKey=apiKey;this.apiSecret=apiSecret;
+    }
+
+    // The broker keeps app credentials server-side. This mode signs nothing locally.
+    public LastFmScrobbleProvider(HttpClient client, Uri brokerEndpoint)
+    {
+        LastFmBrokerProtocol.ValidateEndpoint(brokerEndpoint);
+        this.client=client;this.brokerEndpoint=brokerEndpoint;apiKey="";apiSecret="";
+    }
+
+    private Task<HttpResponseMessage> PostAsync(Dictionary<string,string> parameters, CancellationToken token)
+    {
+        if (brokerEndpoint is null) return client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), token);
+        var payload=parameters.Where(p=>p.Key is not ("api_key" or "api_sig" or "format"))
+            .ToDictionary(p=>p.Key,p=>(object)p.Value,StringComparer.Ordinal);
+        foreach(var field in new[] { "timestamp", "duration" })
+            if(payload.TryGetValue(field,out var value)) payload[field]=long.Parse((string)value,System.Globalization.CultureInfo.InvariantCulture);
+        return client.PostAsJsonAsync(brokerEndpoint,payload,token);
+    }
     private static readonly Uri Endpoint = new("https://ws.audioscrobbler.com/2.0/");
 
     public async Task<ProviderSubmissionResult> SubmitScrobbleAsync(ScrobbleSubmission submission, CancellationToken cancellationToken)
@@ -28,11 +55,11 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         };
         if (!string.IsNullOrWhiteSpace(submission.Album)) parameters["album"] = submission.Album;
         if (submission.DurationSeconds is > 0) parameters["duration"] = submission.DurationSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        parameters["api_sig"] = Sign(parameters, apiSecret);
+        if (brokerEndpoint is null) parameters["api_sig"] = Sign(parameters, apiSecret);
 
         try
         {
-            using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            using var response = await PostAsync(parameters, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapError(apiError), response);
@@ -81,10 +108,10 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         };
         if (!string.IsNullOrWhiteSpace(submission.Album)) parameters["album"] = submission.Album;
         if (submission.DurationSeconds is > 0) parameters["duration"] = submission.DurationSeconds.Value.ToString(System.Globalization.CultureInfo.InvariantCulture);
-        parameters["api_sig"] = Sign(parameters, apiSecret);
+        if (brokerEndpoint is null) parameters["api_sig"] = Sign(parameters, apiSecret);
         try
         {
-            using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            using var response = await PostAsync(parameters, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapStateChangeError(apiError), response);
@@ -127,10 +154,10 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             ["track"] = submission.Track,
             ["format"] = "json",
         };
-        parameters["api_sig"] = Sign(parameters, apiSecret);
+        if (brokerEndpoint is null) parameters["api_sig"] = Sign(parameters, apiSecret);
         try
         {
-            using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            using var response = await PostAsync(parameters, cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
             if (TryReadApiError(payload, out var apiError, out var hasApiError))
                 return WithRetryAfter(MapStateChangeError(apiError), response);
