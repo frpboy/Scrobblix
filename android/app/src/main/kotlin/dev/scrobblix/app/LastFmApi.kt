@@ -52,7 +52,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         val (status,body)=request(mapOf("method" to "auth.getToken"))
         check(status in 200..299 && !body.has("error")) { "Last.fm authorization could not start." }
         val token=body.optString("token")
-        check(token.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm authorization response was invalid." }
+        check(token.matches(Regex("[A-Za-z0-9_-]{32}"))) { "Last.fm authorization response was invalid." }
         val url=if(isBroker) body.optString("authorizationUrl") else "https://www.last.fm/api/auth/?api_key=$apiKey&token=$token"
         val uri=java.net.URI(url)
         check(uri.scheme=="https" && uri.host=="www.last.fm" && uri.rawUserInfo==null && uri.port==-1 && uri.path=="/api/auth/" && uri.rawFragment==null) { "Invalid authorization destination." }
@@ -62,6 +62,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         return BrowserAuthorization(token,url)
     }
     fun completeBrowserAuthorization(authorization:BrowserAuthorization):Login {
+        require(authorization.token.matches(Regex("[A-Za-z0-9_-]{32}"))) { "Invalid authorization token." }
         val (status,body)=request(mapOf("method" to "auth.getSession","token" to authorization.token))
         check(status in 200..299 && !body.has("error")) { "Last.fm authorization is not complete or has expired." }
         return parseLogin(body)

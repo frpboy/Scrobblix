@@ -49,4 +49,33 @@ class BrokerRuntimeTest {
         }
         var rejected=false;try { api.beginBrowserAuthorization() } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
     }
+    @Test fun opaqueRequestTokensStaySeparateFromApiAndSessionKeys() {
+        for(broker in listOf(false,true)) {
+            for(token in listOf("Zg_-".repeat(8),"_".repeat(32),"-".repeat(32))) {
+                var received:String?=null
+                val api=LastFmApi("b".repeat(32),"c".repeat(32),if(broker) "https://broker.invalid/v1/lastfm" else null) { values ->
+                    if(values["method"]=="auth.getToken") 200 to JSONObject().put("token",token)
+                        .put("authorizationUrl","https://www.last.fm/api/auth/?api_key="+"b".repeat(32)+"&token="+token)
+                    else { received=values["token"];200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key","c".repeat(32))) }
+                }
+                val authorization=api.beginBrowserAuthorization()
+                assertEquals(token,authorization.token);assertEquals("Synthetic",api.completeBrowserAuthorization(authorization).username);assertEquals(token,received)
+            }
+            for(token in listOf("x".repeat(31),"x".repeat(33),"x".repeat(31)+"&","x".repeat(31)+" ","x".repeat(31)+"é","x".repeat(32)+"\n")) {
+                var calls=0
+                val api=LastFmApi("b".repeat(32),"c".repeat(32),if(broker) "https://broker.invalid/v1/lastfm" else null) {
+                    calls++;200 to JSONObject().put("token",token).put("authorizationUrl","https://www.last.fm/api/auth/?api_key="+"b".repeat(32)+"&token="+token)
+                }
+                var rejected=false;try { api.beginBrowserAuthorization() } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
+                val before=calls;rejected=false
+                try { api.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(_:IllegalArgumentException) { rejected=true };assertTrue(rejected);assertEquals(before,calls)
+            }
+        }
+        val token="Zg_-".repeat(8)
+        val badApiKey=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("token",token).put("authorizationUrl","https://www.last.fm/api/auth/?api_key=$token&token=$token") }
+        var rejected=false;try { badApiKey.beginBrowserAuthorization() } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
+        val badSessionKey=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key",token)) }
+        rejected=false;try { badSessionKey.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
+    }
+
 }
