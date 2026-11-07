@@ -1639,7 +1639,7 @@ public sealed partial class MainWindow : Window
         _isLastFmConnected = false;
         _lastFmUserName = null;
         UpdateLovedButtons();
-        SetLastFmStatus("Add your Last.fm API key and shared secret in Settings, save them securely, then connect your account. Local history continues without them.");
+        SetLastFmStatus("The Last.fm connection service is unavailable in this build. Local history continues. Advanced users can configure their own API app in Settings.");
         ConnectLastFmButton.IsEnabled = false;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;
@@ -1692,7 +1692,7 @@ public sealed partial class MainWindow : Window
         _isLastFmConnected = false;
         _lastFmUserName = null;
         UpdateLovedButtons();
-        SetLastFmStatus("Last.fm could not be connected. Check the API configuration and complete approval in your browser, then try again.");
+        SetLastFmStatus("Last.fm could not be connected. Check your network and complete approval in your browser, then try again.");
         ConnectLastFmButton.IsEnabled = true;
         CompleteLastFmButton.IsEnabled = false;
         DisconnectLastFmButton.IsEnabled = false;

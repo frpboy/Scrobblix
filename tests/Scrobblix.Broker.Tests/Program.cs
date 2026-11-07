@@ -15,9 +15,12 @@ Check(credentials.User=="SyntheticUser" && credentials.Key==new string('b',32),"
 var provider=new LastFmScrobbleProvider(client,endpoint);
 // Synthetic response ambiguity remains unknown; no credentials or real network.
 var submission=new ScrobbleSubmission("Synthetic Artist","Synthetic Track",DateTimeOffset.FromUnixTimeSeconds(1700000000),new string('b',32),null,60);
-await provider.SubmitScrobbleAsync(submission,default);
+var unknown=await provider.SubmitScrobbleAsync(submission,default);
+Check(!unknown.Accepted && !unknown.IsTransient,"malformed success remains held, never accepted or retried");
 await provider.LoveTrackAsync(submission,default);
-string[] expectedMethods=["auth.getToken","auth.getSession","track.scrobble","track.love"];
+await provider.UnloveTrackAsync(submission,default);
+await provider.UpdateNowPlayingAsync(submission,default);
+string[] expectedMethods=["auth.getToken","auth.getSession","track.scrobble","track.love","track.unlove","track.updateNowPlaying"];
 Check(capture.Methods.SequenceEqual(expectedMethods),"scoped methods routed through broker");
 foreach(var uri in new[]{"http://broker.invalid/v1/lastfm","https://broker.invalid/other","https://user@broker.invalid/v1/lastfm","https://broker.invalid/v1/lastfm?url=bad"}) {
  var rejected=false;try{_=new LastFmScrobbleProvider(client,new Uri(uri));}catch(ArgumentException){rejected=true;}Check(rejected,"unsafe broker endpoint rejected");

@@ -126,7 +126,7 @@
                     <StackPanel Spacing="10">
                         <TextBlock Text="Last.fm delivery" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="LastFmHomeStatusText" Text="Checking Last.fm connection" Style="{StaticResource BodyTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
-                        <TextBlock x:Name="LastFmHomeDetailText" Text="Add API credentials and approve your account in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock x:Name="LastFmHomeDetailText" Text="Connect your Last.fm account in Settings." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel Spacing="4">
                             <TextBlock Text="Queue" Style="{StaticResource CaptionTextBlockStyle}" />
                             <TextBlock x:Name="QueueStateText" Text="Checking queued provider actions" Style="{StaticResource SubtitleTextBlockStyle}" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
@@ -286,12 +286,15 @@
                 <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
                     <StackPanel Spacing="10">
                         <TextBlock Text="Last.fm" Style="{StaticResource SubtitleTextBlockStyle}" />
-                        <TextBlock Text="API credentials" Style="{StaticResource BodyTextBlockStyle}" />
-                        <TextBlock Text="Create an API application at last.fm/api/account/create. Enter the key and shared secret here; Scrobblix stores them in Windows Credential Locker. Never add the secret to Git." TextWrapping="Wrap" />
-                        <TextBox x:Name="LastFmApiKeyInput" Header="API key" PlaceholderText="Paste your Last.fm API key" MaxLength="128" />
-                        <PasswordBox x:Name="LastFmApiSecretInput" Header="Shared secret" PlaceholderText="Paste your Last.fm shared secret" MaxLength="128" />
-                        <Button x:Name="SaveLastFmCredentialsButton" Content="Save API credentials securely" Click="SaveLastFmCredentialsButton_Click" HorizontalAlignment="Left" />
-                        <TextBlock x:Name="LastFmCredentialsStatusText" Text="API credentials are not configured." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock x:Name="LastFmCredentialsStatusText" Text="Checking Last.fm connection service." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <Expander Header="Advanced: use your own Last.fm API app" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Optional. Use an API application you own or are authorized to use. Existing saved API credentials keep their direct Last.fm connection. The key and shared secret stay in Windows Credential Locker." TextWrapping="Wrap" />
+                                <TextBox x:Name="LastFmApiKeyInput" Header="API key" PlaceholderText="Your Last.fm API key" MaxLength="128" />
+                                <PasswordBox x:Name="LastFmApiSecretInput" Header="Shared secret" PlaceholderText="Your Last.fm shared secret" MaxLength="128" />
+                                <Button x:Name="SaveLastFmCredentialsButton" Content="Save own API credentials securely" Click="SaveLastFmCredentialsButton_Click" HorizontalAlignment="Left" />
+                            </StackPanel>
+                        </Expander>
                         <TextBlock Text="Account connection" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,8,0,0" />
                         <TextBlock x:Name="LastFmStatusText" Text="Not connected. A user-approved Last.fm account is required before Scrobblix can submit anything remotely." TextWrapping="Wrap" />
                         <StackPanel Orientation="Horizontal" Spacing="8">

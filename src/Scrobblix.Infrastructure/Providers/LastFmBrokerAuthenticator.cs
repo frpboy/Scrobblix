@@ -6,7 +6,7 @@ using Scrobblix.Application.Abstractions;
 namespace Scrobblix.Infrastructure.Providers;
 
 /** Browser consent only. No developer credential or listener password enters this client. */
-public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, ICredentialStore credentials)
+public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, ICredentialStore credentials) : ILastFmAuthenticator
 {
     private static readonly Regex Hex = new("^[a-fA-F0-9]{32}$", RegexOptions.CultureInvariant);
     public async Task<LastFmAuthorization> BeginAsync(CancellationToken cancellationToken)
@@ -40,7 +40,8 @@ public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, I
     private async Task<JsonDocument> PostAsync<T>(T payload,CancellationToken token)
     {
         LastFmBrokerProtocol.ValidateEndpoint(endpoint);
-        using var response=await client.PostAsJsonAsync(endpoint,payload,token);
+        using var request=new HttpRequestMessage(HttpMethod.Post,endpoint) { Content=JsonContent.Create(payload) };
+        using var response=await client.SendAsync(request,HttpCompletionOption.ResponseHeadersRead,token);
         response.EnsureSuccessStatusCode();
         await using var stream=await response.Content.ReadAsStreamAsync(token);
         using var buffer=new MemoryStream();var chunk=new byte[4096];
