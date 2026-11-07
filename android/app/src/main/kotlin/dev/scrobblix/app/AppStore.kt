@@ -91,8 +91,7 @@ class PlaybackListener:ScrobblixMediaListener() {
         MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history)) { play,playing ->
             val name=store.account()
             if(playing && name!=null && !play.artist.isNullOrBlank() && !play.title.isNullOrBlank()) {
-                fun part(value:String)="${value.length}:$value"
-                store.queue.enqueue(part("lastfm")+part(name)+part(play.id)+":NowPlaying","lastfm",name,ActionType.NowPlaying,System.currentTimeMillis(),play.id)
+                store.queue.refreshNowPlaying("lastfm",name,play.id,System.currentTimeMillis())
             }
             store.schedule()
         }

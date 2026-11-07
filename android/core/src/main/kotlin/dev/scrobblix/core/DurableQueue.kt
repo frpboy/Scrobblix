@@ -18,6 +18,24 @@ class DurableQueue(private val db: QueueSqlDriver) {
         return db.execute("INSERT OR IGNORE INTO android_actions(id,provider,account,type,state,created_ms,due_ms,play_id) VALUES(?,?,?,?,?,?,?,?)",
             listOf(id, provider, account, type.name, ActionState.Pending.name, now, now, playId)) == 1
     }
+    /** Refresh only from a current playing sample. Never revive an ambiguous scrobble.
+     * Retain the unique per-play intent and monotonic attempt fence; an in-flight
+     * attempt is never overwritten. Cumulative retry caps remain conservative.
+     */
+    fun refreshNowPlaying(provider:String,account:String,playId:String,now:Long):Boolean {
+        require(provider.isNotBlank() && account.isNotBlank() && playId.isNotBlank())
+        fun part(value:String)="${value.length}:$value"
+        val id=part(provider)+part(account)+part(playId)+":NowPlaying"
+        return db.transaction {
+            if(enqueue(id,provider,account,ActionType.NowPlaying,now,playId)) true
+            else db.execute("""UPDATE android_actions SET state='Pending',created_ms=?,due_ms=?,
+                reason=NULL,completed_ms=NULL,lease_owner=NULL,lease_expires_ms=NULL
+                WHERE id=? AND provider=? AND account=? AND type='NowPlaying' AND play_id=?
+                AND created_ms<=? AND (state IN ('Accepted','Pending') OR
+                    (state='Cancelled' AND reason='provider.nowplaying.expired'))""",
+                listOf(now,now,id,provider,account,playId,now-120000))==1
+        }
+    }
     fun claim(provider: String, account: String, owner: String, now: Long, leaseMs: Long): ActionLease? {
         require(provider.isNotBlank() && account.isNotBlank() && owner.isNotBlank() && leaseMs > 0)
         return db.transaction {

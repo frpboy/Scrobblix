@@ -49,6 +49,34 @@ class DurableQueueTest {
             db.connection.close()
         } finally { file.delete() }
     }
+    @Test fun activeLongTrackRefreshIsBoundedAndNeverRewritesInFlightOrUnknownScrobbles() {
+        val file=File.createTempFile("scrobblix-nowplaying-", ".db");val db=driver(file);val queue=DurableQueue(db)
+        try {
+            queue.initialize()
+            assertTrue(queue.refreshNowPlaying("lastfm","a","long-play",0))
+            assertFalse(queue.refreshNowPlaying("lastfm","a","long-play",119999))
+            val first=queue.claim("lastfm","a","worker",0,1000)!!
+            assertFalse(queue.refreshNowPlaying("lastfm","a","long-play",120000))
+            assertTrue(queue.complete(first,ActionState.Accepted,"provider.accepted",100))
+            assertTrue(queue.refreshNowPlaying("lastfm","a","long-play",120000))
+            assertFalse(queue.refreshNowPlaying("lastfm","a","long-play",120001))
+            assertEquals(1,db.query("SELECT id FROM android_actions WHERE play_id='long-play'").size)
+            val second=queue.claim("lastfm","a","worker",120000,1000)!!
+            assertTrue(second.attempts>first.attempts)
+            assertFalse(queue.complete(first,ActionState.Accepted,"stale",120001))
+            assertTrue(queue.complete(second,ActionState.Accepted,"provider.accepted",120001))
+            assertTrue(queue.refreshNowPlaying("lastfm","a","long-play",600000))
+            // Without another active sample, the refreshed intent still expires normally.
+            assertNull(queue.claim("lastfm","a","later",900000,1000))
+            assertTrue(queue.refreshNowPlaying("lastfm","a","long-play",900001))
+            queue.enqueue("unknown","lastfm","a",ActionType.Scrobble,0,"scrobble-play")
+            val scrobble=queue.claim("lastfm","a","scrobble",0,1000)!!
+            assertEquals(ActionType.Scrobble,scrobble.type)
+            queue.complete(scrobble,ActionState.SubmissionOutcomeUnknown,"provider.submission_outcome_unknown",1)
+            queue.refreshNowPlaying("lastfm","a","scrobble-play",1000000)
+            assertEquals("SubmissionOutcomeUnknown",db.query("SELECT state FROM android_actions WHERE id='unknown'").single()["state"])
+        } finally { db.connection.close();file.delete() }
+    }
     @Test fun rollbackAndEphemeralExpiry() {
         val file=File.createTempFile("scrobblix-queue-", ".db");val db=driver(file);val queue=DurableQueue(db)
         try {
