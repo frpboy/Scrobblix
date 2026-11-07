@@ -51,8 +51,13 @@ jobs:
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
-      - name: Run native Windows artwork metadata checks
+      - name: Publish synthetic pipe-authorization test client
+        run: dotnet publish tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/pipe-client
+
+      - name: Run native Windows integration checks
         run: dotnet run --project tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj --configuration Release --no-build
+        env:
+          SCROBBLIX_PIPE_CLIENT_PATH: artifacts/pipe-client/Scrobblix.PipeClient.exe
 
       - name: Build isolated self-contained artwork UI probe
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=true --output artifacts/ui-probe

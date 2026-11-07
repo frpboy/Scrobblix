@@ -68,7 +68,9 @@ try
     Assert(noValidation.ArtworkPath is null, "Missing platform validator fails closed");
 }
 finally { Directory.Delete(root, true); }
-Console.WriteLine("Windows artwork metadata integration checks complete. No WinUI pixel or decoder memory-bound claim.");
+await PipeSecurityChecks.RunAsync();
+await CredentialCanaryChecks.RunAsync();
+Console.WriteLine("Windows native integration checks complete (artwork metadata, pipe authorization, credential canaries). No WinUI pixel, decoder memory-bound, or cryptographic caller-authentication claim.");
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
 {

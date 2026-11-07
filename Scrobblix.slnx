@@ -6,5 +6,6 @@
   <Project Path="src/Scrobblix.Windows/Scrobblix.Windows.csproj" />
   <Project Path="src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj" />
   <Project Path="tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj" />
+  <Project Path="tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj" />
   <Project Path="tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj" />
 </Solution>
