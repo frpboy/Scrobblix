@@ -1,0 +1,5 @@
+# Windows media session collector qualification
+
+A user recording shows Windows media controls exposing a playing Mornye track while Scrobblix Sources remains unobserved. That is a detection gap, not a proven GetCurrentSession defect or proof of missing Last.fm credentials. Local collection starts independently of Last.fm setup. Private diagnostic logs are awaited; no user settings/data are reset.
+
+This branch adds a bounded synthetic native Windows MediaPlayer session test. It creates a muted silent local PCM file, explicitly publishes synthetic SMTC title/artist and Playing/Paused state, and requires the actual GsmTcPlaybackObservationSource to observe those values. No user files, accounts, network or database are involved. Local cross-target compile succeeds; Windows execution is pending. A passing synthetic test would qualify this controlled session only, not Mornye, every player or the reported PC. A failed hosted Windows test must be diagnosed as either product behavior or fixture/platform limitation before drawing a user-device conclusion. No production collector fix is guessed from the recording.
