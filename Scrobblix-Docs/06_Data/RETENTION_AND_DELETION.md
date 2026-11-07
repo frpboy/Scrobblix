@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (frpboy)  
 > **Status:** Privacy requirements; full retention/deletion workflow is not established as shipped  
-> **Last reviewed:** 2026-11-06
+> **Last reviewed:** 2026-11-07
 
 ## Current persisted data
 
@@ -20,6 +20,19 @@ The repository owner approved a 30-day retention period for raw `playback_observ
 - Canonical `plays` listening history, `provider_actions` (including pending or ambiguous submissions), `accounts` and `loved_tracks` are never touched by this cleanup.
 - Migration `0006_observation_retention` adds the `ix_playback_observations_captured_utc` index backing the expiry query.
 
+## Approved shipped policy: artwork cache (2026-11-07)
+
+The repository owner approved a 30-day retention period for cached artwork on 2026-11-07 (issue [#122](https://github.com/frpboy/Scrobblix/issues/122)). Shipped behavior:
+
+- Cached artwork files whose last write is older than 30 days are deleted by a background task at app start and every 24 hours while the app runs. As with raw observation cleanup, no cleanup runs while the app is closed.
+- Cached artwork still referenced by retained listening history (`plays.artwork_path`) is preserved, so history artwork remains available; listening history itself is kept and is not covered by this policy.
+- Orphaned temporary files from interrupted artwork writes are removed after a 1-day grace period.
+- Cleanup deletes in bounded batches, honors cancellation between batches, skips locked or inaccessible files for the next cycle, and logs only file counts, never track metadata.
+- Only image files (`.png`, `.jpg`, `.jpeg`, `.webp`, `.gif`, `.bmp`) and `.tmp` files directly inside the artwork cache directory are eligible for removal; other files, subdirectories, the raw history/provider queue, and the rest of the profile directory are never touched.
+- The in-memory GSMTC artwork key map is bounded independently at 2,048 entries with FIFO eviction; evicted keys are revalidated from disk on next use.
+
+An aggregate byte budget for the cache remains an open policy target; the owner selected age-based eviction.
+
 Other data classes below remain policy targets until individually implemented and reviewed.
 
 ## Privacy policy recommendations
@@ -30,7 +43,7 @@ The following are product policy targets that require explicit implementation an
 - Raw observations: choose a limited retention period or bounded quota before private/public release if full indefinite retention is not justified.
 - Provider-action history: retain only enough local status to explain delivery and avoid duplicate reprocessing; define a capped/age-based cleanup policy.
 - Logs: use a bounded rolling policy and redact track identities, secrets, authorization URLs and private paths.
-- Artwork: bound per-item size and eventually document a disk/cache budget and eviction behavior.
+- Artwork: age-based cache eviction is shipped (see the approved policy above); an aggregate byte budget remains an open policy target.
 - Support bundle: user-initiated diagnostics-only export; no automatic upload. Credentials, listening database/history, artwork, free-form log messages, and raw crash dumps are excluded by design.
 
 ## Current disconnect behavior

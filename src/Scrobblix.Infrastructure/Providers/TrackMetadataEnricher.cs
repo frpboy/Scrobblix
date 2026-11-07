@@ -1,4 +1,5 @@
 using Scrobblix.Application.Artwork;
+using Scrobblix.Application.Caching;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
