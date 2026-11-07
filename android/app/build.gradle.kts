@@ -12,7 +12,20 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
-    buildTypes { release { isMinifyEnabled = false } }
+    signingConfigs {
+        val keyPath=System.getenv("SCROBBLIX_SIGNING_STORE")
+        val passwordPath=System.getenv("SCROBBLIX_SIGNING_PASSWORD_FILE")
+        if(keyPath!=null && passwordPath!=null) create("ownerRelease") {
+            storeFile=file(keyPath)
+            storePassword=file(passwordPath).readText().trimEnd('\r','\n')
+            keyAlias="scrobblix"
+            keyPassword=storePassword
+        }
+    }
+    buildTypes { release {
+        isMinifyEnabled = false
+        signingConfig=signingConfigs.findByName("ownerRelease")
+    } }
     compileOptions { sourceCompatibility = JavaVersion.VERSION_17; targetCompatibility = JavaVersion.VERSION_17 }
 }
 dependencies {
