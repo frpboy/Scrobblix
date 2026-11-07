@@ -9,13 +9,14 @@ namespace Scrobblix.Infrastructure.Providers;
 public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, ICredentialStore credentials) : ILastFmAuthenticator
 {
     private static readonly Regex Hex = new("^[a-fA-F0-9]{32}$", RegexOptions.CultureInvariant);
+    private static readonly Regex RequestToken = new(@"\A[A-Za-z0-9_-]{32}\z", RegexOptions.CultureInvariant);
     public async Task<LastFmAuthorization> BeginAsync(CancellationToken cancellationToken)
     {
         using var result=await PostAsync(new { method="auth.getToken" },cancellationToken);
         var root=result.RootElement;
         var token=root.GetProperty("token").GetString();
         var url=root.GetProperty("authorizationUrl").GetString();
-        if(token is null || !Hex.IsMatch(token) || !Uri.TryCreate(url,UriKind.Absolute,out var uri) ||
+        if(token is null || !RequestToken.IsMatch(token) || !Uri.TryCreate(url,UriKind.Absolute,out var uri) ||
             uri.Scheme!="https" || uri.Host!="www.last.fm" || !uri.IsDefaultPort || uri.AbsolutePath!="/api/auth/" ||
             uri.UserInfo.Length!=0 || uri.Fragment.Length!=0)
             throw new InvalidOperationException("Last.fm authorization response was invalid.");
@@ -28,7 +29,7 @@ public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, I
     }
     public async Task<LastFmSession> CompleteAsync(string token,CancellationToken cancellationToken)
     {
-        if(!Hex.IsMatch(token)) throw new ArgumentException("Invalid authorization token.",nameof(token));
+        if(!RequestToken.IsMatch(token)) throw new ArgumentException("Invalid authorization token.",nameof(token));
         using var result=await PostAsync(new { method="auth.getSession",token },cancellationToken);
         var session=result.RootElement.GetProperty("session");
         var name=session.GetProperty("name").GetString();var key=session.GetProperty("key").GetString();

@@ -39,20 +39,39 @@ foreach(var (status,body,transient,reason) in new[] {
  var outcome=await provider.SubmitScrobbleAsync(submission,default);
  Check(!outcome.Accepted && outcome.IsTransient==transient && outcome.ReasonCode==reason,"broker pre-forward rejection versus upstream ambiguity");
 }
+capture.OverrideStatus=200;capture.OverrideBody=null;capture.BadUrl=false;
+foreach(var requestToken in new[]{string.Concat(Enumerable.Repeat("Zg_-",8)),new string('_',32),new string('-',32)}) {
+ capture.RequestToken=requestToken;
+ var authorization=await auth.BeginAsync(default);
+ Check(authorization.Token==requestToken,"URL-safe opaque token retained");
+ await auth.CompleteAsync(authorization.Token,default);
+ Check(capture.SessionToken==requestToken,"session request retains exact token");
+}
+foreach(var requestToken in new[]{new string('x',31),new string('x',33),new string('x',31)+"&",new string('x',31)+" ",new string('x',31)+"é",new string('x',32)+"\n"}) {
+ capture.RequestToken=requestToken;var rejected=false;
+ try{await auth.BeginAsync(default);}catch(InvalidOperationException){rejected=true;}Check(rejected,"unsafe response token rejected");
+ var before=capture.Methods.Count;rejected=false;
+ try{await auth.CompleteAsync(requestToken,default);}catch(ArgumentException){rejected=true;}Check(rejected && capture.Methods.Count==before,"unsafe token rejected before session request");
+}
+capture.RequestToken=string.Concat(Enumerable.Repeat("Zg_-",8));capture.PublicKey=capture.RequestToken;
+var keyRejected=false;try{await auth.BeginAsync(default);}catch(InvalidOperationException){keyRejected=true;}Check(keyRejected,"API key remains hex-only");
+capture.PublicKey=new string('c',32);capture.SessionKey=capture.RequestToken;credentials.Key=null;
+keyRejected=false;try{await auth.CompleteAsync(capture.RequestToken,default);}catch(InvalidOperationException){keyRejected=true;}Check(keyRejected && credentials.Key is null,"nonhex session key never stored");
 Console.WriteLine("PASS synthetic broker client: no app secret/signature/password, fixed endpoint/browser host, scoped methods and credential boundary");
 static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
 sealed class Capture:HttpMessageHandler {
  private static readonly string[] Forbidden=["api_key","api_sig","api_secret","password","url"];
- public List<string> Methods {get;}=[];public bool BadUrl;public int OverrideStatus=200;public string? OverrideBody;
+ public List<string> Methods {get;}=[];public bool BadUrl;public int OverrideStatus=200;public string? OverrideBody;public string RequestToken=new('a',32);public string PublicKey=new('c',32);public string SessionKey=new('b',32);public string? SessionToken;
  protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request,CancellationToken cancellationToken) {
   if(request.RequestUri!.AbsoluteUri!="https://broker.invalid/v1/lastfm" || request.Method!=HttpMethod.Post)throw new InvalidOperationException("wrong destination");
   using var json=JsonDocument.Parse(await request.Content!.ReadAsStringAsync(cancellationToken));
   foreach(var field in Forbidden)if(json.RootElement.TryGetProperty(field,out _))throw new InvalidOperationException("disallowed credential/field");
   var method=json.RootElement.GetProperty("method").GetString()!;Methods.Add(method);
   if(method=="track.scrobble" && json.RootElement.GetProperty("timestamp").ValueKind!=JsonValueKind.Number)throw new InvalidOperationException("timestamp must be numeric");
+  if(method=="auth.getSession")SessionToken=json.RootElement.GetProperty("token").GetString();
   var body=method switch {
-   "auth.getToken"=>JsonSerializer.Serialize(new{token=new string('a',32),authorizationUrl=BadUrl?"https://invalid.example/":"https://www.last.fm/api/auth/?api_key="+new string('c',32)+"&token="+new string('a',32)}),
-   "auth.getSession"=>JsonSerializer.Serialize(new{session=new{name="SyntheticUser",key=new string('b',32)}}),
+   "auth.getToken"=>JsonSerializer.Serialize(new{token=RequestToken,authorizationUrl=BadUrl?"https://invalid.example/":"https://www.last.fm/api/auth/?api_key="+PublicKey+"&token="+RequestToken}),
+   "auth.getSession"=>JsonSerializer.Serialize(new{session=new{name="SyntheticUser",key=SessionKey}}),
    _=>"{}"
   };
   return new HttpResponseMessage((HttpStatusCode)OverrideStatus){Content=new StringContent(OverrideBody ?? body,Encoding.UTF8,"application/json")};
