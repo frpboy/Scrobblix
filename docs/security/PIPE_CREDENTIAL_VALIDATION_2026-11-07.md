@@ -65,6 +65,14 @@ Canary values (`sxcanary-*` GUIDs generated per run, only SHA-256 fingerprints p
 are exercised through the real paths and every produced artifact is scanned for the exact
 canary bytes:
 
+### Finding fixed by this validation
+
+The canary tests caught a second live defect on `main`: `DiagnosticMessageSanitizer`
+matched only carriage-form `key=value` and `key: value` pairs, so a JSON-carried secret
+(`{"sessionKey":"v"}`, `{"access_token":"v"}`) passed through diagnostics unredacted.
+The sanitizer now tolerates JSON-quoted keys and values while keeping the carriage-form
+behavior the existing domain tests pin.
+
 | Boundary | Test |
 |---|---|
 | Credential Locker (`PasswordVault`) | store/retrieve/delete roundtrip; per resource+user isolation; test entries removed |
@@ -76,5 +84,18 @@ canary bytes:
 
 ## Results
 
-Filled in from the exact-head CI run on the validating pull request; this document does
-not assert a result that CI has not produced.
+CI run [42336892433](https://github.com/frpboy/Scrobblix/actions/runs/42336892433)
+(`build-and-test`, `windows-latest`) completed **SUCCESS** on the exact validating head
+`69f398e1974743ba89345c47fa36ee038b974a82`. Every assertion in the matrices above passed:
+
+- #74: all four scenarios behaved as asserted (reject-before-read on scenarios 1-3,
+  positive control accepted on scenario 4), the differential proof against the retired
+  basename rule passed, and the effective pipe DACL carried no broad principal on any
+  scenario.
+- #75: Credential Locker roundtrip, delete and per-resource isolation passed; the
+  sanitizer redacted every canary in every carriage form including JSON pairs; the
+  database, backup archive and hostile-log support bundle byte scans found no canary.
+- #76: the refreshed scans in `scans-2026-11-07/` cover the validating head; gitleaks
+  was re-run after the final code commit (1186 commits across all refs, redacted report)
+  and found no leaks. The post-`b72e0eb` commits touch no manifest or lockfile, so the
+  NuGet (0 vulnerable), npm audit (0) and OSV (0) results stand unchanged.
