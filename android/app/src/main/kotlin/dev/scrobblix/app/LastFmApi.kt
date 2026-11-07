@@ -25,14 +25,35 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             .joinToString("") { "%02x".format(it) }
     }
     data class Login(val username:String,val sessionKey:String) { override fun toString()="Login(redacted)" }
+    /** Browser-token flow is documented for mobile apps with a web browser too.
+     * Token stays in memory; callers must expire it after 60 minutes and never log its URL.
+     */
+    class BrowserAuthorization internal constructor(internal val token:String,val url:String) {
+        override fun toString()="BrowserAuthorization(redacted)"
+    }
+    fun beginBrowserAuthorization():BrowserAuthorization {
+        val (status,body)=request(mapOf("method" to "auth.getToken"))
+        check(status in 200..299 && !body.has("error")) { "Last.fm authorization could not start." }
+        val token=body.optString("token")
+        check(token.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm authorization response was invalid." }
+        return BrowserAuthorization(token,"https://www.last.fm/api/auth/?api_key=$apiKey&token=$token")
+    }
+    fun completeBrowserAuthorization(authorization:BrowserAuthorization):Login {
+        val (status,body)=request(mapOf("method" to "auth.getSession","token" to authorization.token))
+        check(status in 200..299 && !body.has("error")) { "Last.fm authorization is not complete or has expired." }
+        return parseLogin(body)
+    }
+    private fun parseLogin(body:JSONObject):Login {
+        val session=body.optJSONObject("session") ?: throw IllegalStateException("Last.fm sign-in response was invalid.")
+        val name=session.optString("name");val key=session.optString("key")
+        check(name.isNotBlank() && name.length<=255 && name.none { it.isISOControl() } && key.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm sign-in response was not valid." }
+        return Login(name,key)
+    }
     fun login(username:String,password:String):Login {
         require(username.isNotBlank() && username.length<=255 && password.isNotEmpty())
         val (status,body)=request(mapOf("method" to "auth.getMobileSession","username" to username,"password" to password))
         check(status in 200..299 && !body.has("error")) { "Last.fm sign-in failed." }
-        val session=body.optJSONObject("session") ?: throw IllegalStateException("Last.fm sign-in failed. Check credentials and try again.")
-        val name=session.optString("name");val key=session.optString("key")
-        check(name.isNotBlank() && name.length<=255 && name.none { it.isISOControl() } && key.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm sign-in response was not valid." }
-        return Login(name,key)
+        return parseLogin(body)
     }
     private fun request(values:Map<String,String>):Pair<Int,JSONObject> {
         val args=values+mapOf("api_key" to apiKey)

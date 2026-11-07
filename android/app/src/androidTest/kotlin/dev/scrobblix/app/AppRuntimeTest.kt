@@ -114,13 +114,31 @@ class AppRuntimeTest {
             ui.onNodeWithText("Your API shared secret").performScrollTo().performTextInput("e".repeat(32))
             ui.onNodeWithText("Save private API configuration").performScrollTo().performClick()
             ui.waitUntil(10000) { ApiConfigurationStore(ui.activity).read()!=null }
-            ui.onNodeWithText("Connect Last.fm").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("Authorize in browser").performScrollTo().assertIsDisplayed()
             assertFalse(store.tracking());assertNull(store.account())
             capture("private-config-settings")
         } finally {
             dev.scrobblix.platform.SessionSecretStore(ui.activity).remove("lastfm-api-config","device")
             store.disconnect()
         }
+    }
+
+    @Test fun browserTokenFlowUsesHttpsSignedRequestsAndCanonicalAccount() {
+        val calls=mutableListOf<Map<String,String>>()
+        val api=LastFmApi("0".repeat(32),"1".repeat(32)) { params ->
+            calls.add(params)
+            if(params["method"]=="auth.getToken") 200 to JSONObject().put("token","a".repeat(32))
+            else 200 to JSONObject().put("session",JSONObject().put("name","BrowserCanonical").put("key","b".repeat(32)))
+        }
+        val authorization=api.beginBrowserAuthorization()
+        assertEquals("https://www.last.fm",java.net.URI(authorization.url).let { it.scheme+"://"+it.host })
+        assertEquals("BrowserAuthorization(redacted)",authorization.toString())
+        assertEquals("BrowserCanonical",api.completeBrowserAuthorization(authorization).username)
+        assertEquals(listOf("auth.getToken","auth.getSession"),calls.map { it["method"] })
+        assertTrue(calls.all { it["api_sig"]?.length==32 && !it.containsKey("password") })
+        assertEquals("a".repeat(32),calls.last()["token"])
+        val invalid=LastFmApi("0".repeat(32),"1".repeat(32)) { _ -> 200 to JSONObject().put("token","https://invalid.example/") }
+        assertThrows(IllegalStateException::class.java) { invalid.beginBrowserAuthorization() }
     }
 
 }

@@ -36,4 +36,28 @@ class AuthUiTest {
             assertFalse(store.tracking())
         } finally { store.disconnect() }
     }
+    @Test fun browserAuthorizationUiUsesReturnedIdentityWithoutPassword() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val store=(context.applicationContext as ScrobblixApp).store
+        var launchedUrl:String?=null
+        val api=LastFmApi("0".repeat(32),"1".repeat(32)) { params ->
+            assertFalse(params.containsKey("password"))
+            if(params["method"]=="auth.getToken") 200 to JSONObject().put("token","a".repeat(32))
+            else 200 to JSONObject().put("session",JSONObject().put("name","BrowserSynthetic").put("key","c".repeat(32)))
+        }
+        try {
+            // Fake launcher captures URL, never opens browser or contacts provider.
+            ui.setContent { MaterialTheme { AppScreen(store,api,{ launchedUrl=it }) } }
+            ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+            ui.onNodeWithText("Authorize in browser").performScrollTo().performClick()
+            ui.waitUntil(10000) { launchedUrl!=null }
+            assertEquals("www.last.fm",java.net.URI(launchedUrl).host)
+            assertNull(store.account())
+            ui.onNodeWithText("Finish browser connection").performScrollTo().performClick()
+            ui.waitUntil(10000) { store.account()=="BrowserSynthetic" }
+            ui.onNodeWithText("Connected as BrowserSynthetic").performScrollTo().assertIsDisplayed()
+            assertFalse(store.tracking())
+        } finally { store.disconnect() }
+    }
+
 }

@@ -32,7 +32,8 @@ class MainActivity:ComponentActivity() {
     }
 }
 @Composable
-fun AppScreen(store:AppStore,api:LastFmApi?=null) {
+fun AppScreen(store:AppStore,api:LastFmApi?=null,
+    browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) }) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }
@@ -44,6 +45,8 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null) {
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var apiRevision by remember { mutableStateOf(0) }
+    var browserAuthorization by remember { mutableStateOf<LastFmApi.BrowserAuthorization?>(null) }
+    var browserStartedAt by remember { mutableStateOf(0L) }
     var apiKey by remember { mutableStateOf("") }
     var apiSecret by remember { mutableStateOf("") }
     var configure by remember { mutableStateOf(false) }
@@ -122,6 +125,36 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null) {
                         }
                     }
                     else {
+                        Text("Recommended: authorize Scrobblix in your browser. Your Last.fm password stays on Last.fm; the returned session key is encrypted on this device.")
+                        Button(enabled=!busy,onClick={
+                            busy=true;browserAuthorization=null
+                            scope.launch {
+                                message=try {
+                                    val authorization=withContext(Dispatchers.IO) { configured.beginBrowserAuthorization() }
+                                    browserAuthorization=authorization;browserStartedAt=android.os.SystemClock.elapsedRealtime()
+                                    browserLauncher(authorization.url)
+                                    "Approve access on Last.fm, return here and finish connecting within 60 minutes."
+                                } catch(_:Exception) { browserAuthorization=null;"Could not open Last.fm authorization. Check your browser/network and try again." }
+                                busy=false
+                            }
+                        }) { Text("Authorize in browser") }
+                        if(browserAuthorization!=null) Button(enabled=!busy,onClick={
+                            val authorization=browserAuthorization!!
+                            if(android.os.SystemClock.elapsedRealtime()-browserStartedAt>=3600000) {
+                                browserAuthorization=null;message="Authorization expired. Start again."
+                            } else {
+                                busy=true
+                                scope.launch {
+                                    message=try {
+                                        withContext(Dispatchers.IO) { val login=configured.completeBrowserAuthorization(authorization);store.connect(login.username,login.sessionKey) }
+                                        browserAuthorization=null;account=store.account()
+                                        "Last.fm connected. Turn on tracking to scrobble future listening."
+                                    } catch(_:Exception) { "Access is not approved yet, expired, or unavailable. Approve in Last.fm or start again." }
+                                    busy=false
+                                }
+                            }
+                        }) { Text("Finish browser connection") }
+                        Text("Alternative: sign in directly below.")
                         Text("Sign in over HTTPS using Last.fm's mobile authentication. Your password is sent to Last.fm once and is not saved. The session key is encrypted with Android Keystore.")
                         OutlinedTextField(value=username,onValueChange={username=it},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)
                         OutlinedTextField(value=password,onValueChange={password=it},label={Text("Last.fm password")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)
