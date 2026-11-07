@@ -11,10 +11,14 @@ class ListeningHistory(private val db: QueueSqlDriver, private val queue: Durabl
         require(listOf(play.artist,play.title,play.album).all { text ->
             text == null || text.length <= 1024 && text.none { it.isISOControl() } })
         return db.transaction {
-            db.execute("""INSERT INTO android_plays(id,artist,title,album,started_ms,duration_ms,confirmed_ms)
-                VALUES(?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET artist=excluded.artist,title=excluded.title,
-                album=excluded.album,duration_ms=excluded.duration_ms,confirmed_ms=MAX(android_plays.confirmed_ms,excluded.confirmed_ms)""",
+            // Android API26 ships SQLite without modern UPSERT syntax. Avoid REPLACE,
+            // which deletes the existing row and can destroy referencing queue records.
+            db.execute("""INSERT OR IGNORE INTO android_plays(id,artist,title,album,started_ms,duration_ms,confirmed_ms)
+                VALUES(?,?,?,?,?,?,?)""",
                 listOf(play.id,play.artist,play.title,play.album,play.startedMs,play.durationMs,play.confirmedMs))
+            db.execute("""UPDATE android_plays SET artist=?,title=?,album=?,duration_ms=?,
+                confirmed_ms=MAX(confirmed_ms,?) WHERE id=?""",
+                listOf(play.artist,play.title,play.album,play.durationMs,play.confirmedMs,play.id))
             val eligible=ScrobbleEligibility.evaluate(play.artist,play.title,play.durationMs,play.confirmedMs).eligible
             if(eligible && !provider.isNullOrBlank() && !account.isNullOrBlank()) {
                 // Length-prefix keys prevent delimiter collisions between account and play identity.

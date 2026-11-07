@@ -18,6 +18,10 @@ class ListeningHistoryTest {
             assertTrue(history.observe(play.copy(confirmedMs=150000),"lastfm","b",102))
             assertFalse(history.observe(play.copy(confirmedMs=100),"lastfm","a",103))
             assertEquals(150000L,history.read(play.id)!!.confirmedMs)
+            assertFalse(history.observe(play.copy(artist="corrected",startedMs=999,confirmedMs=10),"lastfm","a",104))
+            assertEquals(100L,history.read(play.id)!!.startedMs)
+            assertEquals("corrected",history.read(play.id)!!.artist)
+            assertEquals(2,db.query("SELECT id FROM android_actions WHERE play_id=?",listOf(play.id)).size)
             db.connection.close();db=JdbcQueueDriver(DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}"))
             queue=DurableQueue(db);history=ListeningHistory(db,queue)
             val lease=queue.claim("lastfm","a","worker",103,1000)!!
