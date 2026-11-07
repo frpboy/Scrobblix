@@ -178,4 +178,71 @@ class AppRuntimeTest {
         }
     }
 
+    @Test fun queueDisplayDistinguishesActionTypesAndNeverReflectsUntrustedReason() {
+        assertEquals("Now Playing - Accepted: 1",queueSummaryLine(mapOf("type" to "NowPlaying","state" to "Accepted","total" to "1")))
+        assertEquals("Saved scrobble - SubmissionOutcomeUnknown: 1",queueSummaryLine(mapOf("type" to "Scrobble","state" to "SubmissionOutcomeUnknown","total" to "1")))
+        val secretLike="synthetic-untrusted-text"
+        assertFalse(queueSummaryLine(mapOf("type" to secretLike,"state" to secretLike,"total" to secretLike)).contains(secretLike))
+        assertFalse(queueReasonText(secretLike)!!.contains(secretLike))
+        assertEquals("The send result could not be confirmed. No automatic resend.",queueReasonText("provider.submission_outcome_unknown"))
+    }
+
+    private fun diagnosticContext():Context {
+        val base=InstrumentationRegistry.getInstrumentation().targetContext
+        val prefix="read-only-diagnostics-"+java.util.UUID.randomUUID()
+        val directory=File(base.noBackupFilesDir,prefix).apply{mkdirs()}
+        return object:android.content.ContextWrapper(base) {
+            override fun getDatabasePath(name:String)=File(directory,name)
+            override fun getNoBackupFilesDir()=directory
+            override fun getSharedPreferences(name:String,mode:Int)=base.getSharedPreferences("$prefix-$name",mode)
+        }
+    }
+    @Test fun queueCountsSeparateTypesStatesAndReasonsWithoutMutatingRows() {
+        val context=diagnosticContext()
+        val store=AppStore(context,{listOf(java.util.concurrent.CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(false)
+            val prefix="typed-visibility-fixture-"
+            fun add(id:String,type:ActionType,reason:String?) {
+                store.queue.enqueue(prefix+id,"lastfm","SyntheticVisibility",type,0)
+                store.sql.execute("UPDATE android_actions SET state='SubmissionOutcomeUnknown',reason=? WHERE id=?",listOf(reason,prefix+id))
+            }
+            add("s1",ActionType.Scrobble,"provider.submission_outcome_unknown")
+            add("s2",ActionType.Scrobble,"provider.submission_outcome_unknown")
+            add("s3",ActionType.Scrobble,"provider.lease_expired")
+            add("n1",ActionType.NowPlaying,"provider.submission_outcome_unknown")
+            val before=store.sql.query("SELECT * FROM android_actions ORDER BY id")
+            val rows=store.states()
+            assertTrue(rows.any{it["type"]=="Scrobble" && it["state"]=="SubmissionOutcomeUnknown" && it["reason"]=="provider.submission_outcome_unknown" && it["total"]=="2"})
+            assertTrue(rows.any{it["type"]=="Scrobble" && it["state"]=="SubmissionOutcomeUnknown" && it["reason"]=="provider.lease_expired" && it["total"]=="1"})
+            assertTrue(rows.any{it["type"]=="NowPlaying" && it["state"]=="SubmissionOutcomeUnknown" && it["reason"]=="provider.submission_outcome_unknown" && it["total"]=="1"})
+            assertEquals(before,store.sql.query("SELECT * FROM android_actions ORDER BY id"))
+        }finally{store.close();context.noBackupFilesDir.deleteRecursively()}
+    }
+
+    @Test fun historyDiagnosticsKeepExactPlayAndAccountWithoutMutatingUnknown() {
+        val context=diagnosticContext()
+        val store=AppStore(context,{listOf(java.util.concurrent.CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(false);store.connect("SyntheticHistoryDiagnostic","a".repeat(32))
+            store.sql.execute("INSERT INTO android_plays VALUES('diagnostic-play','Synthetic Artist','Synthetic Track',NULL,1,300000,150000)")
+            store.sql.execute("INSERT INTO android_plays VALUES('diagnostic-other','Synthetic Artist','Other Track',NULL,2,NULL,200000)")
+            store.queue.enqueue("diagnostic-action","lastfm","SyntheticHistoryDiagnostic",ActionType.Scrobble,0,"diagnostic-play")
+            store.queue.enqueue("other-account","lastfm","DifferentAccount",ActionType.Scrobble,0,"diagnostic-play")
+            store.sql.execute("UPDATE android_actions SET state='SubmissionOutcomeUnknown',reason='provider.submission_outcome_unknown' WHERE id='diagnostic-action'")
+            val before=store.sql.query("SELECT * FROM android_actions ORDER BY id")
+            val rows=store.recentDiagnostics().plays
+            val play=rows.single{it.play["id"]=="diagnostic-play"}
+            assertEquals("SyntheticHistoryDiagnostic",play.account)
+            assertEquals(1,play.actions.size)
+            assertEquals("SubmissionOutcomeUnknown",play.actions.single()["state"])
+            assertTrue(rows.single{it.play["id"]=="diagnostic-other"}.actions.isEmpty())
+            assertEquals("Duration: 300 seconds. Threshold: 150 seconds. Listening-time and metadata rule met. This is not delivery confirmation.",historyEligibilityText(play.play))
+            assertEquals("Track duration is unknown.",historyEligibilityText(rows.single{it.play["id"]=="diagnostic-other"}.play))
+            assertEquals(before,store.sql.query("SELECT * FROM android_actions ORDER BY id"))
+            store.disconnect()
+            assertTrue(store.recentDiagnostics().plays.all{it.account==null && it.actions.isEmpty()})
+        }finally{store.close();context.noBackupFilesDir.deleteRecursively()}
+    }
+
 }

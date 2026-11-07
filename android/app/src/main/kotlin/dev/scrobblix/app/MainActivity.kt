@@ -40,6 +40,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
     heldReviewLoader:suspend ()->dev.scrobblix.core.ConnectionAuthority.HeldReview?={withContext(Dispatchers.IO){store.reviewHeld()}},
     heldResumer:suspend (dev.scrobblix.core.ConnectionAuthority.HeldReview)->AppStore.LocalOutcome={review ->withContext(Dispatchers.IO){store.resumeHeld(review)}},
+    historyReader:suspend ()->AppStore.RecentDiagnostics={withContext(Dispatchers.IO){store.recentDiagnostics()}},
     queueReader:suspend (Boolean)->List<Map<String,String?>> = {_ ->withContext(Dispatchers.IO){store.states()}}) {
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
@@ -49,7 +50,11 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var currentAuthority by remember {mutableStateOf<dev.scrobblix.core.ConnectionSnapshot?>(null)}
     var account by remember { mutableStateOf<String?>(null) }
     var access by remember { mutableStateOf(false) }
-    var history by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
+    var history by remember { mutableStateOf(emptyList<AppStore.RecentPlayReading>()) }
+    var historySnapshot by remember {mutableStateOf<dev.scrobblix.core.ConnectionSnapshot?>(null)}
+    var historyCurrent by remember {mutableStateOf(false)}
+    var historyEpoch by remember {mutableStateOf(0L)}
+    fun invalidateHistory() {historyEpoch++;historyCurrent=false;historySnapshot=null;history=emptyList()}
     var sources by remember { mutableStateOf(emptySet<String>()) }
     var queueEpoch by remember {mutableStateOf(0L)}
     var queueMutationPending by remember {mutableStateOf(false)}
@@ -76,18 +81,30 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         val connection=withContext(Dispatchers.IO){store.accountState()}
         storageUnavailable=connection is AppStore.AccountState.StorageUnavailable
         if(storageUnavailable)queueSummaryCurrent=false
-        currentAuthority=(connection as? AppStore.AccountState.Saved)?.snapshot
+        val observedAuthority=(connection as? AppStore.AccountState.Saved)?.snapshot
+        if(storageUnavailable || observedAuthority!=currentAuthority)invalidateHistory()
+        currentAuthority=observedAuthority
         account=currentAuthority?.account
         connectionHealth=store.healthFor(connection);tracking=store.tracking();sources=store.knownSources()
         val polledQueueEpoch=queueEpoch
+        val polledHistoryEpoch=historyEpoch
         try {
-            val recent=withContext(Dispatchers.IO){store.recent()}
+            val recent=historyReader()
             val readings=recent to queueReader(false)
-            history=readings.first
+            val verified=withContext(Dispatchers.IO){store.accountState() to store.authority.snapshot()}
+            val verifiedAuthority=(verified.first as? AppStore.AccountState.Saved)?.snapshot
+            if(verified.first is AppStore.AccountState.StorageUnavailable || verifiedAuthority!=currentAuthority) {
+                invalidateHistory();storageUnavailable=verified.first is AppStore.AccountState.StorageUnavailable
+                currentAuthority=verifiedAuthority;account=verifiedAuthority?.account
+            }
+            if(polledHistoryEpoch==historyEpoch && !busy && !storageUnavailable && verified.second==recent.snapshot &&
+                recent.snapshot.account==account && (account==null || currentAuthority==recent.snapshot)) {
+                history=recent.plays;historySnapshot=recent.snapshot;historyCurrent=true
+            } else if(polledHistoryEpoch==historyEpoch)invalidateHistory()
             if(polledQueueEpoch==queueEpoch && !queueMutationPending && !storageUnavailable) {states=readings.second;queueSummaryCurrent=true}
         }
         catch(cancelled:kotlinx.coroutines.CancellationException){throw cancelled}
-        catch(_:Exception){queueSummaryCurrent=false;storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
+        catch(_:Exception){invalidateHistory();queueSummaryCurrent=false;storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
         delay(2000)
     } }
     Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -107,7 +124,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 Button(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}) { Text("Review media access") }
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
                     Switch(checked=tracking,enabled=!busy && !storageUnavailable,onCheckedChange={enabled ->
-                        busy=true
+                        busy=true;invalidateHistory()
                         scope.launch {try {val result=withContext(Dispatchers.IO){store.setTracking(enabled)};message=result.message;tracking=store.tracking()}
                             catch(_:Exception){message="Local tracking outcome is unavailable. Collection and delivery remain gated."}finally{busy=false}}
                     })
@@ -119,11 +136,25 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
             }
             "History" -> {
                 Text("Recent listening",style=MaterialTheme.typography.headlineSmall)
-                if(history.isEmpty()) Text("Nothing listened to yet. Turn on tracking, allow media access and play a track in a supported player.")
-                history.forEach { play -> Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
+                val showHistory=historyCurrent && !busy && !storageUnavailable && historySnapshot?.account==account && (account==null || historySnapshot==currentAuthority)
+                if(!showHistory) Text("Checking current local history and account actions. Previous diagnostics are hidden.")
+                if(showHistory && history.isEmpty()) Text("Nothing listened to yet. Turn on tracking, allow media access and play a track in a supported player.")
+                if(showHistory)history.forEach { reading -> val play=reading.play;Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                     Text(play["title"] ?: "Unknown track",style=MaterialTheme.typography.titleMedium)
                     Text(play["artist"] ?: "Unknown artist")
                     Text("${(play["confirmed_ms"]?.toLongOrNull() ?: 0)/1000} seconds confirmed")
+                    Text(historyEligibilityText(play))
+                    if(reading.account==null) Text("No connected account is selected for action inspection.")
+                    else {
+                        Text("Recorded actions for current account: ${reading.account}")
+                        if(reading.actions.isEmpty())Text("No matching action is currently stored for this play and account. This does not establish that no earlier attempt occurred.")
+                        reading.actions.forEach { action ->
+                            Text(queueSummaryLine(action+mapOf("total" to "1")))
+                            Text("Reason: ${queueReasonText(action["reason"]) ?: "No reason recorded."}")
+                            val sends=action["provider_sends"]?.toLongOrNull()?.takeIf{it>=0}?.toString() ?: "Unavailable"
+                            Text("Provider send permits recorded: $sends. A permit is not proof of acceptance.")
+                        }
+                    }
                 } } }
             }
             "Queue" -> {
@@ -131,14 +162,20 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 if(!queueSummaryCurrent)Text("Checking current delivery counts.")
                 else {
                     if(states.isEmpty())Text("No scrobbles queued yet.")
-                    states.forEach {Text("${it["state"]}: ${it["total"]}")}
+                    Text("Counts are grouped by action type, state and reason. Each count belongs to its reason, not the whole state.")
+                    states.forEach {
+                        Text(queueSummaryLine(it))
+                        Text("Reason: ${queueReasonText(it["reason"]) ?: "No reason recorded."}")
+                    }
+                    if(states.any{it["state"]=="SubmissionOutcomeUnknown"})
+                        Text("An earlier send has an unknown result. It will not be retried automatically. Check Last.fm before considering another submission; reconnecting does not settle that result.")
                 }
                 Text("Offline work stays on this device. Uncertain submissions are held and never retried automatically. Reconnect the same Last.fm account to resume auth-blocked work.")
                 Button(enabled=!busy && !storageUnavailable,onClick={scope.launch {message=withContext(Dispatchers.IO){store.schedule()}}}) { Text("Check pending delivery") }
                 Text("Held scrobbles need a separate review. Their last attempt had no send permit; earlier attempts may exist. Uncertain submissions are never resumed here. Held Now Playing is excluded.")
                 Button(enabled=!busy && !storageUnavailable,onClick=reviewClick@{
                     if(busy)return@reviewClick
-                    busy=true;heldReview=null;val epoch=++reviewEpoch
+                    busy=true;invalidateHistory();heldReview=null;val epoch=++reviewEpoch
                     scope.launch {try {
                         val reviewed=heldReviewLoader()
                         if(epoch==reviewEpoch)heldReview=reviewed
@@ -156,7 +193,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     Button(enabled=!busy && !storageUnavailable && tracking && !reviewed.snapshot.resumeConsentRequired && reviewed.rows.isNotEmpty(),onClick=resumeClick@{
                         if(busy)return@resumeClick
                         // Capture the displayed token, never recompute a batch at click time.
-                        busy=true;heldReview=null;++reviewEpoch
+                        busy=true;invalidateHistory();heldReview=null;++reviewEpoch
                         val refreshEpoch=++queueEpoch;queueSummaryCurrent=false;queueMutationPending=true
                         scope.launch {try {
                             val outcome=try {heldResumer(reviewed)}
@@ -184,7 +221,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 Text("Screenshots and recent-app previews are enabled. They may show your Last.fm account name, listening history and settings; keep captures private.")
                 if(account!=null) {
                     Text("Connected as $account")
-                    Button(enabled=!busy,onClick={busy=true;scope.launch {try {
+                    Button(enabled=!busy,onClick={busy=true;invalidateHistory();scope.launch {try {
                         val result=withContext(Dispatchers.IO){store.disconnect()};message=result.message
                         account=store.account();tracking=store.tracking()
                     }catch(_:Exception){message="Local disconnect outcome is unavailable. Do not assume disconnected."}finally{busy=false}}}) { Text("Disconnect Last.fm") }
@@ -199,7 +236,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         OutlinedTextField(value=apiKey,onValueChange={apiKey=it.take(64)},label={Text("Your API key")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
                         OutlinedTextField(value=apiSecret,onValueChange={apiSecret=it.take(64)},label={Text("Your API shared secret")},singleLine=true,visualTransformation=PasswordVisualTransformation(),modifier=Modifier.fillMaxWidth())
                         Button(enabled=!busy && apiKey.matches(Regex("[a-fA-F0-9]{32}")) && apiSecret.matches(Regex("[a-fA-F0-9]{32}")),onClick={
-                            val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true
+                            val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true;invalidateHistory()
                             scope.launch {
                                 message=try { withContext(Dispatchers.IO) {
                                     check(store.disconnect().committed) { "Local disconnect unavailable" };ApiConfigurationStore(context).write(keyInput,secretInput)
@@ -215,7 +252,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         if(browserFlowNeedsRestart && browserAuthorization==null && !busy) Text("The previous browser connection cannot be resumed. No connection is confirmed. Your history and queue are unchanged. Start a new authorization only when you are ready.")
                         if(browserStatus.isNotBlank()) Text(browserStatus)
                         Button(enabled=!busy,onClick={
-                            busy=true;browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Opening Last.fm authorization…"
+                            busy=true;invalidateHistory();browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Opening Last.fm authorization…"
                             scope.launch {
                                 message=try {
                                     val authorization=withContext(Dispatchers.IO) { configured.beginBrowserAuthorization() }
@@ -234,7 +271,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                             } else {
                                 // A request can consume the token even when its response is lost.
                                 // Never offer an automatic retry with this one-use token.
-                                busy=true;browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Finishing browser connection…"
+                                busy=true;invalidateHistory();browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Finishing browser connection…"
                                 scope.launch { try {
                                     val login=try {
                                         withContext(Dispatchers.IO) { configured.completeBrowserAuthorization(authorization) }
@@ -267,7 +304,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         OutlinedTextField(value=username,onValueChange={username=it},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)
                         OutlinedTextField(value=password,onValueChange={password=it},label={Text("Last.fm password")},visualTransformation=PasswordVisualTransformation(),singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)
                         Button(enabled=!busy && username.isNotBlank() && password.isNotEmpty(),onClick={
-                            busy=true;val input=password;password=""
+                            busy=true;invalidateHistory();val input=password;password=""
                             scope.launch { message=try {
                                 withContext(Dispatchers.IO) { val login=configured.login(username,input);store.connect(login.username,login.sessionKey).message }
                             } catch(_:Exception) { "Could not confirm the provider sign-in response. No local connection is confirmed; check the observed error before trying again." }
@@ -294,4 +331,46 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         if(message.isNotBlank() && !(tab=="Settings" && browserStatus==message)) Text(message)
         Spacer(Modifier.height(24.dp))
     }
+}
+
+/** Display only fixed labels, never stored provider text or arbitrary database values. */
+internal fun queueSummaryLine(row:Map<String,String?>):String {
+    val type=when(row["type"]) {"Scrobble"->"Saved scrobble";"NowPlaying"->"Now Playing";"Love"->"Love";"Unlove"->"Unlove";else->null}
+    val state=when(row["state"]) {
+        "Pending","RetryScheduled","Accepted","SubmissionOutcomeUnknown","LocalHold","AuthBlocked","PermanentFailure","ProviderIgnored","RetryExhausted","Cancelled","InFlight"->row["state"]!!
+        else->"Unrecognized state"
+    }
+    val total=row["total"]?.toLongOrNull()?.takeIf{it>=0}?.toString() ?: "Unavailable"
+    return if(type==null)"$state: $total" else "$type - $state: $total"
+}
+internal fun queueReasonText(reason:String?):String?=when(reason) {
+    null->null
+    "provider.accepted"->"Last.fm confirmed acceptance."
+    "provider.submission_outcome_unknown"->"The send result could not be confirmed. No automatic resend."
+    "provider.temporary_unavailable","provider.rate_limited","provider.lease_expired"->"A temporary delivery problem was recorded."
+    "provider.auth.invalid_session"->"Last.fm reported an invalid session for this action."
+    "provider.rejected"->"The request was rejected."
+    "provider.retry_exhausted"->"Automatic attempts reached their limit."
+    "provider.ignored.1","provider.ignored.2","provider.ignored.3","provider.ignored.4","provider.ignored.5"->"Last.fm reported that this action was ignored."
+    "local.unsent_recovery"->"This attempt was held before a send permit."
+    else->"A different local delivery reason was recorded."
+}
+
+internal fun historyEligibilityText(play:Map<String,String?>):String {
+    val confirmed=play["confirmed_ms"]?.toLongOrNull()?.takeIf{it>=0} ?: return "Local eligibility is unavailable."
+    val duration=play["duration_ms"]?.toIntOrNull()
+    val result=dev.scrobblix.core.ScrobbleEligibility.evaluate(play["artist"],play["title"],duration,confirmed)
+    val detail=when(result.reason) {
+        null->"Listening-time and metadata rule met. This is not delivery confirmation."
+        "metadata.missing_artist"->"Artist metadata is missing."
+        "metadata.missing_title"->"Track metadata is missing."
+        "playback.duration_unknown"->"Track duration is unknown."
+        "metadata.invalid_duration"->"Track duration is invalid."
+        "playback.track_too_short"->"Track is too short for a scrobble."
+        "playback.insufficient_confirmed_time"->"More confirmed listening time is required."
+        else->"Local eligibility is unavailable."
+    }
+    val durationText=duration?.takeIf{it>0}?.let{"Duration: ${it/1000} seconds. "} ?: ""
+    val thresholdText=result.thresholdMs?.let{"Threshold: ${it/1000} seconds. "} ?: ""
+    return durationText+thresholdText+detail
 }

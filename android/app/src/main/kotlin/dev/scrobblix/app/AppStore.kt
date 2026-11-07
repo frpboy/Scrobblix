@@ -139,8 +139,21 @@ class AppStore(val context:Context,
         if(allowed) values.remove(name) else values.add(name)
         preferences.edit().putStringSet("blocked-sources",values).apply()
     }
-    fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC LIMIT 50")
-    fun states()=sql.query("SELECT state,COUNT(*) AS total FROM android_actions GROUP BY state ORDER BY state")
+    data class RecentPlayReading(val play:Map<String,String?>,val account:String?,val actions:List<Map<String,String?>>)
+    data class RecentDiagnostics(val snapshot:ConnectionSnapshot,val plays:List<RecentPlayReading>)
+    /** SELECT-only local transaction on the existing connection; no nonblocking-connection claim. */
+    fun recentDiagnostics():RecentDiagnostics = synchronized(authorityCoordinator) {
+        sql.transaction {
+            val snapshot=authority.snapshot()
+            val plays=sql.query("SELECT id,artist,title,started_ms,duration_ms,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
+            val actions=if(snapshot.account==null) emptyList() else sql.query("""SELECT play_id,type,state,reason,attempts,provider_sends
+                FROM android_actions WHERE provider='lastfm' AND account=? AND play_id IN
+                (SELECT id FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50) ORDER BY created_ms,id""",listOf(snapshot.account))
+            RecentDiagnostics(snapshot,plays.map { play -> RecentPlayReading(play,snapshot.account,actions.filter{it["play_id"]==play["id"]}) })
+        }
+    }
+    fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
+    fun states()=sql.query("SELECT type,state,reason,COUNT(*) AS total FROM android_actions GROUP BY type,state,reason ORDER BY type,state,reason")
     fun reviewHeld():ConnectionAuthority.HeldReview?=synchronized(authorityCoordinator) {authority.reviewHeld()}
     fun resumeHeld(review:ConnectionAuthority.HeldReview):LocalOutcome=synchronized(authorityCoordinator) {
         if(review.rows.isEmpty())return@synchronized LocalOutcome(false,"No held scrobbles selected. Nothing was resumed.")

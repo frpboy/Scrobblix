@@ -1,0 +1,104 @@
+name: Focused local delivery diagnostics
+on:
+  push:
+    branches: [qa/scrobblix-delivery-diagnostics]
+    paths: ['android/**', '.github/workflows/scrobblix-delivery-diagnostics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: scrobblix-delivery-diagnostics-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  diagnostics:
+    if: github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    strategy:
+      fail-fast: true
+      max-parallel: 2
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require exact reviewed Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD:android)" = 19d963d3dd0fce1d416ea37d44cb79e591d3e7e6
+          test -z "${SCROBBLIX_SIGNING_STORE:-}"
+          test -z "${SCROBBLIX_SIGNING_PASSWORD_FILE:-}"
+      - name: Run six focused synthetic tests with provider egress blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-diagnostics"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME" diagnostics-evidence
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+          echo no | avdmanager create avd -n diagnostics -k 'system-images;android-${{ matrix.api }};default;x86_64' --path "$ANDROID_AVD_HOME/diagnostics.avd" --force
+          emulator -avd diagnostics -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/diagnostics-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          timeout 180 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -60 /tmp/diagnostics-emulator.log; exit 1; fi
+          adb root
+          adb wait-for-device
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          tests='dev.scrobblix.app.AppRuntimeTest#queueDisplayDistinguishesActionTypesAndNeverReflectsUntrustedReason,dev.scrobblix.app.AppRuntimeTest#queueCountsSeparateTypesStatesAndReasonsWithoutMutatingRows,dev.scrobblix.app.AppRuntimeTest#historyDiagnosticsKeepExactPlayAndAccountWithoutMutatingUnknown,dev.scrobblix.app.AuthorityUiStateTest#latePreClickPollCannotOverwriteRefreshAndFailedPollHidesCountsUntilRecovery,dev.scrobblix.app.AuthorityUiStateTest#failedPostCommitCountRefreshKeepsCommittedMessageAndHidesOldSummary,dev.scrobblix.app.AuthorityUiStateTest#historyDiagnosticsFenceDelayedOldPollAfterDisconnectAndHideReadFailure'
+          result=0
+          android/gradlew -p android :app:connectedDebugAndroidTest "-Pandroid.testInstrumentationRunnerArguments.class=$tests" --no-daemon || result=$?
+          for name in authority-held-counts-unavailable authority-held-counts-recovered history-eligibility history-unknown-action; do
+            adb pull "/sdcard/Download/scrobblix-$name.png" diagnostics-evidence/ || result=1
+          done
+          python3 - <<'PY'
+          import pathlib, xml.etree.ElementTree as E
+          files=list(pathlib.Path('android/app/build/outputs/androidTest-results').rglob('TEST-*.xml'))
+          assert files, 'Instrumentation XML absent'
+          total=failures=errors=skipped=0
+          for f in files:
+              root=E.parse(f).getroot()
+              total+=int(root.get('tests',0)); failures+=int(root.get('failures',0)); errors+=int(root.get('errors',0)); skipped+=int(root.get('skipped',0))
+          print('FOCUSED_INSTRUMENTATION',total,failures,errors,skipped)
+          assert (total,failures,errors,skipped)==(6,0,0,0)
+          PY
+          exit "$result"
+      - name: Preserve only bounded synthetic XML and pixels
+        id: evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics-evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          out=Path('diagnostics-evidence')
+          for n,f in enumerate(Path('android/app/build/outputs/androidTest-results').rglob('TEST-*.xml')):
+              shutil.copyfile(f,out/('instrumentation-'+str(n)+'.xml'))
+          allowed={'scrobblix-authority-held-counts-unavailable.png','scrobblix-authority-held-counts-recovered.png','scrobblix-history-eligibility.png','scrobblix-history-unknown-action.png'}
+          for p in out.iterdir():
+              assert p.is_file() and (p.name in allowed or p.name.startswith('instrumentation-') and p.suffix=='.xml')
+          assert sum(p.stat().st_size for p in out.iterdir())<=10*1024*1024, 'Synthetic evidence exceeds cap'
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: scrobblix-diagnostics-api${{ matrix.api }}
+          path: diagnostics-evidence/
+          if-no-files-found: error
+          retention-days: 1
