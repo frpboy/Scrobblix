@@ -17,7 +17,7 @@ class LayoutRuntimeTest {
     }
     private fun capture(name:String) {
         ui.activity.runOnUiThread { ui.activity.window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
-        ui.waitForIdle();Thread.sleep(400)
+        ui.waitForIdle();Thread.sleep(1500)
         shell("screencap -p /sdcard/Download/scrobblix-$name.png")
     }
     @Test fun largeFontAndLandscapeKeepControlsReachable() {
@@ -30,13 +30,14 @@ class LayoutRuntimeTest {
             ui.onNodeWithText("Player controls").performScrollTo().assertIsDisplayed()
             capture("large-font-settings")
             shell("settings put system font_scale 1.0")
-            ui.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE
-            ui.activityRule.scenario.recreate()
+            ui.activity.runOnUiThread { ui.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_LANDSCAPE }
+            ui.waitUntil(10000) { ui.activity.resources.configuration.orientation==android.content.res.Configuration.ORIENTATION_LANDSCAPE }
+            Thread.sleep(1500)
             ui.onNodeWithText("Review media access").performScrollTo().assertIsDisplayed()
             capture("landscape-listen")
         } finally {
             shell("settings put system font_scale 1.0")
-            ui.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
+            ui.activity.runOnUiThread { ui.activity.requestedOrientation=ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED }
         }
     }
 }
