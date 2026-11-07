@@ -1,0 +1,255 @@
+{
+  "target": "b72e0eb",
+  "queries": 31,
+  "vulnerabilityHits": 0,
+  "results": [
+    {
+      "package": {
+        "name": "Microsoft.Data.Sqlite",
+        "ecosystem": "NuGet"
+      },
+      "version": "10.0.14",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "Microsoft.Data.Sqlite.Core",
+        "ecosystem": "NuGet"
+      },
+      "version": "10.0.14",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.bundle_e_sqlite3",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.core",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "SQLitePCLRaw.provider.e_sqlite3",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.1.13",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "runtimepack.Microsoft.Windows.SDK.NET.Ref",
+        "ecosystem": "NuGet"
+      },
+      "version": "10.0.26100.57",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "scrobblix-browser-companion",
+        "ecosystem": "npm"
+      },
+      "version": "0.1.0",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "Microsoft.WindowsAppSDK",
+        "ecosystem": "NuGet"
+      },
+      "version": "2.6.4",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@types/chrome",
+        "ecosystem": "npm"
+      },
+      "version": "0.3.7",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@types/har-format",
+        "ecosystem": "npm"
+      },
+      "version": "1.2.16",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-aix-ppc64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-darwin-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-darwin-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-freebsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-freebsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-arm",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-loong64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-mips64el",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-ppc64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-riscv64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-s390x",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-linux-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-netbsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-netbsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-openbsd-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-openbsd-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-sunos-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-win32-arm64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "@typescript/typescript-win32-x64",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    },
+    {
+      "package": {
+        "name": "typescript",
+        "ecosystem": "npm"
+      },
+      "version": "7.0.2",
+      "vulnerabilities": []
+    }
+  ]
+}

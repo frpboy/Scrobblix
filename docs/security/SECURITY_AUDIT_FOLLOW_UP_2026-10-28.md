@@ -35,7 +35,7 @@ The initial review inspected selected Scrobblix source files, browser extension 
 
 1. Browser extension payload validation bounds metadata fields and requires HTTPS for artwork URLs.
 2. The native messaging host limits frames to 256 KiB and checks the extension identity before dispatching message types, including ping.
-3. The native host uses a current-user-only named-pipe client. The effective desktop server-side ACL/caller enforcement still needs Windows verification.
+3. The native host uses a current-user-only named-pipe client. Server-side caller verification is validated by the synthetic Windows scenario matrix in docs/security/PIPE_CREDENTIAL_VALIDATION_2026-11-07.md, which executes the production verifier against a test-hosted pipe created with the same options and ACL assertions; the desktop listener wiring itself is not exercised by that matrix. The boundary is spoofing resistance, not cryptographic caller authentication.
 4. CI declares `contents: read` at workflow scope, and the release publication job requests `contents: write`.
 5. Preview releases are described as unsigned development bundles with SHA-256 checksums; checksums do not establish publisher identity.
 
