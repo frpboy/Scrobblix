@@ -62,7 +62,7 @@ test(gsmtc): cover paused-to-stopped transition
 - `fix/<issue>-<slug>`: bug fixes.
 - `release/<version>`: only when release stabilization requires it.
 
-Contributors must use focused pull requests. The maintainer must inspect the latest PR head, applicable CI results, review feedback, and merge prerequisites before merging. Conditional Android jobs must pass for Android changes even though they are not globally required on unrelated documentation PRs.
+Contributors must use focused pull requests. The maintainer must inspect the latest PR head, applicable CI results, review feedback, and merge prerequisites before merging. Android jobs currently live in draft PR133, not main; when present in a proposed Android change they must pass before merge. They are not globally required on unrelated PRs.
 
 ## Validation and merge discipline
 
