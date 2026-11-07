@@ -35,7 +35,7 @@ class ListenerLifecycleTest {
             session.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,0,1f).build())
             session.isActive=true
             shell("cmd notification allow_listener $component")
-            until { context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(ComponentName(context,PlaybackListener::class.java)) }
+            until { store.hasMediaAccess() }
             Thread.sleep(2500)
             assertTrue(store.sql.query("SELECT id FROM android_plays WHERE title=?",listOf(title)).isEmpty())
             store.setTracking(true)
@@ -49,7 +49,7 @@ class ListenerLifecycleTest {
             store.setTracking(true)
             Thread.sleep(2500)
             shell("cmd notification disallow_listener $component")
-            until { !context.getSystemService(NotificationManager::class.java).isNotificationListenerAccessGranted(ComponentName(context,PlaybackListener::class.java)) }
+            until { !store.hasMediaAccess() }
             Thread.sleep(2500)
             val revoked=store.sql.query("SELECT SUM(confirmed_ms) AS total FROM android_plays WHERE title=?",listOf(title))
             Thread.sleep(3000)
