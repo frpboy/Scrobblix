@@ -16,10 +16,15 @@ class ListeningHistory(private val db: QueueSqlDriver, private val queue: Durabl
             db.execute("""INSERT OR IGNORE INTO android_plays(id,artist,title,album,started_ms,duration_ms,confirmed_ms)
                 VALUES(?,?,?,?,?,?,?)""",
                 listOf(play.id,play.artist,play.title,play.album,play.startedMs,play.durationMs,play.confirmedMs))
-            db.execute("""UPDATE android_plays SET artist=?,title=?,album=?,duration_ms=?,
+            // A transient metadata gap cannot erase previously observed useful fields.
+            // Nonblank metadata updates still replace old values for this play identity.
+            db.execute("""UPDATE android_plays SET artist=COALESCE(?,artist),title=COALESCE(?,title),
+                album=COALESCE(?,album),duration_ms=COALESCE(?,duration_ms),
                 confirmed_ms=MAX(confirmed_ms,?) WHERE id=?""",
-                listOf(play.artist,play.title,play.album,play.durationMs,play.confirmedMs,play.id))
-            val eligible=ScrobbleEligibility.evaluate(play.artist,play.title,play.durationMs,play.confirmedMs).eligible
+                listOf(play.artist?.takeIf { it.isNotBlank() },play.title?.takeIf { it.isNotBlank() },
+                    play.album?.takeIf { it.isNotBlank() },play.durationMs?.takeIf { it>0 },play.confirmedMs,play.id))
+            val stored=checkNotNull(read(play.id))
+            val eligible=ScrobbleEligibility.evaluate(stored.artist,stored.title,stored.durationMs,stored.confirmedMs).eligible
             if(eligible && !provider.isNullOrBlank() && !account.isNullOrBlank()) {
                 // Length-prefix keys prevent delimiter collisions between account and play identity.
                 fun part(value:String) = "${value.length}:$value"

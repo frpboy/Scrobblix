@@ -30,6 +30,23 @@ class ListeningHistoryTest {
             assertNotNull(queue.claim("lastfm","b","worker-b",103,1000))
         } finally { db.connection.close();file.delete() }
     }
+    @Test fun transientMetadataGapsPreservePayloadAndUseAccumulatedEligibility() {
+        val file=File.createTempFile("scrobblix-metadata-", ".db")
+        val db=JdbcQueueDriver(DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}"))
+        try {
+            val history=ListeningHistory(db,DurableQueue(db));history.initialize()
+            val play=LocalPlay("metadata-play","Artist","Title","Album",100,300000,149999)
+            assertFalse(history.observe(play,"lastfm","a",100))
+            assertTrue(history.observe(play.copy(artist=null,title="  ",album=null,durationMs=null,confirmedMs=150000),"lastfm","a",101))
+            val stored=history.read(play.id)!!
+            assertEquals("Artist",stored.artist);assertEquals("Title",stored.title)
+            assertEquals("Album",stored.album);assertEquals(300000,stored.durationMs)
+            assertEquals(150000L,stored.confirmedMs);assertEquals(100L,stored.startedMs)
+            assertTrue(history.observe(play.copy(artist="",title=null,album=" ",durationMs=0,confirmedMs=1),"lastfm","b",102))
+            assertEquals(stored,history.read(play.id))
+            assertEquals(2,db.query("SELECT id FROM android_actions WHERE play_id=?",listOf(play.id)).size)
+        } finally { db.connection.close();file.delete() }
+    }
     @Test fun enqueueFailureRollsBackHistoryAndInvalidDataNeverWrites() {
         val file=File.createTempFile("scrobblix-history-", ".db")
         val db=JdbcQueueDriver(DriverManager.getConnection("jdbc:sqlite:${file.absolutePath}"))
