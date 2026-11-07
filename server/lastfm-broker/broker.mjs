@@ -3,6 +3,8 @@ import {safeProviderResponse} from './response.mjs';
 
 const UPSTREAM = 'https://ws.audioscrobbler.com/2.0/';
 const HEX = /^[a-f0-9]{32}$/i;
+// Request tokens are opaque, not signatures or session keys. Strict URL-safe bounded alphabet.
+const REQUEST_TOKEN = /^[A-Za-z0-9]{32}$/;
 const reply = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
 });
@@ -20,7 +22,7 @@ export function validatedParams(input, nowSeconds) {
   if (!fields || Object.keys(input).some(k => k !== 'method' && !fields.includes(k))) throw new Error('invalid');
   const result = {method: input.method};
   if (input.method === 'auth.getSession') {
-    if (!HEX.test(input.token ?? '')) throw new Error('invalid');
+    if (!REQUEST_TOKEN.test(input.token ?? '')) throw new Error('invalid');
     result.token = input.token;
   }
   if (input.method.startsWith('track.')) {
@@ -64,35 +66,16 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
     catch { return reply(503,{broker_error:'limiter_unavailable'}); }
     const args={...params,api_key:env.LASTFM_API_KEY};
     const body=new URLSearchParams({...args,api_sig:signature(args,env.LASTFM_API_SECRET),format:'json'});
-    let stage="network",upstreamStatus=0,upstreamType="unknown",schema="unread";
-    const tokenShape=p=>{
-      if(!p || typeof p!=='object' || Array.isArray(p)) return 'not_object';
-      if(p.error!==undefined) return 'provider_error';
-      if(!Object.hasOwn(p,'token')) return 'token_missing';
-      if(typeof p.token!=='string') return 'token_not_string';
-      if(p.token.length!==32) return 'token_wrong_length';
-      return HEX.test(p.token)?'token_hex32':'token_nonhex32';
-    };
     try {
       const response=await fetcher(UPSTREAM,{method:'POST',body,redirect:'manual',signal:AbortSignal.timeout(15000)});
-      upstreamStatus=response.status;
-      const type=(response.headers.get("Content-Type")??"").split(";")[0].trim().toLowerCase();
-      upstreamType=["application/json","text/xml","application/xml","text/html"].includes(type)?type:"other";
-      stage="read";
       if(response.status>=300 && response.status<400) throw new Error("redirect");
-      const raw=await readLimited(response.body,65536);stage="parse";
-      const payload=JSON.parse(raw);stage="schema";
-      if(params.method==='auth.getToken')schema=tokenShape(payload);
+      const payload=JSON.parse(await readLimited(response.body,65536));
       if(!payload || typeof payload!=='object' || Array.isArray(payload)) throw new Error('invalid');
       // Preserve provider semantics; a transport/parse failure is never proof a scrobble was rejected.
       const safe=safeProviderResponse(params.method,payload);
       if(params.method==='auth.getToken' && safe.token)
         safe.authorizationUrl='https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+safe.token;
       return reply(response.status,safe);
-    } catch {
-      // A bounded diagnostic only for starting anonymous browser consent. Never echo response data.
-      const detail=params.method==='auth.getToken'?{diagnostic:{stage,upstreamStatus,upstreamType,schema}}:{};
-      return reply(502,{broker_error:'upstream_outcome_unknown',...detail});
-    }
+    } catch { return reply(502,{broker_error:'upstream_outcome_unknown'}); }
   };
 }

@@ -29,7 +29,7 @@ test('limit, missing configuration and limiter failure fail closed',async()=>{
 });
 test('network ambiguity explicit with no retry',async()=>{
  let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;throw Error('network')}});
- const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnostic:{stage:'network',upstreamStatus:0,upstreamType:'unknown',schema:'unread'}});assert.equal(calls,1);
+ const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown'});assert.equal(calls,1);
 });
 test('oversize upstream response not reflected',async()=>{
  const h=handler({gate:async()=>true,fetcher:async()=>new Response('x'.repeat(65537))});assert.equal((await h(request({method:'auth.getToken'}),env)).status,502);
@@ -92,20 +92,16 @@ test('broker rejection marker is separate from provider API errors and only pre-
  assert.equal(invalid.status,400);assert.deepEqual(await invalid.json(),{broker_error:'invalid_request'});assert.equal(calls,0);
 });
 
-test('anonymous token diagnostic exposes only fixed stage/status/type, never bodies or listening paths',async()=>{
- const h=handler({gate:async()=>true,fetcher:async()=>new Response('synthetic-private-echo',{status:403,headers:{'Content-Type':'text/html; charset=utf-8'}})});
+test('opaque nonhex request tokens accepted, unsafe tokens rejected; no diagnostics remain',async()=>{
+ const token='Zg9x'.repeat(8);
+ const h=handler({gate:async()=>true,fetcher:async()=>Response.json({token})});
  const r=await h(request({method:'auth.getToken'}),env);
- assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnostic:{stage:'parse',upstreamStatus:403,upstreamType:'text/html',schema:'unread'}});
- const track=await h(request({method:'track.scrobble',sk:'c'.repeat(32),artist:'Synthetic',track:'Synthetic',timestamp:1}),env);
- assert.deepEqual(await track.json(),{broker_error:'upstream_outcome_unknown'});
-});
-
-test('token schema diagnostic is a fixed enum, never provider keys or values',async()=>{
- const cases=[ [[], 'not_object'], [{privateEcho:'never-return-this'},'token_missing'], [{token:{private:'never-return-this'}},'token_not_string'], [{token:'never-return-this'},'token_wrong_length'], [{token:'z'.repeat(32)},'token_nonhex32'] ];
- for(const [payload,schema] of cases){
-  const h=handler({gate:async()=>true,fetcher:async()=>Response.json(payload)});
-  const r=await h(request({method:'auth.getToken'}),env);
-  assert.equal(r.status,502);
-  assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnostic:{stage:'schema',upstreamStatus:200,upstreamType:'application/json',schema}});
+ assert.deepEqual(await r.json(),{token,authorizationUrl:'https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+token});
+ assert.equal(validatedParams({method:'auth.getSession',token},0).token,token);
+ for(const bad of ['x'.repeat(31),'x'.repeat(33),'x'.repeat(31)+'&','x'.repeat(31)+' ', 'x'.repeat(31)+'é','x'.repeat(31)+'\n']){
+  assert.throws(()=>validatedParams({method:'auth.getSession',token:bad},0));
+  const reject=handler({gate:async()=>true,fetcher:async()=>Response.json({token:bad})});
+  assert.deepEqual(await (await reject(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
  }
+ assert.throws(()=>validatedParams({method:'track.love',sk:token,artist:'a',track:'b'},0));
 });

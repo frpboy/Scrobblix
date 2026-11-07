@@ -1,4 +1,5 @@
 const HEX=/^[a-f0-9]{32}$/i;
+const REQUEST_TOKEN=/^[A-Za-z0-9]{32}$/;
 const plain=v=>v && typeof v==='object' && !Array.isArray(v);
 const text=(v,max)=>typeof v==='string' && v.length<=max && !/[\x00-\x1f\x7f]/.test(v);
 const invalid=()=>{throw new Error('invalid provider shape');};
@@ -31,7 +32,7 @@ export function safeProviderResponse(method,payload) {
   return {error:Number(error),message:'Last.fm returned an API error'};
  }
  if(method==='auth.getToken') {
-  if(!HEX.test(payload.token??''))return invalid();return {token:payload.token};
+  if(typeof payload.token!=='string' || !REQUEST_TOKEN.test(payload.token))return invalid();return {token:payload.token};
  }
  if(method==='auth.getSession') {
   const s=payload.session;if(!plain(s) || !text(s.name,255) || !s.name.trim() || !HEX.test(s.key??''))return invalid();
