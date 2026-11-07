@@ -145,4 +145,37 @@ class AppRuntimeTest {
         assertThrows(IllegalStateException::class.java) { invalid.beginBrowserAuthorization() }
     }
 
+    @Test fun browserExchangeDiagnosticsNeverExposeUntrustedProviderText() {
+        val sentinel="synthetic-private-echo"
+        val cases=listOf(
+            (403 to org.json.JSONObject().put("error",14).put("message",sentinel)) to "Last.fm rejected the session exchange (HTTP 403, API code 14).",
+            (502 to org.json.JSONObject().put("broker_error","upstream_outcome_unknown").put("debug",sentinel)) to "Connection service could not confirm the Last.fm response. HTTP 502.",
+            (429 to org.json.JSONObject().put("broker_error","limited")) to "Connection service rate limit. HTTP 429.",
+            (200 to org.json.JSONObject().put("session",org.json.JSONObject().put("name",sentinel))) to "Last.fm session response format was invalid."
+        )
+        cases.forEach { (response,expected) ->
+            val api=LastFmApi("0".repeat(32),"1".repeat(32)) {response}
+            try {api.completeBrowserAuthorization(LastFmApi.BrowserAuthorization("a".repeat(32),"https://invalid.example"));fail("Expected failure")}
+            catch(f:LastFmApi.BrowserExchangeFailure) {assertEquals(expected,f.diagnostic);assertFalse(f.toString().contains(sentinel))}
+        }
+    }
+
+    @Test fun sessionKeysAreOpaqueBoundedAsciiNotMd5Signatures() {
+        for(key in listOf("a".repeat(32),"Zg_-".repeat(8),"_".repeat(32),"-".repeat(32))) assertTrue(LastFmApi.validSessionKey(key))
+        for(key in listOf("a".repeat(31),"a".repeat(33),"a".repeat(31)+"\n","+".repeat(32),"/".repeat(32),"é".repeat(32)," ".repeat(32))) assertFalse(LastFmApi.validSessionKey(key))
+    }
+
+    @Test fun browserSessionParserPreservesOpaqueBytesAndRejectsCoercion() {
+        fun api(key:Any)=LastFmApi("a".repeat(32),"b".repeat(32),exchange={
+            200 to org.json.JSONObject().put("session",org.json.JSONObject().put("name","Synthetic").put("key",key))
+        })
+        for(key in listOf("a".repeat(32),"Zg_-".repeat(8))) {
+            assertEquals(key,api(key).completeBrowserAuthorization(LastFmApi.BrowserAuthorization("c".repeat(32),"unused")).sessionKey)
+        }
+        for(key in listOf(org.json.JSONObject.NULL,org.json.JSONArray().put("a".repeat(32)),"a".repeat(32)+"\n",123456789,"+".repeat(32))) {
+            try {api(key).completeBrowserAuthorization(LastFmApi.BrowserAuthorization("c".repeat(32),"unused"));fail("invalid synthetic credential accepted")}
+            catch(_:LastFmApi.BrowserExchangeFailure) { }
+        }
+    }
+
 }

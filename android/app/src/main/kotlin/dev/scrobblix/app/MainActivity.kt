@@ -60,6 +60,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var apiRevision by remember { mutableStateOf(0) }
     var browserAuthorization by remember { mutableStateOf<LastFmApi.BrowserAuthorization?>(null) }
     var browserStartedAt by remember { mutableStateOf(0L) }
+    var browserStatus by remember { mutableStateOf("") }
     var browserFlowNeedsRestart by rememberSaveable { mutableStateOf(false) }
     var apiKey by remember { mutableStateOf("") }
     var apiSecret by remember { mutableStateOf("") }
@@ -210,17 +211,18 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     }
                     if(configured!=null) {
                         if(configured.isBroker) Text("Connect without developer API keys. The Scrobblix connection service handles session keys and track details in transit to Last.fm; local history stays on this device.")
-                        Text("Recommended: authorize Scrobblix in your browser. Your Last.fm password stays on Last.fm; the returned session key is encrypted on this device.")
+                        Text("Authorize in your browser, then manually return to this app Settings and tap Finish browser connection. Last.fm does not return you automatically. Your password stays on Last.fm.")
                         if(browserFlowNeedsRestart && browserAuthorization==null && !busy) Text("The previous browser connection cannot be resumed. No connection is confirmed. Your history and queue are unchanged. Start a new authorization only when you are ready.")
+                        if(browserStatus.isNotBlank()) Text(browserStatus)
                         Button(enabled=!busy,onClick={
-                            busy=true;browserAuthorization=null;browserFlowNeedsRestart=false
+                            busy=true;browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Opening Last.fm authorization…"
                             scope.launch {
                                 message=try {
                                     val authorization=withContext(Dispatchers.IO) { configured.beginBrowserAuthorization() }
                                     browserAuthorization=authorization;browserStartedAt=android.os.SystemClock.elapsedRealtime();browserFlowNeedsRestart=true
                                     browserLauncher(authorization.url)
-                                    "Approve access on Last.fm, return here and finish connecting within 60 minutes."
-                                } catch(_:Exception) { browserAuthorization=null;"Could not open Last.fm authorization. Check your browser/network and try again." }
+                                    "Approve access on Last.fm, return here and finish connecting within 60 minutes.".also {browserStatus=it}
+                                } catch(_:Exception) { browserAuthorization=null;"Could not open Last.fm authorization. Check your browser/network and try again.".also {browserStatus=it} }
                                 busy=false
                             }
                         }) { Text("Authorize in browser") }
@@ -228,16 +230,19 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         if(browserAuthorization!=null) Button(enabled=!busy,onClick={
                             val authorization=browserAuthorization!!
                             if(android.os.SystemClock.elapsedRealtime()-browserStartedAt>=3600000) {
-                                browserAuthorization=null;browserFlowNeedsRestart=true;message="Authorization expired. No connection is confirmed. Start a new authorization when ready."
+                                browserAuthorization=null;browserFlowNeedsRestart=true;message="Authorization expired. No connection is confirmed. Start a new authorization when ready.";browserStatus=message
                             } else {
                                 // A request can consume the token even when its response is lost.
                                 // Never offer an automatic retry with this one-use token.
-                                busy=true;browserAuthorization=null
-                                scope.launch {
+                                busy=true;browserAuthorization=null;browserFlowNeedsRestart=false;browserStatus="Finishing browser connection…"
+                                scope.launch { try {
                                     val login=try {
                                         withContext(Dispatchers.IO) { configured.completeBrowserAuthorization(authorization) }
-                                    } catch(_:Exception) {
-                                        message="Could not confirm the Last.fm session exchange. The token will not be retried. Your history and queue are unchanged; no new connection is confirmed."
+                                    } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+                                    catch(failure:Exception) {
+                                        val detail=(failure as? LastFmApi.BrowserExchangeFailure)?.diagnostic ?: "Session exchange outcome is unavailable."
+                                        message="$detail The token will not be retried. No new connection is confirmed. Your history and queue are unchanged."
+                                        browserStatus=message
                                         null
                                     }
                                     if(login!=null) {
@@ -250,11 +255,11 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                             "Last.fm returned a session, but saving the local connection failed. Do not assume it is connected. Your history and queue are preserved; this token will not be retried."
                                         }
                                     }
-                                    busy=false
-                                }
+                                    browserStatus=message
+                                } finally {busy=false} }
                             }
                         }) { Text("Finish browser connection") }
-                        if(browserAuthorization==null) Text("Last.fm browser approval does not finish the connection inside Scrobblix. Return here and tap Finish browser connection; the account is connected only after this step succeeds.")
+                        if(browserAuthorization==null && browserStatus.isBlank() && !browserFlowNeedsRestart) Text("Browser approval alone does not save a session. Start authorization here; after approval, return to Settings and use the Finish browser connection button that appears.")
                         if(configured.isBroker) Text("The Scrobblix connection service handles session keys and track details in transit to Last.fm. Local history stays on this device. Your password stays on Last.fm.")
                         if(!configured.isBroker) {
                         Text("Alternative: sign in directly below.")
@@ -286,7 +291,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 Text("Privacy: app backup is disabled. Uninstalling removes this device's history and queued work. Disconnect does not delete history or revoke the remote session.")
             }
         }
-        if(message.isNotBlank()) Text(message)
+        if(message.isNotBlank() && !(tab=="Settings" && browserStatus==message)) Text(message)
         Spacer(Modifier.height(24.dp))
     }
 }

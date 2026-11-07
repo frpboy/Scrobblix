@@ -163,7 +163,7 @@ class AppStore(val context:Context,
     enum class ConnectState { Committed, NotCommitted, StorageUnavailable, InvalidInput, StageFailed }
     data class ConnectOutcome(val state:ConnectState,val message:String)
     fun connect(name:String,key:String):ConnectOutcome=synchronized(authorityCoordinator) {
-        if(!ConnectionSchema.validAccount(name) || !Regex("[a-fA-F0-9]{32}").matches(key))
+        if(!ConnectionSchema.validAccount(name) || !LastFmApi.validSessionKey(key))
             return@synchronized ConnectOutcome(ConnectState.InvalidInput,"The returned account/session format is invalid. No local connection was changed.")
         val generation=java.util.UUID.randomUUID().toString()
         val bytes=key.toByteArray(Charsets.UTF_8)

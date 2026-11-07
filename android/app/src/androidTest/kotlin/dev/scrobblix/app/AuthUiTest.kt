@@ -48,7 +48,7 @@ class AuthUiTest {
         val api=LastFmApi("0".repeat(32),"1".repeat(32)) { params ->
             assertFalse(params.containsKey("password"))
             if(params["method"]=="auth.getToken") 200 to JSONObject().put("token","a".repeat(32))
-            else 200 to JSONObject().put("session",JSONObject().put("name","BrowserSynthetic").put("key","c".repeat(32)))
+            else 200 to JSONObject().put("session",JSONObject().put("name","BrowserSynthetic").put("key","Zg_-".repeat(8)))
         }
         try {
             // Fake launcher captures URL, never opens browser or contacts provider.
@@ -62,6 +62,11 @@ class AuthUiTest {
             ui.waitUntil(10000) { store.account()=="BrowserSynthetic" }
             ui.waitUntil(10000) { ui.onAllNodesWithText("Connected as BrowserSynthetic").fetchSemanticsNodes().size==1 }
             ui.onNodeWithText("Connected as BrowserSynthetic").performScrollTo().assertIsDisplayed()
+            val credential=store.resolveCredential(store.authority.snapshot())
+            assertTrue(credential is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)
+            if(credential is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)try {
+                assertArrayEquals("Zg_-".repeat(8).toByteArray(),credential.secret)
+            }finally{credential.secret.fill(0)}
             assertFalse(store.tracking())
         } finally { store.disconnect() }
     }
@@ -83,8 +88,11 @@ class AuthUiTest {
             ui.waitUntil(10000) { launched }
             ui.onNodeWithText("Finish browser connection").performScrollTo().performClick()
             ui.waitUntil(10000) { exchanges.get()==1 }
-            ui.waitUntil(10000) { ui.onAllNodesWithText("Could not confirm the Last.fm session exchange. The token will not be retried. Your history and queue are unchanged; no new connection is confirmed.").fetchSemanticsNodes().size==1 }
+            ui.waitUntil(10000) { ui.onAllNodesWithText("Network or response-format failure during session exchange. The token will not be retried. No new connection is confirmed. Your history and queue are unchanged.").fetchSemanticsNodes().size==1 }
             ui.onNodeWithText("Finish browser connection").assertDoesNotExist()
+            ui.onNodeWithText("The previous browser connection cannot be resumed.",substring=true).assertDoesNotExist()
+            // Adjacent status, not the generic footer copy, must be reachable with the button.
+            ui.onAllNodesWithText("Network or response-format failure during session exchange.",substring=true)[0].performScrollTo().assertIsDisplayed()
             assertNull(store.account());assertFalse(store.tracking());assertEquals(1,exchanges.get())
         } finally { store.disconnect() }
     }
