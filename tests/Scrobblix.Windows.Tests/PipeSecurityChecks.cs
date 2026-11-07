@@ -147,6 +147,10 @@ internal static class PipeSecurityChecks
             if (cleanupStagedHost)
             {
                 TryDelete(stagedHost);
+                // Remove the staged-host directory tree we created so later CI steps that
+                // require a fresh profile (no %LOCALAPPDATA%\Scrobblix) still qualify.
+                TryRemoveEmptyDirectory(stagedHostDir);
+                TryRemoveEmptyDirectory(Path.Combine(localAppData, "Scrobblix"));
             }
 
             if (positiveControlAvailable && createdVendorDir)
