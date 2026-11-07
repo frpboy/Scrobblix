@@ -38,7 +38,7 @@ Version tags trigger the automated [Preview Release workflow](.github/workflows/
 | Local storage | SQLite, encrypted secrets in Windows Credential Locker |
 | Architecture | Clean Architecture with explicit domain, application, infrastructure, and presentation boundaries |
 | Distribution | Signed MSIX/App Installer first; Microsoft Store and WinGet later |
-| License | MIT for Scrobblix source code; third-party data remains governed by its own terms |
+| License | Apache-2.0 for Scrobblix source code; third-party data remains governed by its own terms |
 
 The earlier Python/PySide6 concept remains viable for a prototype. It is not the selected production baseline because Scrobblix depends heavily on Windows-native media, notifications, packaging, credential storage, app lifecycle, and Fluent UI integration.
 
