@@ -5,7 +5,6 @@ import android.content.ComponentName
 import android.content.Intent
 import android.os.Bundle
 import android.provider.Settings
-import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -25,8 +24,6 @@ import kotlinx.coroutines.withContext
 class MainActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        // Auth input, history and app-switcher snapshots are private by default.
-        window.addFlags(WindowManager.LayoutParams.FLAG_SECURE)
         enableEdgeToEdge()
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { AppScreen((application as ScrobblixApp).store) } } }
     }
@@ -100,6 +97,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
             "Settings" -> {
                 Text("Last.fm account",style=MaterialTheme.typography.headlineSmall)
                 Text("Scrobbling sends artist, track, album, duration and play time to Last.fm only after you connect an account and enable tracking. Local history stays on this device. No analytics or cloud sync.")
+                Text("Screenshots and recent-app previews are enabled. They may show your Last.fm account name, listening history and settings; keep captures private.")
                 if(account!=null) {
                     Text("Connected as $account")
                     Button(onClick={scope.launch { withContext(Dispatchers.IO) { store.disconnect() };account=null;tracking=false;message="Disconnected locally. History and queue are preserved. Revoke the session in Last.fm settings if needed." }}) { Text("Disconnect Last.fm") }
@@ -155,6 +153,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                 }
                             }
                         }) { Text("Finish browser connection") }
+                        Text("Last.fm browser approval does not finish the connection inside Scrobblix. Return here and tap Finish browser connection; the account is connected only after this step succeeds.")
                         if(configured.isBroker) Text("The Scrobblix connection service handles session keys and track details in transit to Last.fm. Local history stays on this device. Your password stays on Last.fm.")
                         if(!configured.isBroker) {
                         Text("Alternative: sign in directly below.")
