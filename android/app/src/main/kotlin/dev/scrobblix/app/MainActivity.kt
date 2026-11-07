@@ -125,6 +125,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         }
                     }
                     else {
+                        if(configured.isBroker) Text("Connect without developer API keys. The Scrobblix connection service handles session keys and track details in transit to Last.fm; local history stays on this device.")
                         Text("Recommended: authorize Scrobblix in your browser. Your Last.fm password stays on Last.fm; the returned session key is encrypted on this device.")
                         Button(enabled=!busy,onClick={
                             busy=true;browserAuthorization=null
@@ -154,6 +155,8 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                 }
                             }
                         }) { Text("Finish browser connection") }
+                        if(configured.isBroker) Text("The Scrobblix connection service handles session keys and track details in transit to Last.fm. Local history stays on this device. Your password stays on Last.fm.")
+                        if(!configured.isBroker) {
                         Text("Alternative: sign in directly below.")
                         Text("Sign in over HTTPS using Last.fm's mobile authentication. Your password is sent to Last.fm once and is not saved. The session key is encrypted with Android Keystore.")
                         OutlinedTextField(value=username,onValueChange={username=it},label={Text("Last.fm username")},singleLine=true,modifier=Modifier.fillMaxWidth(),enabled=!busy)
@@ -166,6 +169,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                             } catch(_:Exception) { "Could not connect. Check your credentials or network and try again." }
                             account=store.account();busy=false }
                         }) { Text(if(busy) "Connecting…" else "Connect Last.fm") }
+                        }
                     }
                 }
                 Text("Powered by AudioScrobbler. Last.fm is an independent service.")

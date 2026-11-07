@@ -10,15 +10,32 @@ import javax.net.ssl.HttpsURLConnection
 
 /** Last.fm documented mobile auth. No password persistence, request logging or HTTP fallback. */
 class LastFmApi(private val apiKey:String,private val apiSecret:String,
+    private val brokerEndpoint:String?=null,
     private val exchange:((Map<String,String>)->Pair<Int,JSONObject>)?=null):ScrobbleTransport {
+    val isBroker:Boolean get()=brokerEndpoint!=null
+    init { if(brokerEndpoint!=null) validateBrokerEndpoint(brokerEndpoint) }
     companion object {
+        internal fun validateBrokerEndpoint(endpoint:String) {
+            val uri=java.net.URI(endpoint)
+            require(uri.scheme=="https" && uri.host!=null && uri.host!="localhost" && uri.host!="127.0.0.1" && uri.host!="::1" &&
+                uri.rawUserInfo==null && uri.rawQuery==null && uri.rawFragment==null && uri.path=="/v1/lastfm" && uri.port==-1)
+        }
+        internal fun brokerPayload(values:Map<String,String>):JSONObject {
+            val json=JSONObject()
+            values.forEach { (key,value)->json.put(key,if(key=="timestamp" || key=="duration") value.toLong() else value) }
+            return json
+        }
+
         fun configured(context:Context):LastFmApi? {
             // Supplied as private generated resources for a registered API application.
             fun value(name:String):String { val id=context.resources.getIdentifier(name,"string",context.packageName)
                 return if(id==0) "" else context.getString(id) }
             val saved=ApiConfigurationStore(context).read()
             val key=saved?.first ?: value("lastfm_api_key");val secret=saved?.second ?: value("lastfm_api_secret")
-            return if(key.matches(Regex("[a-fA-F0-9]{32}")) && secret.matches(Regex("[a-fA-F0-9]{32}"))) LastFmApi(key,secret) else null
+            if(key.matches(Regex("[a-fA-F0-9]{32}")) && secret.matches(Regex("[a-fA-F0-9]{32}"))) return LastFmApi(key,secret)
+            // Public endpoint only. No app key or secret is bundled for broker mode.
+            val broker=value("lastfm_broker_endpoint")
+            return if(broker.isNotBlank()) try { LastFmApi("","",broker) } catch(_:Exception) { null } else null
         }
         internal fun signature(values:Map<String,String>,secret:String):String = MessageDigest.getInstance("MD5")
             .digest((values.toSortedMap().entries.joinToString("") { it.key+it.value }+secret).toByteArray(Charsets.UTF_8))
@@ -36,7 +53,13 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         check(status in 200..299 && !body.has("error")) { "Last.fm authorization could not start." }
         val token=body.optString("token")
         check(token.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm authorization response was invalid." }
-        return BrowserAuthorization(token,"https://www.last.fm/api/auth/?api_key=$apiKey&token=$token")
+        val url=if(isBroker) body.optString("authorizationUrl") else "https://www.last.fm/api/auth/?api_key=$apiKey&token=$token"
+        val uri=java.net.URI(url)
+        check(uri.scheme=="https" && uri.host=="www.last.fm" && uri.rawUserInfo==null && uri.port==-1 && uri.path=="/api/auth/" && uri.rawFragment==null) { "Invalid authorization destination." }
+        val fields=uri.rawQuery?.split("&")?.map { it.split("=",limit=2) } ?: emptyList()
+        check(fields.size==2 && fields.all { it.size==2 } && fields.count { it[0]=="token" && it[1]==token }==1 &&
+            fields.count { it[0]=="api_key" && it[1].matches(Regex("[a-fA-F0-9]{32}")) }==1) { "Invalid authorization parameters." }
+        return BrowserAuthorization(token,url)
     }
     fun completeBrowserAuthorization(authorization:BrowserAuthorization):Login {
         val (status,body)=request(mapOf("method" to "auth.getSession","token" to authorization.token))
@@ -50,6 +73,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         return Login(name,key)
     }
     fun login(username:String,password:String):Login {
+        check(!isBroker) { "Use browser authorization with the connection service." }
         require(username.isNotBlank() && username.length<=255 && password.isNotEmpty())
         val (status,body)=request(mapOf("method" to "auth.getMobileSession","username" to username,"password" to password))
         check(status in 200..299 && !body.has("error")) { "Last.fm sign-in failed." }
@@ -57,14 +81,14 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
     }
     private fun request(values:Map<String,String>):Pair<Int,JSONObject> {
         val args=values+mapOf("api_key" to apiKey)
-        val params=args+mapOf("api_sig" to signature(args,apiSecret),"format" to "json")
+        val params=if(isBroker) values else args+mapOf("api_sig" to signature(args,apiSecret),"format" to "json")
         exchange?.let { return it(params) }
-        val bytes=params.entries.joinToString("&") { URLEncoder.encode(it.key,"UTF-8")+"="+URLEncoder.encode(it.value,"UTF-8") }.toByteArray(Charsets.UTF_8)
-        val connection=URL("https://ws.audioscrobbler.com/2.0/").openConnection() as HttpsURLConnection
+        val bytes=(if(isBroker) brokerPayload(params).toString() else params.entries.joinToString("&") { URLEncoder.encode(it.key,"UTF-8")+"="+URLEncoder.encode(it.value,"UTF-8") }).toByteArray(Charsets.UTF_8)
+        val connection=URL(brokerEndpoint ?: "https://ws.audioscrobbler.com/2.0/").openConnection() as HttpsURLConnection
         try {
             connection.requestMethod="POST";connection.instanceFollowRedirects=false
             connection.connectTimeout=15000;connection.readTimeout=20000;connection.doOutput=true
-            connection.setRequestProperty("Content-Type","application/x-www-form-urlencoded; charset=UTF-8")
+            connection.setRequestProperty("Content-Type",if(isBroker) "application/json" else "application/x-www-form-urlencoded; charset=UTF-8")
             connection.setFixedLengthStreamingMode(bytes.size)
             connection.outputStream.use { it.write(bytes) }
             val status=connection.responseCode
@@ -89,6 +113,15 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         return parse(type,status,body)
     }
     internal fun parse(type:ActionType,status:Int,body:JSONObject):ProviderResult {
+        if(isBroker && body.has("broker_error")) {
+            if(body.length()!=1) return ProviderResult(false,"provider.submission_outcome_unknown")
+            return when(status to body.optString("broker_error")) {
+                429 to "limited" -> ProviderResult(false,"provider.rate_limited",true)
+                503 to "not_configured",503 to "limiter_unavailable" -> ProviderResult(false,"provider.temporary_unavailable",true)
+                400 to "invalid_request" -> ProviderResult(false,"provider.rejected")
+                else -> ProviderResult(false,"provider.submission_outcome_unknown")
+            }
+        }
         val code=body.opt("error")
         if(code is Int) return when(code) {
             9 -> ProviderResult(false,"provider.auth.invalid_session")
