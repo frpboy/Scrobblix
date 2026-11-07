@@ -1,5 +1,5 @@
 const HEX=/^[a-f0-9]{32}$/i;
-const REQUEST_TOKEN=/^[A-Za-z0-9]{32}$/;
+const REQUEST_TOKEN=/^[A-Za-z0-9_-]{32}$/;
 const plain=v=>v && typeof v==='object' && !Array.isArray(v);
 const text=(v,max)=>typeof v==='string' && v.length<=max && !/[\x00-\x1f\x7f]/.test(v);
 const invalid=()=>{throw new Error('invalid provider shape');};

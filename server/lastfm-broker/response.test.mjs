@@ -24,6 +24,6 @@ test('love success must be exact empty object, never fabricated from unknown res
 });
 
 test('opaque request tokens do not relax session keys',()=>{
- assert.deepEqual(safe('auth.getToken',{token:'Zg9x'.repeat(8)}),{token:'Zg9x'.repeat(8)});
- assert.throws(()=>safe('auth.getSession',{session:{name:'Synthetic',key:'Zg9x'.repeat(8)}}));
+ assert.deepEqual(safe('auth.getToken',{token:'Zg_-'.repeat(8)}),{token:'Zg_-'.repeat(8)});
+ assert.throws(()=>safe('auth.getSession',{session:{name:'Synthetic',key:'Zg_-'.repeat(8)}}));
 });

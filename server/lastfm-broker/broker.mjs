@@ -4,7 +4,7 @@ import {safeProviderResponse} from './response.mjs';
 const UPSTREAM = 'https://ws.audioscrobbler.com/2.0/';
 const HEX = /^[a-f0-9]{32}$/i;
 // Request tokens are opaque, not signatures or session keys. Strict URL-safe bounded alphabet.
-const REQUEST_TOKEN = /^[A-Za-z0-9]{32}$/;
+const REQUEST_TOKEN = /^[A-Za-z0-9_-]{32}$/;
 const reply = (status, value) => new Response(JSON.stringify(value), {
   status, headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff' }
 });
@@ -66,36 +66,16 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
     catch { return reply(503,{broker_error:'limiter_unavailable'}); }
     const args={...params,api_key:env.LASTFM_API_KEY};
     const body=new URLSearchParams({...args,api_sig:signature(args,env.LASTFM_API_SECRET),format:'json'});
-    let diagnosis='network';
     try {
       const response=await fetcher(UPSTREAM,{method:'POST',body,redirect:'manual',signal:AbortSignal.timeout(15000)});
-      diagnosis='redirect';
       if(response.status>=300 && response.status<400) throw new Error("redirect");
-      diagnosis='read';const raw=await readLimited(response.body,65536);
-      diagnosis='parse';const payload=JSON.parse(raw);
-      diagnosis='not_object';
-      if(params.method==='auth.getToken' && payload && typeof payload==='object' && !Array.isArray(payload)) {
-        if(payload.error!==undefined) diagnosis='invalid_provider_error';
-        else if(!Object.hasOwn(payload,'token')) diagnosis='token_missing';
-        else if(typeof payload.token!=='string') diagnosis='token_not_string';
-        else if(payload.token.length!==32) diagnosis='token_wrong_length';
-        else if(/^[A-Za-z0-9]{32}$/.test(payload.token)) diagnosis='token_alnum32';
-        else if(/^[A-Za-z0-9_-]{32}$/.test(payload.token)) diagnosis='token_urlsafe32';
-        else if(/[\x00-\x20\x7f]/.test(payload.token)) diagnosis='token_space_or_control';
-        else if(/[^\x21-\x7e]/.test(payload.token)) diagnosis='token_nonascii';
-        else diagnosis='token_other_ascii32';
-      }
+      const payload=JSON.parse(await readLimited(response.body,65536));
       if(!payload || typeof payload!=='object' || Array.isArray(payload)) throw new Error('invalid');
       // Preserve provider semantics; a transport/parse failure is never proof a scrobble was rejected.
       const safe=safeProviderResponse(params.method,payload);
-      diagnosis='authorization_url';
       if(params.method==='auth.getToken' && safe.token)
         safe.authorizationUrl='https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+safe.token;
-      diagnosis='reply';
       return reply(response.status,safe);
-    } catch {
-      const detail=params.method==='auth.getToken'?{diagnosis}:{};
-      return reply(502,{broker_error:'upstream_outcome_unknown',...detail});
-    }
+    } catch { return reply(502,{broker_error:'upstream_outcome_unknown'}); }
   };
 }

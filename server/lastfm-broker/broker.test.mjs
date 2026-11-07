@@ -29,7 +29,7 @@ test('limit, missing configuration and limiter failure fail closed',async()=>{
 });
 test('network ambiguity explicit with no retry',async()=>{
  let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;throw Error('network')}});
- const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnosis:'network'});assert.equal(calls,1);
+ const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown'});assert.equal(calls,1);
 });
 test('oversize upstream response not reflected',async()=>{
  const h=handler({gate:async()=>true,fetcher:async()=>new Response('x'.repeat(65537))});assert.equal((await h(request({method:'auth.getToken'}),env)).status,502);
@@ -93,7 +93,7 @@ test('broker rejection marker is separate from provider API errors and only pre-
 });
 
 test('opaque nonhex request tokens accepted, unsafe tokens rejected; no diagnostics remain',async()=>{
- const token='Zg9x'.repeat(8);
+ const token='Zg_-'.repeat(8);
  const h=handler({gate:async()=>true,fetcher:async()=>Response.json({token})});
  const r=await h(request({method:'auth.getToken'}),env);
  assert.deepEqual(await r.json(),{token,authorizationUrl:'https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+token});
@@ -101,19 +101,29 @@ test('opaque nonhex request tokens accepted, unsafe tokens rejected; no diagnost
  for(const bad of ['x'.repeat(31),'x'.repeat(33),'x'.repeat(31)+'&','x'.repeat(31)+' ', 'x'.repeat(31)+'é','x'.repeat(31)+'\n']){
   assert.throws(()=>validatedParams({method:'auth.getSession',token:bad},0));
   const reject=handler({gate:async()=>true,fetcher:async()=>Response.json({token:bad})});
-  assert.deepEqual(await (await reject(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown',diagnosis:bad.length!==32?'token_wrong_length':/[\x00-\x20\x7f]/.test(bad)?'token_space_or_control':/[^\x21-\x7e]/.test(bad)?'token_nonascii':'token_other_ascii32'});
+  assert.deepEqual(await (await reject(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
  }
  assert.throws(()=>validatedParams({method:'track.love',sk:token,artist:'a',track:'b'},0));
 });
 
-test('consolidated token failure diagnosis is fixed, value-free and absent on listening errors',async()=>{
- for(const [payload,diagnosis] of [ [null,'not_object'],[[],'not_object'],[{},'token_missing'],[{error:0},'invalid_provider_error'],[{error:{private:'echo'}},'invalid_provider_error'],[{token:5},'token_not_string'],[{token:'x'},'token_wrong_length'],[{token:'Zg_-'.repeat(8)},'token_urlsafe32'],[{token:'+'.repeat(32)},'token_other_ascii32'],[{token:'é'.repeat(32)},'token_nonascii'],[{token:' '.repeat(32)},'token_space_or_control'] ]) {
-  const h=handler({gate:async()=>true,fetcher:async()=>Response.json(payload)});
-  assert.deepEqual(await (await h(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown',diagnosis});
-  assert.deepEqual(await (await h(request({method:'track.love',sk:'c'.repeat(32),artist:'a',track:'b'}),env)).json(),payload && !Array.isArray(payload) && Object.keys(payload).length===0?{}:{broker_error:'upstream_outcome_unknown'});
+// Full synthetic envelopes: no real session exchange or listening request.
+test('URL-safe request token round trip stays bounded; failures have no diagnostics',async()=>{
+ for(const token of ['Zg_-'.repeat(8),'_'.repeat(32),'-'.repeat(32)]) {
+  let calls=0;
+  const h=handler({gate:async()=>true,fetcher:async(url,options)=>{
+   calls++;assert.equal(options.body.get('token'),token);
+   assert.match(options.body.get('api_sig'),/^[a-f0-9]{32}$/);
+   return Response.json({session:{name:'Synthetic',key:'c'.repeat(32),subscriber:0,debug:'private'},debug:'private'});
+  }});
+  const r=await h(request({method:'auth.getSession',token}),env);
+  assert.equal(r.status,200);assert.deepEqual(await r.json(),{session:{name:'Synthetic',key:'c'.repeat(32),subscriber:0}});assert.equal(calls,1);
  }
- for(const [response,diagnosis] of [[new Response('bad-json'),'parse'],[new Response('',{status:302}),'redirect'],[new Response('x'.repeat(65537)),'read']]) {
-  const h=handler({gate:async()=>true,fetcher:async()=>response});
-  assert.deepEqual(await (await h(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown',diagnosis});
+ for(const payload of [null,[],{}, {error:0},{error:{private:'echo'}},{token:5},{token:'x'},{token:'+'.repeat(32)},{token:'é'.repeat(32)},{token:' '.repeat(32)}]) {
+  const h=handler({gate:async()=>true,fetcher:async()=>Response.json(payload)});
+  assert.deepEqual(await (await h(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
+ }
+ for(const body of ['bad-json','x'.repeat(65537)]) {
+  const h=handler({gate:async()=>true,fetcher:async()=>new Response(body)});
+  assert.deepEqual(await (await h(request({method:'auth.getToken'}),env)).json(),{broker_error:'upstream_outcome_unknown'});
  }
 });
