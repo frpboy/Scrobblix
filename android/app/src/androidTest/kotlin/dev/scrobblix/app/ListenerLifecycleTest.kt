@@ -72,6 +72,10 @@ class ListenerLifecycleTest {
             assertEquals(revoked,store.sql.query("SELECT SUM(confirmed_ms) AS total FROM android_plays WHERE title=?",listOf(title)))
         } finally {
             store.disconnect();session.release();access(false)
+            if(android.os.Build.VERSION.SDK_INT<28) {
+                if(originalListeners.isEmpty()) shell("settings delete secure enabled_notification_listeners")
+                else shell("settings put secure enabled_notification_listeners '$originalListeners'")
+            }
             // Only exact synthetic-test rows. No production-history cleanup route.
             store.sql.execute("DELETE FROM android_actions WHERE account=?",listOf("synthetic-runtime"))
             store.sql.execute("DELETE FROM android_plays WHERE title=?",listOf(title))
