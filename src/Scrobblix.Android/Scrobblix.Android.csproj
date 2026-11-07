@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net10.0-android</TargetFramework>
+    <SupportedOSPlatformVersion>26</SupportedOSPlatformVersion>
+    <Description>Android platform adapters for Scrobblix. Not a distributable application.</Description>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
+  </ItemGroup>
+</Project>

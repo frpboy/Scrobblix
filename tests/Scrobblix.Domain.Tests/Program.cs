@@ -1,3 +1,4 @@
+using Scrobblix.Application.Android;
 using Scrobblix.Domain.Eligibility;
 using Scrobblix.Domain.Diagnostics;
 using Scrobblix.Domain.History;
@@ -356,6 +357,28 @@ Assert(exhaustedLifecycle.Current == ProviderActionState.RetryExhausted
     "RetryExhausted is a supported lifecycle completion and clears its lease.");
 
 var sourceEventKey = new SourceEventKey("gsmtc", "session-1", 42, "event-42");
+var androidSnapshotNow = new DateTimeOffset(2026, 11, 6, 17, 30, 0, TimeSpan.Zero);
+var androidSnapshotInput = new MediaSnapshot("org.example.player", "artist", "title", "album", 180000, 30000, MediaState.Playing);
+var androidSnapshotMapper = new MediaSessionSnapshotMapper("instance-a");
+var androidSnapshotFirst = androidSnapshotMapper.Map(androidSnapshotInput, androidSnapshotNow)!;
+Assert(androidSnapshotFirst.SourceName == "android-media-session", "Explicit source provenance");
+Assert(androidSnapshotFirst.ApplicationId == androidSnapshotInput.PackageName, "Player identity preserved");
+Assert(androidSnapshotFirst.Artist == "artist" && androidSnapshotFirst.Title == "title", "Structured metadata preserved");
+Assert(androidSnapshotFirst.DurationMilliseconds == 180000 && androidSnapshotFirst.PositionMilliseconds == 30000, "No position extrapolation");
+Assert(androidSnapshotFirst.CapturedAtUtc == androidSnapshotNow && androidSnapshotFirst.ObservedAtUtc == androidSnapshotNow, "Local receipt clock, not untrusted player timestamp");
+Assert(androidSnapshotFirst.PlaybackState == PlayState.Playing, "Playing mapping");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { State = MediaState.Paused }, androidSnapshotNow)!.PlaybackState == PlayState.Paused, "Paused mapping");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { State = MediaState.Stopped }, androidSnapshotNow)!.PlaybackState == PlayState.Ended, "Stopped mapping");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { State = MediaState.Buffering }, androidSnapshotNow)!.PlaybackState == PlayState.Unknown, "Buffering never counts as confirmed playing");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { DurationMs = long.MaxValue, PositionMs = -1 }, androidSnapshotNow) is { DurationMilliseconds: null, PositionMilliseconds: null }, "Out-of-range fields not overflowed or invented");
+Assert(androidSnapshotMapper.Map(null, androidSnapshotNow) is null, "Listener/session disconnect does not fabricate end or listening time");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { PackageName = "" }, androidSnapshotNow) is null, "No unidentified player observation");
+Assert(androidSnapshotFirst.SourceEventKey != androidSnapshotMapper.Map(androidSnapshotInput, androidSnapshotNow)!.SourceEventKey, "Unique sequence across callbacks");
+Assert(androidSnapshotFirst.SourceEventKey != new MediaSessionSnapshotMapper("instance-b").Map(androidSnapshotInput, androidSnapshotNow)!.SourceEventKey, "Collector restart identity distinct");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { Title = new string('x', 1025) }, androidSnapshotNow) is null, "Oversized session metadata rejected before persistence");
+Assert(androidSnapshotMapper.Map(androidSnapshotInput with { Artist = "bad\ntext" }, androidSnapshotNow) is null, "Control characters rejected before persistence");
+PlaybackObservationValidator.Validate(androidSnapshotFirst);
+
 var observation = new PlayObservation(
     sourceEventKey,
     new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
