@@ -109,7 +109,9 @@ class AuthUiTest {
             // Drain the launch coroutine/recomposition before taking the saved-state snapshot.
             ui.waitForIdle()
             restoration.emulateSavedInstanceStateRestore()
-            ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
+            // The saved scroll offset can leave navigation above the viewport.
+            ui.onNodeWithText("Settings",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText("Last.fm account").assertExists()
             ui.waitForIdle()
             println("RESTORED_SYNTHETIC_UI="+ui.onRoot(useUnmergedTree=true).printToString())
             ui.onNodeWithText("Finish browser connection").assertDoesNotExist()
