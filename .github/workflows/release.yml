@@ -79,11 +79,11 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.ref_name }}
-          name: ${{ github.ref_name == 'v0.1.0-beta.4' && 'Scrobblix v0.1.0-beta.4 - Windows x64 startup fix (unsigned preview)' || format('Scrobblix {0} - Preview', github.ref_name) }}
+          name: ${{ github.ref_name == 'v0.1.0-beta.5' && 'Scrobblix v0.1.0-beta.5 - Local storage compatibility (unsigned preview)' || github.ref_name == 'v0.1.0-beta.4' && 'Scrobblix v0.1.0-beta.4 - Windows x64 startup fix (unsigned preview)' || format('Scrobblix {0} - Preview', github.ref_name) }}
           prerelease: true
           make_latest: "false"
-          generate_release_notes: ${{ github.ref_name != 'v0.1.0-beta.4' }}
-          body_path: ${{ github.ref_name == 'v0.1.0-beta.4' && 'docs/releases/v0.1.0-beta.4.md' || 'docs/releases/preview-default.md' }}
+          generate_release_notes: ${{ github.ref_name != 'v0.1.0-beta.4' && github.ref_name != 'v0.1.0-beta.5' }}
+          body_path: ${{ github.ref_name == 'v0.1.0-beta.5' && 'docs/releases/v0.1.0-beta.5.md' || github.ref_name == 'v0.1.0-beta.4' && 'docs/releases/v0.1.0-beta.4.md' || 'docs/releases/preview-default.md' }}
           files: release-assets/*
           fail_on_unmatched_files: true
         env:
