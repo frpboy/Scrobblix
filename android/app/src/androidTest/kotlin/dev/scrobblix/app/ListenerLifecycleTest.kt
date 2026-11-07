@@ -39,7 +39,7 @@ class ListenerLifecycleTest {
             Thread.sleep(2500)
             assertTrue(store.sql.query("SELECT id FROM android_plays WHERE title=?",listOf(title)).isEmpty())
             store.setTracking(true)
-            until(45000) { store.sql.query("SELECT id FROM android_actions WHERE account=? AND state='Pending'",listOf("synthetic-runtime")).isNotEmpty() }
+            until(45000) { store.sql.query("SELECT id FROM android_actions WHERE account=? AND type='Scrobble' AND state='Pending'",listOf("synthetic-runtime")).isNotEmpty() }
             assertTrue(store.sql.query("SELECT confirmed_ms FROM android_plays WHERE title=?",listOf(title)).any { it.getValue("confirmed_ms")!!.toLong()>=30000 })
             store.setTracking(false)
             Thread.sleep(2500)

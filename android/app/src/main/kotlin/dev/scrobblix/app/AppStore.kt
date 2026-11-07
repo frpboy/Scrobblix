@@ -59,8 +59,12 @@ class AppStore(val context:Context):java.io.Closeable {
         account()?.let { secrets.remove("lastfm",it) }
         preferences.edit().remove("account").commit()
     }
-    fun schedule() {
+    private var lastScheduledTick=Long.MIN_VALUE
+    @Synchronized fun schedule() {
         if(!tracking() || account()==null) return
+        val tick=android.os.SystemClock.elapsedRealtime()
+        if(lastScheduledTick!=Long.MIN_VALUE && tick-lastScheduledTick<30000) return
+        lastScheduledTick=tick
         val constraints=Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
         WorkManager.getInstance(context).enqueueUniqueWork("delivery",ExistingWorkPolicy.KEEP,
             OneTimeWorkRequestBuilder<DeliveryWorker>().setConstraints(constraints).build())
@@ -82,7 +86,14 @@ class PlaybackListener:ScrobblixMediaListener() {
     override fun onDestroy() { store.preferences.unregisterOnSharedPreferenceChangeListener(changes);super.onDestroy() }
     override fun currentProviderAccount()=store.account()?.let { "lastfm" to it }
     override fun createCollectionSession()=MediaCollectionSession(
-        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history))
+        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history)) { play,playing ->
+            val name=store.account()
+            if(playing && name!=null && !play.artist.isNullOrBlank() && !play.title.isNullOrBlank()) {
+                fun part(value:String)="${value.length}:$value"
+                store.queue.enqueue(part("lastfm")+part(name)+part(play.id)+":NowPlaying","lastfm",name,ActionType.NowPlaying,System.currentTimeMillis(),play.id)
+            }
+            store.schedule()
+        }
 }
 class DeliveryWorker(context:Context,params:WorkerParameters):Worker(context,params) {
     override fun doWork():Result {
@@ -97,10 +108,8 @@ class DeliveryWorker(context:Context,params:WorkerParameters):Worker(context,par
             val worker=QueueWorker(store.queue,store.history,api)
             repeat(20) {
                 if(!store.tracking() || store.account()!=name || isStopped) return Result.success()
-                val processed=synchronized(store) {
-                    if(!store.tracking() || store.account()!=name || isStopped) false
+                val processed=if(!store.tracking() || store.account()!=name || isStopped) false
                     else worker.process("lastfm",name,id.toString(),key.secret.toString(Charsets.UTF_8),System.currentTimeMillis())
-                }
                 if(!processed) return Result.success()
             }
         } finally { key.secret.fill(0) }
