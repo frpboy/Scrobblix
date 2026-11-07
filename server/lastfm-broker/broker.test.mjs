@@ -29,7 +29,7 @@ test('limit, missing configuration and limiter failure fail closed',async()=>{
 });
 test('network ambiguity explicit with no retry',async()=>{
  let calls=0;const h=handler({gate:async()=>true,fetcher:async()=>{calls++;throw Error('network')}});
- const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown'});assert.equal(calls,1);
+ const r=await h(request({method:'auth.getToken'}),env);assert.equal(r.status,502);assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnostic:{stage:'network',upstreamStatus:0,upstreamType:'unknown'}});assert.equal(calls,1);
 });
 test('oversize upstream response not reflected',async()=>{
  const h=handler({gate:async()=>true,fetcher:async()=>new Response('x'.repeat(65537))});assert.equal((await h(request({method:'auth.getToken'}),env)).status,502);
@@ -90,4 +90,12 @@ test('broker rejection marker is separate from provider API errors and only pre-
  }
  const invalid=await handler({gate:async()=>true,fetcher})(request({method:'unknown'}),env);
  assert.equal(invalid.status,400);assert.deepEqual(await invalid.json(),{broker_error:'invalid_request'});assert.equal(calls,0);
+});
+
+test('anonymous token diagnostic exposes only fixed stage/status/type, never bodies or listening paths',async()=>{
+ const h=handler({gate:async()=>true,fetcher:async()=>new Response('synthetic-private-echo',{status:403,headers:{'Content-Type':'text/html; charset=utf-8'}})});
+ const r=await h(request({method:'auth.getToken'}),env);
+ assert.deepEqual(await r.json(),{broker_error:'upstream_outcome_unknown',diagnostic:{stage:'parse',upstreamStatus:403,upstreamType:'text/html'}});
+ const track=await h(request({method:'track.scrobble',sk:'c'.repeat(32),artist:'Synthetic',track:'Synthetic',timestamp:1}),env);
+ assert.deepEqual(await track.json(),{broker_error:'upstream_outcome_unknown'});
 });

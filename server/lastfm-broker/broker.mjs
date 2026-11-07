@@ -64,16 +64,26 @@ export function handler({fetcher=fetch,gate,clock=()=>Date.now()}={}) {
     catch { return reply(503,{broker_error:'limiter_unavailable'}); }
     const args={...params,api_key:env.LASTFM_API_KEY};
     const body=new URLSearchParams({...args,api_sig:signature(args,env.LASTFM_API_SECRET),format:'json'});
+    let stage="network",upstreamStatus=0,upstreamType="unknown";
     try {
       const response=await fetcher(UPSTREAM,{method:'POST',body,redirect:'manual',signal:AbortSignal.timeout(15000)});
+      upstreamStatus=response.status;
+      const type=(response.headers.get("Content-Type")??"").split(";")[0].trim().toLowerCase();
+      upstreamType=["application/json","text/xml","application/xml","text/html"].includes(type)?type:"other";
+      stage="read";
       if(response.status>=300 && response.status<400) throw new Error("redirect");
-      const payload=JSON.parse(await readLimited(response.body,65536));
+      const raw=await readLimited(response.body,65536);stage="parse";
+      const payload=JSON.parse(raw);stage="schema";
       if(!payload || typeof payload!=='object' || Array.isArray(payload)) throw new Error('invalid');
       // Preserve provider semantics; a transport/parse failure is never proof a scrobble was rejected.
       const safe=safeProviderResponse(params.method,payload);
       if(params.method==='auth.getToken' && safe.token)
         safe.authorizationUrl='https://www.last.fm/api/auth/?api_key='+env.LASTFM_API_KEY+'&token='+safe.token;
       return reply(response.status,safe);
-    } catch { return reply(502,{broker_error:'upstream_outcome_unknown'}); }
+    } catch {
+      // A bounded diagnostic only for starting anonymous browser consent. Never echo response data.
+      const detail=params.method==='auth.getToken'?{diagnostic:{stage,upstreamStatus,upstreamType}}:{};
+      return reply(502,{broker_error:'upstream_outcome_unknown',...detail});
+    }
   };
 }
