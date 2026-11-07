@@ -8,4 +8,5 @@
   <Project Path="tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj" />
   <Project Path="tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj" />
   <Project Path="tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj" />
+  <Project Path="tests/Scrobblix.Broker.Tests/Scrobblix.Broker.Tests.csproj" />
 </Solution>

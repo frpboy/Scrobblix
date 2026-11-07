@@ -45,11 +45,18 @@ jobs:
       - name: Validate CI concurrency contract
         run: node scripts/test-ci-concurrency.mjs
 
+      - name: Validate bounded Last.fm broker contracts (synthetic only)
+        working-directory: server/lastfm-broker
+        run: npm test
+
       - name: Restore .NET solution
         run: dotnet restore Scrobblix.slnx
 
       - name: Build .NET solution
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
+
+      - name: Validate native broker client contracts (synthetic only)
+        run: dotnet run --project tests/Scrobblix.Broker.Tests/Scrobblix.Broker.Tests.csproj --configuration Release --no-build
 
       - name: Publish synthetic pipe-authorization test client
         run: dotnet publish tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/pipe-client

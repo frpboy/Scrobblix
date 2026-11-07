@@ -7,11 +7,17 @@ public sealed record LastFmAuthorization(string Token, Uri AuthorizationUri);
 
 public sealed record LastFmSession(string UserName);
 
+public interface ILastFmAuthenticator
+{
+    Task<LastFmAuthorization> BeginAsync(CancellationToken cancellationToken);
+    Task<LastFmSession> CompleteAsync(string token, CancellationToken cancellationToken);
+}
+
 public sealed class LastFmDesktopAuthenticator(
     HttpClient client,
     string apiKey,
     string apiSecret,
-    ICredentialStore credentialStore)
+    ICredentialStore credentialStore) : ILastFmAuthenticator
 {
     private const string Endpoint = "https://ws.audioscrobbler.com/2.0/";
     public const string CredentialResource = "Scrobblix.LastFm";
