@@ -5,6 +5,18 @@ using Scrobblix.Infrastructure.Providers;
 using Scrobblix.Application.Abstractions;
 using Scrobblix.Application.Providers;
 
+// Explicit one-shot manual mode only. Never consent, exchange a session or store credentials.
+if(args.SequenceEqual(new[]{"--qualify-live-token-start"})) {
+ using var liveClient=new HttpClient(new HttpClientHandler{AllowAutoRedirect=false}){Timeout=TimeSpan.FromSeconds(20)};
+ var memoryCredentials=new Credentials();
+ try {
+  var liveAuth=new LastFmBrokerAuthenticator(liveClient,new Uri(LastFmConnectionDefaults.BrokerEndpoint),memoryCredentials);
+  _=await liveAuth.BeginAsync(default);
+  Check(memoryCredentials.Key is null,"token start must not persist a session");
+  Console.WriteLine("PASS live native token-start only: validated fixed consent destination; no browser, session, storage or listening action");
+ } catch { Console.Error.WriteLine("FAIL live native token-start only; response details suppressed");Environment.ExitCode=1; }
+ return;
+}
 Check(LastFmConnectionDefaults.ResolveBrokerEndpoint(null)=="https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm","normal-user endpoint pinned without developer keys");
 Check(LastFmConnectionDefaults.ResolveBrokerEndpoint("")=="","explicit invalid override never falls back silently");
 Check(LastFmConnectionDefaults.ResolveBrokerEndpoint("https://broker.invalid/v1/lastfm")=="https://broker.invalid/v1/lastfm","qualification override remains explicit");
