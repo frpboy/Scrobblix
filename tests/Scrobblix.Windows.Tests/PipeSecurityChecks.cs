@@ -66,13 +66,10 @@ internal static class PipeSecurityChecks
 
         File.Copy(clientSource, expectedHost, overwrite: false);
 
-        var cmdExe = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe");
-        Check.True(File.Exists(cmdExe), "cmd.exe located for synthetic parent staging");
-
         var spoofDir = Path.Combine(tempRoot, "spoof");
         Directory.CreateDirectory(spoofDir);
         var fakeBrowser = Path.Combine(spoofDir, "chrome.exe");
-        File.Copy(cmdExe, fakeBrowser);
+        File.Copy(clientSource, fakeBrowser);
 
         var userChromeDir = Path.Combine(localAppData, "Google", "Chrome", "Application");
         var vendorChrome = Path.Combine(userChromeDir, "chrome.exe");
@@ -116,7 +113,7 @@ internal static class PipeSecurityChecks
             Check.True(scenario.PayloadBytes == 0, "Direct-invocation client had zero payload bytes read");
 
             // Scenario 3: registered-path host launched by a renamed fake chrome.exe parent.
-            scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(fakeBrowser, expectedHost, pipe));
+            scenario = await RunScenarioAsync(expectedHost, pipe => StartViaFakeBrowser(fakeBrowser, expectedHost, pipe));
             Check.True(!scenario.Accepted && scenario.Reason == "native_host_parent_not_supported_browser",
                 "Renamed fake chrome.exe parent rejected (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Fake-browser-parent client had zero payload bytes read");
@@ -125,10 +122,10 @@ internal static class PipeSecurityChecks
             if (positiveControlAvailable)
             {
                 Directory.CreateDirectory(userChromeDir);
-                File.Copy(cmdExe, vendorChrome);
+                File.Copy(clientSource, vendorChrome);
                 try
                 {
-                    scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(vendorChrome, expectedHost, pipe));
+                    scenario = await RunScenarioAsync(expectedHost, pipe => StartViaFakeBrowser(vendorChrome, expectedHost, pipe));
                     Check.True(scenario.Accepted && scenario.Reason == "accepted",
                         "Positive control: vendor-install-location browser parent accepted");
                     Check.True(scenario.PayloadBytes > 0, "Positive control payload read after acceptance");
@@ -247,8 +244,21 @@ internal static class PipeSecurityChecks
 
         if (!completed.Wait(TimeSpan.FromSeconds(60)))
         {
+            var clientState = "no client process";
+            if (process is not null)
+            {
+                clientState = "client hasExited=" + process.HasExited;
+                if (process.HasExited)
+                {
+                    clientState += " exitCode=" + process.ExitCode
+                        + " stdout=[" + process.StandardOutput.ReadToEnd().Trim() + "]"
+                        + " stderr=[" + process.StandardError.ReadToEnd().Trim() + "]";
+                }
+            }
+
             try { server.Dispose(); } catch (ObjectDisposedException) { }
             throw new InvalidOperationException("FAIL scenario timed out waiting for the server verdict on " + pipeName
+                + "; " + clientState
                 + (clientError is null ? string.Empty : " (client error: " + clientError.GetType().Name + ")"));
         }
 
@@ -385,7 +395,7 @@ internal static class PipeSecurityChecks
         return Process.Start(start)!;
     }
 
-    private static Process StartViaCmdCopy(string fakeBrowserPath, string hostPath, string pipeName)
+    private static Process StartViaFakeBrowser(string fakeBrowserPath, string hostPath, string pipeName)
     {
         var start = new ProcessStartInfo
         {
@@ -395,8 +405,9 @@ internal static class PipeSecurityChecks
             RedirectStandardOutput = true,
             RedirectStandardError = true,
         };
-        start.ArgumentList.Add("/c");
-        start.ArgumentList.Add("\"" + hostPath + "\" \"" + pipeName + "\"");
+        start.ArgumentList.Add("spawn");
+        start.ArgumentList.Add(hostPath);
+        start.ArgumentList.Add(pipeName);
         return Process.Start(start)!;
     }
 

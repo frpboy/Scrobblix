@@ -6,9 +6,18 @@ using System.Buffers.Binary;
 using System.IO.Pipes;
 using System.Text;
 
+if (args.Length == 3 && args[0] == "spawn")
+{
+    // Fake-parent mode: this renamed copy poses as the browser and launches the real
+    // client, so the server's parent-image check sees this executable as the parent.
+    var child = System.Diagnostics.Process.Start(args[1], args[2]);
+    child!.WaitForExit();
+    return 0;
+}
+
 if (args.Length != 1)
 {
-    Console.Error.WriteLine("usage: Scrobblix.PipeClient <pipeName>");
+    Console.Error.WriteLine("usage: Scrobblix.PipeClient <pipeName> | Scrobblix.PipeClient spawn <hostPath> <pipeName>");
     return 2;
 }
 
