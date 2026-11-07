@@ -23,6 +23,17 @@ internal static class PipeSecurityChecks
         new SecurityIdentifier(WellKnownSidType.NetworkSid, null),
     ];
 
+    // Principals whose presence in the DACL does not widen access beyond the owning
+    // user on a normal single-user machine: the user itself, SYSTEM, Administrators
+    // (a same-machine admin already owns every user process), and owner pseudo-SIDs.
+    private static readonly SecurityIdentifier[] AllowedGranteeSids =
+    [
+        new SecurityIdentifier(WellKnownSidType.LocalSystemSid, null),
+        new SecurityIdentifier(WellKnownSidType.BuiltinAdministratorsSid, null),
+        new SecurityIdentifier("S-1-3-0"), // CREATOR OWNER
+        new SecurityIdentifier("S-1-3-4"), // OWNER RIGHTS
+    ];
+
     public static async Task RunAsync()
     {
         Console.WriteLine("--- #74 named-pipe authorization checks (synthetic clients, no production data) ---");
@@ -223,24 +234,26 @@ internal static class PipeSecurityChecks
         var security = server.GetAccessControl();
         var currentUser = WindowsIdentity.GetCurrent().User;
         var rules = security.GetAccessRules(includeExplicit: true, includeInherited: false, typeof(SecurityIdentifier));
-        var sawCurrentUser = false;
+        var allowCount = 0;
         foreach (PipeAccessRule rule in rules)
         {
             var sid = (SecurityIdentifier)rule.IdentityReference;
             Console.WriteLine("  pipe ACL: " + rule.AccessControlType + " " + rule.PipeAccessRights + " " + sid + " (" + DescribeSid(sid) + ")");
             if (rule.AccessControlType == System.Security.AccessControl.AccessControlType.Allow)
             {
+                allowCount++;
                 Check.True(
                     !BroadSids.Any(broad => broad.Equals(sid)),
                     "Pipe ACL grants no broad principal (" + DescribeSid(sid) + ")");
-                if (currentUser is not null && sid.Equals(currentUser))
-                {
-                    sawCurrentUser = true;
-                }
+                var isCurrentUser = currentUser is not null && sid.Equals(currentUser);
+                Check.True(
+                    isCurrentUser || AllowedGranteeSids.Any(allowed => allowed.Equals(sid)),
+                    "Pipe ACL allow entry is the current user or an owner-equivalent principal (" + DescribeSid(sid) + ")");
             }
         }
 
-        Check.True(sawCurrentUser, "Pipe ACL grants the current user explicitly");
+        Check.True(allowCount >= 1, "Pipe ACL grants at least one principal (effective DACL observed)");
+        Console.WriteLine("  effective pipe DACL: " + allowCount + " allow rule(s), current user " + currentUser);
     }
 
     private static string DescribeSid(SecurityIdentifier sid)
