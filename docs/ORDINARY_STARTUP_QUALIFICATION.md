@@ -1,0 +1,7 @@
+# Ordinary publish startup qualification (issue135)
+
+Initial actual framework-dependent publish at8feaa3f displayed a Windows App Runtime missing-dependency dialog, not Scrobblix. A responsive process/window alone was insufficient. No app logs existed. Screenshot inspected; no ordinary startup pass claimed for that attempt.
+
+At4c6b05d the ephemeral hosted Windows runner installed official MSIX runtime packages from restored Microsoft.WindowsAppSDK.Runtime2.6.4. Reported installed WindowsAppRuntime.2 version2.6.5.0. Normal framework-dependent app publish (no compile-time fixture path, no fixture environment, no credentials or prior app data) launched and stayed responsive20s. Startup/tray initialization/SQLite migration logs exist. Actual desktop screenshot inspected: real Scrobblix Listening screen, music placeholder, no bootstrap error; screenshot bounds exceeded runner desktop and clipped right/bottom, so capture is being rerun after fitting window to desktop.
+
+Exact full CI: https://github.com/frpboy/Scrobblix/actions/runs/42310549202/job/128210606380 . App PRI now exists in ordinary publish. No account login, live playback/provider/browser submission, notification/tray interaction, graceful close, long soak, installer/upgrade/rollback or DPI/accessibility fleet is qualified. Harness terminates only its spawned process as cleanup, not as evidence of clean shutdown. Runtime installation was on disposable CI, not a user machine. Distribution still needs documented matching runtime deployment; this does not turn the unsigned beta into an installer.

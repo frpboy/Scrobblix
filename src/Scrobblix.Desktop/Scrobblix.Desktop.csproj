@@ -3,7 +3,11 @@
     <OutputType>WinExe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
     <UseWinUI>true</UseWinUI>
+    <EnableMsixTooling>true</EnableMsixTooling>
     <WindowsPackageType>None</WindowsPackageType>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(ScrobblixUiQualification)' == 'true'">
+    <DefineConstants>$(DefineConstants);SCROBBLIX_UI_QUALIFICATION</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />

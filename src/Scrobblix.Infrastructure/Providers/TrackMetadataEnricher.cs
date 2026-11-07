@@ -1,3 +1,4 @@
+using Scrobblix.Application.Artwork;
 using System.Globalization;
 using System.Net;
 using System.Net.Sockets;
@@ -23,6 +24,7 @@ public sealed class TrackMetadataEnricher
     private string? _lastFmApiKey;
     private readonly string _artworkDirectory;
     private readonly Action<string>? _log;
+    private readonly IArtworkContentValidator? _artworkValidator;
     private const int MetadataCacheCapacity = 512;
     private readonly BoundedCache<string, PlayMetadataEnrichment> _cache = new(MetadataCacheCapacity, StringComparer.Ordinal);
     private long _configurationVersion;
@@ -34,7 +36,8 @@ public sealed class TrackMetadataEnricher
         string? lastFmApiKey,
         string artworkDirectory,
         Action<string>? log = null,
-        HttpClient? artworkClient = null)
+        HttpClient? artworkClient = null,
+        IArtworkContentValidator? artworkValidator = null)
     {
         ArgumentNullException.ThrowIfNull(client);
         ArgumentException.ThrowIfNullOrWhiteSpace(artworkDirectory);
@@ -43,6 +46,7 @@ public sealed class TrackMetadataEnricher
         _lastFmApiKey = string.IsNullOrWhiteSpace(lastFmApiKey) ? null : lastFmApiKey.Trim();
         _artworkDirectory = artworkDirectory;
         _log = log;
+        _artworkValidator = artworkValidator;
         const string userAgent = "Scrobblix/0.1.0 (+https://github.com/frpboy/Scrobblix)";
         if (_client.DefaultRequestHeaders.UserAgent.Count == 0)
         {
@@ -655,6 +659,18 @@ public sealed class TrackMetadataEnricher
         }
     }
 
+    private async Task<bool> IsSafeCachedArtworkAsync(string path, CancellationToken cancellationToken)
+    {
+        if (_artworkValidator is null) return false;
+        try
+        {
+            await using var input = File.OpenRead(path);
+            var content = await ArtworkContent.ReadBoundedAsync(input, cancellationToken);
+            return content is not null && await _artworkValidator.IsSafeAsync(content, cancellationToken);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
+    }
+
     private async Task<PlayMetadataEnrichment> TryCacheArtworkAsync(string? imageUrl, string source, CancellationToken cancellationToken)
     {
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri) || !IsSafeRemoteImageUri(imageUri))
@@ -668,6 +684,7 @@ public sealed class TrackMetadataEnricher
         var cachedPath = Directory.EnumerateFiles(_artworkDirectory, cacheKey + ".*").FirstOrDefault();
         if (cachedPath is not null)
         {
+            if (!await IsSafeCachedArtworkAsync(cachedPath, cancellationToken)) return new PlayMetadataEnrichment();
             _log?.Invoke($"Artwork cache hit; source={source}; host={imageUri.Host}; file={Path.GetFileName(cachedPath)}.");
             return new PlayMetadataEnrichment(ArtworkPath: cachedPath, ArtworkSource: source);
         }
@@ -722,7 +739,9 @@ public sealed class TrackMetadataEnricher
                 var targetPath = Path.Combine(_artworkDirectory, cacheKey + extension);
                 if (File.Exists(targetPath))
                 {
-                    return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
+                    return await IsSafeCachedArtworkAsync(targetPath, cancellationToken)
+                        ? new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source)
+                        : new PlayMetadataEnrichment();
                 }
 
                 await using var sourceStream = await response.Content.ReadAsStreamAsync(cancellationToken);
@@ -745,9 +764,15 @@ public sealed class TrackMetadataEnricher
                     await output.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
                 }
 
+                var content = output.ToArray();
+                if (_artworkValidator is null || !await _artworkValidator.IsSafeAsync(content, cancellationToken))
+                {
+                    _log?.Invoke($"Artwork metadata rejected; source={source}; reason=unsupported_corrupt_or_dimensions.");
+                    return new PlayMetadataEnrichment();
+                }
                 var tempPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
-                await File.WriteAllBytesAsync(tempPath, output.ToArray(), cancellationToken);
-                File.Move(tempPath, targetPath, overwrite: true);
+                await File.WriteAllBytesAsync(tempPath, content, cancellationToken);
+                File.Move(tempPath, targetPath, overwrite: false);
                 _log?.Invoke($"Artwork cached successfully; source={source}; host={currentUri.Host}; bytes={output.Length}; file={Path.GetFileName(targetPath)}.");
                 return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
             }

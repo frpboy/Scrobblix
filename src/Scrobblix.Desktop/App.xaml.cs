@@ -41,6 +41,33 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
     {
+#if SCROBBLIX_UI_QUALIFICATION
+        // Explicit CI-only build: bypass every normal account/network/tray/storage path.
+        if (Environment.GetEnvironmentVariable("SCROBBLIX_UI_OUTPUT") is { } output)
+        {
+        Directory.CreateDirectory(output);
+        try
+        {
+            DebugSettings.IsBindingTracingEnabled = true;
+            DebugSettings.IsXamlResourceReferenceTracingEnabled = true;
+            DebugSettings.XamlResourceReferenceFailed += (_, eventArgs) =>
+                File.AppendAllText(Path.Combine(output, "xaml-resources.txt"), eventArgs.Message + Environment.NewLine);
+            UnhandledException += (_, eventArgs) =>
+                File.AppendAllText(Path.Combine(output, "unhandled.txt"), eventArgs.Exception.ToString() + Environment.NewLine);
+            var probe = new MainWindow();
+            probe.Activate();
+            await probe.QualifyArtworkAsync(Environment.GetEnvironmentVariable("SCROBBLIX_UI_FIXTURES")!, output);
+            File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI qualification");
+        }
+        catch (Exception failure)
+        {
+            var data = string.Join(Environment.NewLine, failure.Data.Keys.Cast<object>().Select(key => $"{key}: {failure.Data[key]}"));
+            File.WriteAllText(Path.Combine(output, "result.txt"), failure + Environment.NewLine + data);
+        }
+        Exit();
+        return;
+        }
+#endif
         if (!TryAcquireSingleInstance())
         {
             Exit();
@@ -336,7 +363,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 initialApiKey,
                 Path.Combine(dataDirectory, "artwork"),
                 message => logger.Info("METADATA_PROVIDER", message),
-                artworkHttpClient);
+                artworkHttpClient, new WindowsArtworkContentValidator());
             // Bound pending metadata work and completed-job suppression: rapid track
             // changes can no longer queue unbounded network work behind the
             // serialized provider gate, and long sessions cannot grow the

@@ -442,5 +442,39 @@
     "ciConclusion": "success",
     "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/42167800462",
     "scope": "Released beta.2 audited baseline, not a live pointer to later main commits"
+  },
+  "currentSourceAddendum": {
+    "date": "2026-11-07",
+    "targetSha": "3f158e6ab2ea93f3725bd1e91cb18cf816ad73c2",
+    "document": "docs/security/CURRENT_SOURCE_ADDENDUM_2026-11-07.md",
+    "ciUrl": "https://github.com/frpboy/Scrobblix/actions/runs/42313185981/job/128219352607",
+    "scope": "Bounded changed-safety/startup source reconciliation, not 128 historical comments fully revalidated or new full scan",
+    "fixedPRs": [
+      121,
+      124,
+      126,
+      128,
+      132,
+      134,
+      136
+    ],
+    "openIssues": [
+      74,
+      75,
+      76,
+      78,
+      88,
+      122,
+      17
+    ],
+    "governanceReadback": {
+      "protected": false,
+      "rulesets": [],
+      "protectionEndpoint": "404 Branch not protected; earlier403 historical",
+      "settingsChanged": false
+    },
+    "nextGate": "74 synthetic isolated Windows IPC caller/ACL enforcement; no production account needed to begin",
+    "historicalEvidencePreserved": true,
+    "releaseReady": false
   }
 }

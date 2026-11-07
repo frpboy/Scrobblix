@@ -1,5 +1,11 @@
 # Repository Audit Checkpoint
 
+## Current-source reconciliation - 2026-11-07
+
+[Exact main 3f158e6 addendum](../../docs/security/CURRENT_SOURCE_ADDENDUM_2026-11-07.md) supersedes older current-status language below for changed safety/startup coverage and open gates. Earlier SHA/scanner/environment statements remain historical, not re-dated current proof. Full audit/release status remains incomplete.
+
+---
+
 ## Current checkpoint - 2026-11-06
 
 > This section is the live status snapshot. The 2026-10-31 checkpoint below is retained as historical evidence and is not the current repository baseline.

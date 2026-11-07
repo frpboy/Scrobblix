@@ -34,6 +34,10 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
             var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
+                return WithRetryAfter(MapError(apiError), response);
+            if (hasApiError || payload.Length > 65536)
+                return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
             if (!response.IsSuccessStatusCode)
             {
                 // A response without a documented Last.fm API result is ambiguous: do not blindly resend it.
@@ -45,8 +49,8 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
                     rateLimited ? GetRetryAfter(response) : null);
             }
             using var json = JsonDocument.Parse(payload);
-            if (json.RootElement.TryGetProperty("error", out var error))
-                return MapError(error.GetInt32());
+            if (json.RootElement.TryGetProperty("error", out _))
+                return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
             return ParseScrobbleOutcome(json.RootElement);
         }
         catch (HttpRequestException)
@@ -59,7 +63,7 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             // A timeout after sending a POST is not proof that Last.fm rejected the scrobble.
             return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException)
         {
             return new(false, ReasonCodes.Provider.SubmissionOutcomeUnknown, false);
         }
@@ -81,20 +85,23 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         try
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
+                return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
             {
                 var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
                 return new(false, rateLimited ? ReasonCodes.Provider.RateLimited : ReasonCodes.Provider.TemporaryUnavailable, true,
                     rateLimited ? GetRetryAfter(response) : null);
             }
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            using var json = JsonDocument.Parse(payload);
             if (json.RootElement.TryGetProperty("error", out var error))
-                return MapError(error.GetInt32());
+                return new(false, ReasonCodes.Provider.ResponseInvalid, false);
             return ParseNowPlayingOutcome(json.RootElement);
         }
         catch (HttpRequestException) { return new(false, ReasonCodes.Provider.TemporaryUnavailable, true); }
         catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested) { return new(false, ReasonCodes.Provider.TemporaryUnavailable, true); }
-        catch (JsonException) { return new(false, ReasonCodes.Provider.ResponseInvalid, false); }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException) { return new(false, ReasonCodes.Provider.ResponseInvalid, false); }
     }
 
     public Task<ProviderSubmissionResult> LoveTrackAsync(ScrobbleSubmission submission, CancellationToken cancellationToken) =>
@@ -124,6 +131,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         try
         {
             using var response = await client.PostAsync(Endpoint, new FormUrlEncodedContent(parameters), cancellationToken);
+            var payload = await response.Content.ReadAsStringAsync(cancellationToken);
+            if (TryReadApiError(payload, out var apiError, out var hasApiError))
+                return WithRetryAfter(MapStateChangeError(apiError), response);
             if (!response.IsSuccessStatusCode)
             {
                 var rateLimited = response.StatusCode == HttpStatusCode.TooManyRequests;
@@ -131,9 +141,9 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
                     rateLimited ? GetRetryAfter(response) : null);
             }
 
-            using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellationToken));
+            using var json = JsonDocument.Parse(payload);
             return json.RootElement.TryGetProperty("error", out var error)
-                ? MapError(error.GetInt32())
+                ? new(false, ReasonCodes.Provider.ResponseInvalid, false)
                 : new(true, ReasonCodes.Provider.Accepted, false);
         }
         catch (HttpRequestException)
@@ -144,7 +154,7 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
         {
             return new(false, ReasonCodes.Provider.TemporaryUnavailable, true);
         }
-        catch (JsonException)
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException)
         {
             return new(false, ReasonCodes.Provider.ResponseInvalid, false);
         }
@@ -296,10 +306,37 @@ public sealed class LastFmScrobbleProvider(HttpClient client, string apiKey, str
             : delay.Value;
     }
 
+    private static bool TryReadApiError(string payload, out int errorCode, out bool hasApiError)
+    {
+        errorCode = 0;
+        hasApiError = false;
+        // Only documented, well-typed API failures establish rejection. Arbitrary HTML,
+        // unknown error codes and oversized bodies must not authorize append-only retries.
+        if (payload.Length > 65536) return false;
+        try
+        {
+            using var document = JsonDocument.Parse(payload);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("error", out var error)) return false;
+            hasApiError = true;
+            if (error.ValueKind != JsonValueKind.Number || !error.TryGetInt32(out var code)
+                || code is not (2 or 3 or 4 or 5 or 6 or 7 or 8 or 9 or 10 or 11 or 13 or 16 or 26 or 29)) return false;
+            errorCode = code;
+            return true;
+        }
+        catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException or OverflowException) { return false; }
+    }
+
+    private static ProviderSubmissionResult WithRetryAfter(ProviderSubmissionResult result, HttpResponseMessage response) =>
+        result.ReasonCode == ReasonCodes.Provider.RateLimited ? result with { RetryAfter = GetRetryAfter(response) } : result;
+
     private static string Sign(IReadOnlyDictionary<string, string> parameters, string secret)
     {
         return LastFmRequestSigner.Sign(parameters, secret);
     }
+
+    private static ProviderSubmissionResult MapStateChangeError(int errorCode) => errorCode == 8
+        ? new(false, ReasonCodes.Provider.TemporaryUnavailable, true) : MapError(errorCode);
 
     private static ProviderSubmissionResult MapError(int errorCode) => errorCode switch
     {

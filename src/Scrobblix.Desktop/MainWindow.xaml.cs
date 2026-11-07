@@ -1,3 +1,7 @@
+using Scrobblix.Application.Artwork;
+using Scrobblix.Windows;
+using Windows.Storage.Streams;
+using System.Runtime.CompilerServices;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Automation;
@@ -465,55 +469,73 @@ public sealed partial class MainWindow : Window
         return string.Join(Environment.NewLine, lines);
     }
 
-    private void SetArtwork(Image image, Image fallback, string? artworkPath)
+    private sealed class ArtworkLoadState
+    {
+        public long Generation;
+        public string? LoadedPath;
+        public string? RequestedPath;
+        public CancellationTokenSource? Pending;
+    }
+    private readonly ConditionalWeakTable<Image, ArtworkLoadState> _artworkLoads = new();
+    private readonly WindowsArtworkContentValidator _artworkValidator = new();
+
+    private async void SetArtwork(Image image, Image fallback, string? artworkPath)
     {
         image.Tag = fallback;
-        if (string.IsNullOrWhiteSpace(artworkPath) || !File.Exists(artworkPath))
-        {
-            image.Source = null;
-            image.Visibility = Visibility.Collapsed;
-            fallback.Visibility = Visibility.Visible;
-            if (!string.IsNullOrWhiteSpace(artworkPath))
-            {
-                DiagnosticLogRequested?.Invoke($"Artwork cache path was missing: {Path.GetFileName(artworkPath)}");
-            }
-            return;
-        }
-
+        var state = _artworkLoads.GetOrCreateValue(image);
+        // Polling the same pending artwork must not starve a slow valid load by restarting it.
+        if (state.Pending is not null && state.RequestedPath == artworkPath) return;
+        state.Pending?.Cancel();
+        state.Pending = null; state.RequestedPath = null;
+        var generation = ++state.Generation;
+        // Already displayed pixels were validated; never reopen this path in BitmapImage.
+        if (artworkPath is not null && state.LoadedPath == artworkPath && image.Source is not null
+            && image.Visibility == Visibility.Visible) return;
+        state.LoadedPath = null;
+        image.Source = null; image.Visibility = Visibility.Collapsed; fallback.Visibility = Visibility.Visible;
+        if (string.IsNullOrWhiteSpace(artworkPath)) return;
+        using var pending = new CancellationTokenSource();
+        state.Pending = pending; state.RequestedPath = artworkPath;
         try
         {
-            var fullPath = Path.GetFullPath(artworkPath);
-            // Polling should not restart the decoder for the exact same local cover every two seconds.
-            if (image.Source is BitmapImage currentBitmap
-                && currentBitmap.UriSource is { IsFile: true } currentUri
-                && string.Equals(currentUri.LocalPath, fullPath, StringComparison.OrdinalIgnoreCase)
-                && image.Visibility == Visibility.Visible)
+            byte[]? content;
+            await using (var input = File.OpenRead(Path.GetFullPath(artworkPath)))
+                content = await ArtworkContent.ReadBoundedAsync(input, pending.Token);
+            if (content is null || !await _artworkValidator.IsSafeAsync(content, pending.Token))
             {
+                DiagnosticLogRequested?.Invoke("Artwork metadata rejected; placeholder retained.");
                 return;
             }
-
-            image.Source = null;
-            image.Visibility = Visibility.Collapsed;
-            fallback.Visibility = Visibility.Visible;
-            image.ImageFailed -= ArtworkImageFailed;
-            image.ImageOpened -= ArtworkImageOpened;
-            image.ImageFailed += ArtworkImageFailed;
-            image.ImageOpened += ArtworkImageOpened;
+            if (_isClosed || generation != state.Generation) return;
+            using var stream = new InMemoryRandomAccessStream();
+            using (var writer = new DataWriter(stream.GetOutputStreamAt(0)))
+            {
+                writer.WriteBytes(content); await writer.StoreAsync();
+            }
+            stream.Seek(0);
             var bitmap = new BitmapImage
             {
                 DecodePixelWidth = Math.Max(128, (int)Math.Ceiling(image.ActualWidth > 0 ? image.ActualWidth * 2 : image.Width * 2)),
-                UriSource = new Uri(fullPath, UriKind.Absolute),
             };
-            // Keep the image element visible while loading; the fallback remains in front until ImageOpened.
-            image.Visibility = Visibility.Visible;
-            image.Source = bitmap;
+            // Decode the SAME bounded bytes that passed metadata checks, not a mutable cache URI.
+            await bitmap.SetSourceAsync(stream);
+            if (_isClosed || generation != state.Generation) return;
+            image.Source = bitmap; image.Visibility = Visibility.Visible; fallback.Visibility = Visibility.Collapsed;
+            state.LoadedPath = artworkPath;
         }
-        catch (Exception exception) when (exception is UriFormatException or ArgumentException or IOException or UnauthorizedAccessException)
+        catch (OperationCanceledException) { /* A newer image request owns the surface. */ }
+        catch (Exception exception) when (exception is ArgumentException or IOException or UnauthorizedAccessException
+            or InvalidOperationException or System.Runtime.InteropServices.COMException or NotSupportedException)
         {
-            image.Source = null;
-            image.Visibility = Visibility.Collapsed;
-            fallback.Visibility = Visibility.Visible;
-            DiagnosticLogRequested?.Invoke($"Artwork path could not be opened: {exception.GetType().Name}");
+            if (generation == state.Generation)
+            {
+                image.Source = null; image.Visibility = Visibility.Collapsed; fallback.Visibility = Visibility.Visible;
+                DiagnosticLogRequested?.Invoke($"Artwork unavailable: {exception.GetType().Name}");
+            }
+        }
+        finally
+        {
+            if (generation == state.Generation) { state.Pending = null; state.RequestedPath = null; }
         }
     }
 
