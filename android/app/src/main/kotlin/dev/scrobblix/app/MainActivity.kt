@@ -39,6 +39,7 @@ fun AppScreen(store:AppStore) {
     var account by remember { mutableStateOf(store.account()) }
     var access by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
+    var sources by remember { mutableStateOf(emptySet<String>()) }
     var states by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
     var username by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
@@ -47,7 +48,7 @@ fun AppScreen(store:AppStore) {
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
         access=store.hasMediaAccess()
-        account=store.account();tracking=store.tracking()
+        account=store.account();tracking=store.tracking();sources=store.knownSources()
         withContext(Dispatchers.IO) { history=store.recent();states=store.states() }
         delay(2000)
     } }
@@ -114,6 +115,16 @@ fun AppScreen(store:AppStore) {
                 }
                 Text("Powered by AudioScrobbler. Last.fm is an independent service.")
                 TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.last.fm/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}) { Text("Open Last.fm") }
+                Text("Player controls",style=MaterialTheme.typography.titleLarge)
+                Text("Supported media sessions appear here after media access is enabled. Disable any player you do not want tracked. No installed-app inventory is requested.")
+                if(sources.isEmpty()) Text("No media players discovered yet.")
+                sources.sorted().forEach { name ->
+                    var allowed by remember(name) { mutableStateOf(store.sourceAllowed(name)) }
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        Switch(checked=allowed,onCheckedChange={allowed=it;store.setSourceAllowed(name,it)})
+                        Text(name,Modifier.weight(1f).padding(top=12.dp))
+                    }
+                }
                 Text("Privacy: app backup is disabled. Uninstalling removes this device's history and queued work. Disconnect does not delete history or revoke the remote session.")
             }
         }

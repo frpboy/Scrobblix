@@ -32,6 +32,17 @@ class AppStore(val context:Context) {
         preferences.edit().putBoolean("tracking",enabled).apply()
         if(enabled) schedule() else { WorkManager.getInstance(context).cancelUniqueWork("delivery");WorkManager.getInstance(context).cancelUniqueWork("delivery-periodic") }
     }
+    fun sourceAllowed(name:String)=!preferences.getStringSet("blocked-sources",emptySet())!!.contains(name)
+    fun knownSources()=preferences.getStringSet("known-sources",emptySet())!!.toSet()
+    fun discoverSources(names:Set<String>) {
+        val updated=knownSources()+names
+        if(updated!=knownSources()) preferences.edit().putStringSet("known-sources",updated).apply()
+    }
+    fun setSourceAllowed(name:String,allowed:Boolean) {
+        val values=preferences.getStringSet("blocked-sources",emptySet())!!.toMutableSet()
+        if(allowed) values.remove(name) else values.add(name)
+        preferences.edit().putStringSet("blocked-sources",values).apply()
+    }
     fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC LIMIT 50")
     fun states()=sql.query("SELECT state,COUNT(*) AS total FROM android_actions GROUP BY state ORDER BY state")
     @Synchronized fun connect(name:String,key:String) {
@@ -59,7 +70,7 @@ class AppStore(val context:Context) {
 class PlaybackListener:ScrobblixMediaListener() {
     private val store get()=(application as ScrobblixApp).store
     private val changes=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,key ->
-        if(key=="tracking" || key=="account") setUserTrackingEnabled(store.tracking())
+        if(key=="tracking" || key=="account" || key=="blocked-sources") setUserTrackingEnabled(store.tracking())
     }
     override fun onListenerConnected() {
         super.onListenerConnected()
@@ -70,7 +81,7 @@ class PlaybackListener:ScrobblixMediaListener() {
     override fun onDestroy() { store.preferences.unregisterOnSharedPreferenceChangeListener(changes);super.onDestroy() }
     override fun currentProviderAccount()=store.account()?.let { "lastfm" to it }
     override fun createCollectionSession()=MediaCollectionSession(
-        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java)),PlaybackCollector(store.history))
+        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history))
 }
 class DeliveryWorker(context:Context,params:WorkerParameters):Worker(context,params) {
     override fun doWork():Result {

@@ -17,12 +17,16 @@ sealed interface MediaReadResult {
 }
 
 /** Structured sessions only. Does not enable access, inspect notifications, or control players. */
-class MediaSessionReader(private val context: Context, private val listener: ComponentName) {
+class MediaSessionReader(private val context: Context, private val listener: ComponentName,
+    private val isAllowed:(String)->Boolean = { true },
+    private val onDiscovered:(Set<String>)->Unit = {}) {
     fun read(): MediaReadResult {
         if (Build.VERSION.SDK_INT >= 27 && !context.getSystemService(NotificationManager::class.java)
                 .isNotificationListenerAccessGranted(listener)) return MediaReadResult.AccessRequired
         return try {
-            val sessions = context.getSystemService(MediaSessionManager::class.java).getActiveSessions(listener)
+            val available = context.getSystemService(MediaSessionManager::class.java).getActiveSessions(listener)
+            onDiscovered(available.map { it.packageName }.toSet())
+            val sessions=available.filter { isAllowed(it.packageName) }
             val controller = sessions.firstOrNull { it.playbackState?.state == PlaybackState.STATE_PLAYING }
                 ?: sessions.firstOrNull() ?: return MediaReadResult.NoSession
             snapshot(controller)

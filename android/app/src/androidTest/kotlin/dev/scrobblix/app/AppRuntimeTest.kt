@@ -20,10 +20,9 @@ class AppRuntimeTest {
         ui.waitForIdle()
         val instrumentation=InstrumentationRegistry.getInstrumentation()
         // Synthetic fresh-profile test capture only; ordinary app keeps FLAG_SECURE.
-        val screenshot=instrumentation.uiAutomation.takeScreenshot()
-        val target=File(ui.activity.getExternalFilesDir(null),"$name.png")
-        target.outputStream().use { screenshot.compress(Bitmap.CompressFormat.PNG,100,it) }
-        screenshot.recycle()
+        instrumentation.uiAutomation.executeShellCommand("screencap -p /sdcard/Download/scrobblix-$name.png").use {
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+        }
     }
     @Test fun freshProfileTabsAndExplicitTracking() {
         val store=(ui.activity.application as ScrobblixApp).store
