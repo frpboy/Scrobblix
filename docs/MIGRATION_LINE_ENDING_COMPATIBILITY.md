@@ -1,0 +1,7 @@
+# Migration line-ending compatibility
+
+A released Windows build can embed SQL resources with CRLF while a local source build embeds LF. Raw-text migration checksums then differ even when the SQL is otherwise identical. The published beta4 assembly contains CRLF migration resources; the repository has LF text. Current startup validation rejects the other line-ending hash as a migration mismatch.
+
+A synthetic reproduction creates an initialized database with exact known migration checksums from the other line-ending form. Before the fix, startup fails with a mismatch on 0001_initial. After the fix, both known LF and CRLF forms reopen, retain existing checksum records and sentinel data, and still reject changed SQL hashes. Local targeted tests pass; Windows/full-suite CI pending. This is a verified general upgrade-compatibility defect, not proof of the specific user's failure until their error text confirms it. Private diagnostic logs are not committed.
+
+The fix canonicalizes only CRLF to LF for new checksums and accepts the exact known CRLF hash for legacy records. It does not trim SQL, accept arbitrary checksums, edit old checksum rows, delete app data, or relax the existing unknown/gapped migration-history guards. SQL changes other than this exact newline representation continue to fail closed. No production database migration or recovery action is performed by preparing this code.
