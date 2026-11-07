@@ -110,13 +110,13 @@ internal static class PipeSecurityChecks
             Check.True(scenario.PayloadBytes == 0, "Rejected same-user client had zero payload bytes read (reject-before-persistence)");
 
             // Scenario 2: image at the registered native-host path, launched by a non-browser parent.
-            scenario = await RunScenarioAsync(expectedHost, pipe => StartDirect(expectedHost, pipe));
+            scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartDirect(expectedHost, pipe)));
             Check.True(!scenario.Accepted && scenario.Reason == "native_host_parent_not_supported_browser",
                 "Registered-path host launched by non-browser parent rejected (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Direct-invocation client had zero payload bytes read");
 
             // Scenario 3: registered-path host launched by a renamed fake chrome.exe parent.
-            scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(fakeBrowser, expectedHost, pipe));
+            scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartViaCmdCopy(fakeBrowser, expectedHost, pipe)));
             Check.True(!scenario.Accepted && scenario.Reason == "native_host_parent_not_supported_browser",
                 "Renamed fake chrome.exe parent rejected (reason=" + scenario.Reason + ")");
             Check.True(scenario.PayloadBytes == 0, "Fake-browser-parent client had zero payload bytes read");
@@ -128,7 +128,7 @@ internal static class PipeSecurityChecks
                 File.Copy(cmdExe, vendorChrome);
                 try
                 {
-                    scenario = await RunScenarioAsync(expectedHost, pipe => StartViaCmdCopy(vendorChrome, expectedHost, pipe));
+                    scenario = await RunScenarioAsync(expectedHost, pipe => Task.FromResult<Process?>(StartViaCmdCopy(vendorChrome, expectedHost, pipe)));
                     Check.True(scenario.Accepted && scenario.Reason == "accepted",
                         "Positive control: vendor-install-location browser parent accepted");
                     Check.True(scenario.PayloadBytes > 0, "Positive control payload read after acceptance");
@@ -165,7 +165,7 @@ internal static class PipeSecurityChecks
         Console.WriteLine("Pipe authorization checks complete. Boundary: same-user spoofing resistance plus OS cross-user isolation; not cryptographic caller authentication.");
     }
 
-    private static async Task<ServerOutcome> RunScenarioAsync(string expectedHostPath, Func<string, Process?> clientStarter)
+    private static async Task<ServerOutcome> RunScenarioAsync(string expectedHostPath, Func<string, Task<Process?>> clientStarter)
     {
         var pipeName = "scrobblix.test." + Guid.NewGuid().ToString("N");
         await using var server = new NamedPipeServerStream(
@@ -177,9 +177,12 @@ internal static class PipeSecurityChecks
 
         AssertPipeAclCurrentUserOnly(server);
 
-        var waitForConnection = server.WaitForConnectionAsync();
-        var process = clientStarter(pipeName);
-        await waitForConnection.WaitAsync(TimeSpan.FromSeconds(20));
+        using var connectTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var waitForConnection = server.WaitForConnectionAsync(connectTimeout.Token);
+        var process = await clientStarter(pipeName);
+        Console.WriteLine("  scenario client started for " + pipeName + "; awaiting server accept");
+        await waitForConnection;
+        Console.WriteLine("  server accepted a connection for " + pipeName);
 
         var accepted = NamedPipePeerVerifier.IsTrustedBrowserNativeHost(
             server.SafePipeHandle.DangerousGetHandle(), expectedHostPath, out var reason);
@@ -268,21 +271,24 @@ internal static class PipeSecurityChecks
         }
     }
 
-    private static Process? ConnectInProcessAsync(string pipeName)
+    private static async Task<Process?> ConnectInProcessAsync(string pipeName)
     {
         var client = new NamedPipeClientStream(".", pipeName, PipeDirection.Out, PipeOptions.Asynchronous);
-        client.Connect(TimeSpan.FromSeconds(10));
+        await client.ConnectAsync(TimeSpan.FromSeconds(10), CancellationToken.None);
         var payload = Encoding.UTF8.GetBytes(
             "{\"protocolVersion\":1,\"messageId\":\"forged-inproc-1\",\"type\":\"playback.observation.v1\","
             + "\"browserInstanceId\":\"forged-instance-id\",\"siteOrigin\":\"https://music.example\","
             + "\"sequenceNumber\":1,\"artist\":\"synthetic-artist\",\"title\":\"synthetic-title\"}");
+        // Stay connected while the server verifies the peer: a client that connects and
+        // disconnects inside the accept race can leave WaitForConnectionAsync pending.
+        await Task.Delay(TimeSpan.FromSeconds(2));
         try
         {
             var header = new byte[sizeof(int)];
             BinaryPrimitives.WriteInt32LittleEndian(header, payload.Length);
-            client.Write(header);
-            client.Write(payload);
-            client.Flush();
+            await client.WriteAsync(header);
+            await client.WriteAsync(payload);
+            await client.FlushAsync();
         }
         catch (IOException)
         {
