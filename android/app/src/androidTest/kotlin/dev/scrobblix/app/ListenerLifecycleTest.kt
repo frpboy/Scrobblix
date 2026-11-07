@@ -1,6 +1,5 @@
 package dev.scrobblix.app
 
-import android.app.NotificationManager
 import android.content.ComponentName
 import android.media.MediaMetadata
 import android.media.session.MediaSession
@@ -19,7 +18,24 @@ class ListenerLifecycleTest {
         val context=instrumentation.targetContext
         val store=(context.applicationContext as ScrobblixApp).store
         val component=ComponentName(context,PlaybackListener::class.java).flattenToString()
-        fun shell(command:String) { instrumentation.uiAutomation.executeShellCommand(command).use { android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() } }
+        fun shell(command:String):String = instrumentation.uiAutomation.executeShellCommand(command).use {
+            android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes().toString(Charsets.UTF_8).trim()
+        }
+        // Android 8 predates notification shell allow_listener. This runs only on
+        // an isolated instrumentation emulator, preserving its original grant list.
+        val originalListeners=shell("settings get secure enabled_notification_listeners").let { if(it=="null") "" else it }
+        fun access(enabled:Boolean) {
+            if(android.os.Build.VERSION.SDK_INT>=28) {
+                val output=shell("cmd notification ${if(enabled) "allow_listener" else "disallow_listener"} $component")
+                assertFalse("Notification shell rejected test access: $output",output.contains("Unknown",ignoreCase=true) || output.contains("Error",ignoreCase=true))
+            } else {
+                val entries=originalListeners.split(':').filter { it.isNotBlank() && it!=component }.toMutableList()
+                if(enabled) entries.add(component)
+                val value=entries.joinToString(":")
+                if(value.isEmpty()) shell("settings delete secure enabled_notification_listeners")
+                else shell("settings put secure enabled_notification_listeners '$value'")
+            }
+        }
         fun until(timeout:Long=15000,condition:()->Boolean) {
             val end=SystemClock.elapsedRealtime()+timeout
             while(!condition() && SystemClock.elapsedRealtime()<end) Thread.sleep(250)
@@ -34,7 +50,7 @@ class ListenerLifecycleTest {
                 .putString(MediaMetadata.METADATA_KEY_TITLE,title).putLong(MediaMetadata.METADATA_KEY_DURATION,60000).build())
             session.setPlaybackState(PlaybackState.Builder().setState(PlaybackState.STATE_PLAYING,0,1f).build())
             session.isActive=true
-            shell("cmd notification allow_listener $component")
+            access(true)
             until { store.hasMediaAccess() }
             Thread.sleep(2500)
             assertTrue(store.sql.query("SELECT id FROM android_plays WHERE title=?",listOf(title)).isEmpty())
@@ -48,14 +64,14 @@ class ListenerLifecycleTest {
             assertEquals(before,store.sql.query("SELECT SUM(confirmed_ms) AS total FROM android_plays WHERE title=?",listOf(title)))
             store.setTracking(true)
             Thread.sleep(2500)
-            shell("cmd notification disallow_listener $component")
+            access(false)
             until { !store.hasMediaAccess() }
             Thread.sleep(2500)
             val revoked=store.sql.query("SELECT SUM(confirmed_ms) AS total FROM android_plays WHERE title=?",listOf(title))
             Thread.sleep(3000)
             assertEquals(revoked,store.sql.query("SELECT SUM(confirmed_ms) AS total FROM android_plays WHERE title=?",listOf(title)))
         } finally {
-            store.disconnect();session.release();shell("cmd notification disallow_listener $component")
+            store.disconnect();session.release();access(false)
             // Only exact synthetic-test rows. No production-history cleanup route.
             store.sql.execute("DELETE FROM android_actions WHERE account=?",listOf("synthetic-runtime"))
             store.sql.execute("DELETE FROM android_plays WHERE title=?",listOf(title))
