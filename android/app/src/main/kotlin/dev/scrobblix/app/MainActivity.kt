@@ -26,11 +26,11 @@ class MainActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        val store=try {(application as ScrobblixApp).store}catch(_:Exception){null}
+        val store=(application as ScrobblixApp).storeOrNull()
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) {
             if(store==null) Column(Modifier.safeDrawingPadding().padding(24.dp)) {
                 Text("Local storage is unavailable")
-                Text("Scrobblix could not safely read or migrate this device's data. Collection, account setup and delivery are disabled. Your data has not been reset.")
+                Text("Scrobblix could not safely read or migrate this device's data. Collection, account setup and delivery are disabled. Your data has not been reset. Restart the app after local storage is available.")
             } else AppScreen(store)
         } } }
     }

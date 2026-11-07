@@ -48,9 +48,16 @@ abstract class ScrobblixMediaListener : NotificationListenerService() {
         super.onListenerConnected()
         connected=true
         handler.post {
-            session?.disconnected()
-            session=if(connected) createCollectionSession() else null
-            if(connected && tracking) { handler.removeCallbacks(tick);handler.post(tick) }
+            try {
+                session?.disconnected()
+                session=if(connected) createCollectionSession() else null
+                if(connected && tracking) { handler.removeCallbacks(tick);handler.post(tick) }
+            } catch(failure:Exception) {
+                // Creation runs on the serial worker too. A failed local startup must
+                // not kill that looper or continue collecting with a prior session.
+                session=null;tracking=false;handler.removeCallbacks(tick)
+                collectionFailed(failure)
+            }
         }
     }
     override fun onListenerDisconnected() {

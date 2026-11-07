@@ -9,8 +9,17 @@ import dev.scrobblix.core.*
 import dev.scrobblix.platform.*
 import java.util.concurrent.TimeUnit
 
+/** One process startup attempt. Failure is cached without retaining/logging private exception text.
+ * Recovery requires app restart after local storage is available; teardown never retries construction.
+ */
+internal class StoreStartup<T:Any>(private val create:()->T) {
+    private val result:T? by lazy { try {create()} catch(_:Exception){null} }
+    fun available():T?=result
+}
 class ScrobblixApp:Application() {
-    val store:AppStore by lazy { AppStore(this) }
+    private val startup=StoreStartup {AppStore(this)}
+    fun storeOrNull():AppStore?=startup.available()
+    val store:AppStore get()=checkNotNull(storeOrNull()) {"Local store startup unavailable"}
 }
 class AppStore(val context:Context,
     private val operationOverride:((Boolean)->List<java.util.concurrent.Future<*>>)?=null,
@@ -48,7 +57,11 @@ class AppStore(val context:Context,
     val connectionHealth:String? get()=healthFor(accountState())
     data class LocalOutcome(val committed:Boolean,val message:String)
     val preferences=context.getSharedPreferences("controls",Context.MODE_PRIVATE)
-    private val db=SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath("listening.db").apply { parentFile?.mkdirs() },null)
+    private val db=SQLiteDatabase.openOrCreateDatabase(context.getDatabasePath("listening.db").apply { parentFile?.mkdirs() },null).also { opened ->
+        try {synchronized(authorityCoordinator) {
+            LocalSchema.initialize(AndroidQueueSqlDriver(opened),preferences.getString("account",null))
+        }} catch(failure:Exception) {opened.close();throw failure}
+    }
     val sql=AndroidQueueSqlDriver(db)
     val queue=DurableQueue(sql)
     val history=ListeningHistory(sql,queue)
@@ -61,15 +74,14 @@ class AppStore(val context:Context,
     private var setupRevision=0L
     private var setupPending=false
     private var lastScheduledTick=Long.MIN_VALUE
-    init { synchronized(authorityCoordinator) {
-        LocalSchema.initialize(sql,preferences.getString("account",null))
+    init { try {synchronized(authorityCoordinator) {
         authority.recoverClaims(System.currentTimeMillis())
         val initial=authority.snapshot()
         if(initial.account!=null) {
             // Reconcile only local scheduler state. This does not contact Last.fm here.
             try {schedule()}catch(_:Exception){setupState="Last.fm connection saved; delivery setup is deferred."}
         }
-    }
+    }} catch(failure:Exception) {db.close();throw failure}
     }
     /** Two-second polling transition, NOT an observer notification. Whole synchronous sample is fenced.
      * MediaSession IPC under this lock can delay controls; asynchronous IPC needs a separate revision-fenced design.
@@ -221,17 +233,25 @@ class AppStore(val context:Context,
 
 }
 class PlaybackListener:ScrobblixMediaListener() {
-    private val store get()=(application as ScrobblixApp).store
+    private var boundStore:AppStore?=null
+    private val store get()=checkNotNull(boundStore) {"Collection store unavailable"}
     private val changes=android.content.SharedPreferences.OnSharedPreferenceChangeListener { _,key ->
-        if(key=="tracking" || key=="account" || key=="blocked-sources") setUserTrackingEnabled(store.tracking())
+        if(key=="tracking" || key=="account" || key=="blocked-sources") setUserTrackingEnabled(boundStore?.tracking()==true)
     }
     override fun onListenerConnected() {
+        val local=(application as ScrobblixApp).storeOrNull()
+        if(local==null) {setUserTrackingEnabled(false);return}
+        boundStore=local
+        local.preferences.registerOnSharedPreferenceChangeListener(changes)
         super.onListenerConnected()
-        store.preferences.registerOnSharedPreferenceChangeListener(changes)
-        setUserTrackingEnabled(store.tracking())
+        setUserTrackingEnabled(local.tracking())
     }
-    override fun onListenerDisconnected() { store.preferences.unregisterOnSharedPreferenceChangeListener(changes);super.onListenerDisconnected() }
-    override fun onDestroy() { store.preferences.unregisterOnSharedPreferenceChangeListener(changes);super.onDestroy() }
+    private fun detachStore() {
+        boundStore?.preferences?.unregisterOnSharedPreferenceChangeListener(changes)
+        boundStore=null
+    }
+    override fun onListenerDisconnected() {detachStore();super.onListenerDisconnected()}
+    override fun onDestroy() {detachStore();super.onDestroy()}
     private var sampledRevision:Long?=null
     override fun sampleWithCurrentAuthority(session:MediaCollectionSession) {
         sampledRevision=store.withCollectionSnapshot(sampledRevision,session::disconnected) { snapshot ->
@@ -250,7 +270,7 @@ class PlaybackListener:ScrobblixMediaListener() {
 }
 class DeliveryWorker(context:Context,params:WorkerParameters):Worker(context,params) {
     override fun doWork():Result {
-        val store=(applicationContext as ScrobblixApp).store
+        val store=(applicationContext as ScrobblixApp).storeOrNull() ?: return Result.failure()
         if(!store.tracking()) return Result.success()
         val snapshot=try{store.authority.snapshot()}catch(_:Exception){store.account();return Result.failure()}
         if(snapshot.account==null || snapshot.resumeConsentRequired)return Result.success()
