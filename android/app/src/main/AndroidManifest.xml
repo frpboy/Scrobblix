@@ -3,6 +3,7 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <application android:name=".ScrobblixApp" android:label="Scrobblix Preview"
         android:allowBackup="false" android:fullBackupContent="false"
+        android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false" android:theme="@style/AppTheme">
         <activity android:name=".MainActivity" android:exported="true">
             <intent-filter>
