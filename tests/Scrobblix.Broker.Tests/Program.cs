@@ -5,6 +5,10 @@ using Scrobblix.Infrastructure.Providers;
 using Scrobblix.Application.Abstractions;
 using Scrobblix.Application.Providers;
 
+Check(LastFmConnectionDefaults.ResolveBrokerEndpoint(null)=="https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm","normal-user endpoint pinned without developer keys");
+Check(LastFmConnectionDefaults.ResolveBrokerEndpoint("")=="","explicit invalid override never falls back silently");
+Check(LastFmConnectionDefaults.ResolveBrokerEndpoint("https://broker.invalid/v1/lastfm")=="https://broker.invalid/v1/lastfm","qualification override remains explicit");
+_ = new LastFmScrobbleProvider(new HttpClient(new Capture()),new Uri(LastFmConnectionDefaults.BrokerEndpoint));
 var capture=new Capture();using var client=new HttpClient(capture);
 var endpoint=new Uri("https://broker.invalid/v1/lastfm");var credentials=new Credentials();
 var auth=new LastFmBrokerAuthenticator(client,endpoint,credentials);

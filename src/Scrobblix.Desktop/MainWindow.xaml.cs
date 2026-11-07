@@ -1736,8 +1736,8 @@ public sealed partial class MainWindow : Window
         var isConnected = status.StartsWith("Connected as ", StringComparison.Ordinal);
         LastFmHomeDetailText.Text = isConnected
             ? "Your account is connected. Manage credentials and delivery settings in Settings."
-            : "Add API credentials and approve your account in Settings.";
-        OpenLastFmSettingsButton.Content = isConnected ? "Manage Last.fm settings" : "Configure API key / Login";
+            : "Approve access in your browser from Settings. No developer API keys are needed.";
+        OpenLastFmSettingsButton.Content = isConnected ? "Manage Last.fm settings" : "Connect Last.fm";
         UpdateScrobbleStatus();
     }
 

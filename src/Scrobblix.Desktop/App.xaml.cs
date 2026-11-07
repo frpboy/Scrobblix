@@ -455,8 +455,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         LastFmAuthorization? authorization = null;
         DateTimeOffset authorizationStartedUtc = default;
         var brokerConfigured = false;
-        // Private qualification override only. A shipping endpoint must be pinned after backend qualification.
-        var brokerSetting = Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_BROKER_ENDPOINT");
+        // Verified public broker by default; an explicit engineering override never silently falls back.
+        var brokerSetting = LastFmConnectionDefaults.ResolveBrokerEndpoint(Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_BROKER_ENDPOINT"));
 
         bool ConfigureCredentials(string? apiKey, string? apiSecret)
         {
