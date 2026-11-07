@@ -272,7 +272,12 @@ class AuthorityUiStateTest {
         val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
         val requests=java.util.concurrent.LinkedBlockingQueue<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
         val outstanding=java.util.concurrent.CopyOnWriteArrayList<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
-        fun next()=checkNotNull(requests.poll(10,java.util.concurrent.TimeUnit.SECONDS)) {"Expected suspended poll"}
+        fun next():kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>> {
+            // Normal poll delay uses Compose virtual time, not Queue.poll wall time.
+            // waitUntil drives that clock and yields for the suspended reader's IO.
+            ui.waitUntil(10000){requests.isNotEmpty()}
+            return checkNotNull(requests.poll()) {"Expected suspended poll"}
+        }
         val held=listOf(mapOf("state" to "LocalHold","total" to "1"))
         val pending=listOf(mapOf("state" to "Pending","total" to "1"))
         try {
