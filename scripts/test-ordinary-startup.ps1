@@ -1,3 +1,7 @@
+param(
+    [string]$AppDirectory = 'artifacts/Scrobblix/desktop',
+    [switch]$RequirePrivateRuntime
+)
 $ErrorActionPreference = 'Stop'
 $output = Join-Path $env:RUNNER_TEMP 'scrobblix-ordinary-startup'
 New-Item -ItemType Directory -Force $output | Out-Null
@@ -6,7 +10,7 @@ if (Test-Path $data) { throw 'Fresh-profile precondition failed: existing Scrobb
 foreach ($name in @('SCROBBLIX_UI_OUTPUT','SCROBBLIX_UI_FIXTURES','SCROBBLIX_LASTFM_API_KEY','SCROBBLIX_LASTFM_API_SECRET')) {
     [Environment]::SetEnvironmentVariable($name, $null, 'Process')
 }
-$appDirectory = Join-Path $PWD 'artifacts/Scrobblix/desktop'
+$appDirectory = (Resolve-Path $AppDirectory).Path
 $app = Join-Path $appDirectory 'Scrobblix.Desktop.exe'
 $pri = Join-Path $appDirectory 'Scrobblix.Desktop.pri'
 if (-not (Test-Path $pri)) { throw 'Ordinary publish app PRI missing' }
@@ -29,6 +33,13 @@ try {
     $p.Refresh()
     if ($p.HasExited) { throw "Ordinary app exited before20s, exit=$($p.ExitCode)" }
     if ($p.MainWindowHandle -eq 0 -or -not $p.Responding) { throw 'Ordinary app has no responsive main window' }
+    if ($RequirePrivateRuntime) {
+        $privateClr = @($p.Modules | Where-Object { $_.ModuleName -ieq 'coreclr.dll' })
+        if ($privateClr.Count -ne 1 -or [IO.Path]::GetDirectoryName($privateClr[0].FileName) -ine $appDirectory) { throw 'CLR was not loaded from delivered app folder' }
+        $privateXaml = @($p.Modules | Where-Object { $_.ModuleName -ieq 'Microsoft.UI.Xaml.dll' })
+        if ($privateXaml.Count -ne 1 -or [IO.Path]::GetDirectoryName($privateXaml[0].FileName) -ine $appDirectory) { throw 'WinUI was not loaded from delivered app folder' }
+        'PASS loaded private coreclr.dll and Microsoft.UI.Xaml.dll from exact extracted ZIP' | Set-Content (Join-Path $output 'private-runtime.txt')
+    }
     $screen = [Windows.Forms.Screen]::PrimaryScreen.WorkingArea
     $captureWidth = [Math]::Min(1000,$screen.Width-32)
     $captureHeight = [Math]::Min(740,$screen.Height-32)

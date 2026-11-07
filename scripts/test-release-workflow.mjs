@@ -20,7 +20,7 @@ assert.match(release, /softprops\/action-gh-release@efb35369e0ad2afab669f228072c
 assert.match(release, /fail_on_unmatched_files:\s*true/, "Missing release assets must fail publication.");
 assert.match(release, /RELEASE_TAG.*v\(/s, "Release tags must be checked against a semantic version pattern.");
 assert.match(release, /SHA256SUMS\.txt/, "Checksums must be included in the release notes and asset set.");
-assert.match(release, /not a signed installer or production release/i, "Release body must disclose the current release limitations.");
+assert.match(read("docs/releases/preview-default.md"), /not a signed installer or production release/i, "Release body must disclose the current release limitations.");
 
 // Every third-party workflow action must be pinned to a complete reviewed commit SHA.
 // The semver comment keeps the pinned upstream release visible to maintainers.
@@ -62,3 +62,14 @@ assert.match(ci, /collect-third-party-notices\.mjs \$bundle/, "Windows ZIP must 
 assert.match(ci, /collect-third-party-notices\.mjs \$companion/, "Browser companion must carry dependency licenses before compression.");
 
 assert.match(read("scripts/setup-browser-companion.ps1"), /collect-third-party-notices\.mjs \$packageRoot/, "Local source-clone packaging must carry the same license evidence.");
+
+assert.match(ci, /portable-zip-startup:/, 'Final ZIP must have a separate fresh-runner startup job.');
+assert.match(ci, /needs: build-and-test/, 'ZIP startup must consume the completed package.');
+assert.match(ci, /RequirePrivateRuntime/, 'Startup must prove private runtime loading.');
+assert.match(ci, /WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=false --output artifacts\/Scrobblix\/desktop/, 'Delivered app must be ordinary self-contained build, not fixture.');
+assert.match(ci, /test-portable-package.ps1/, 'ZIP must verify runtime/resource files before launch.');
+assert.doesNotMatch(ci, /Install matching official Windows App Runtime/, 'Do not hide portable runtime gaps with runtime installation.');
+
+assert.match(release, /body_path:/, 'Release must publish reviewed notes from source.');
+assert.match(release, /github.ref_name != 'v0.1.0-beta.4'/, 'Beta4 must not append unreviewed generated notes.');
+assert.match(read('docs/releases/v0.1.0-beta.4.md'), /Don't disable Windows security protections/, 'Beta4 security caveat must remain.');

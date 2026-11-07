@@ -40,6 +40,10 @@ jobs:
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
       - name: Download validated Windows test bundle
         uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
@@ -75,25 +79,11 @@ jobs:
         uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
         with:
           tag_name: ${{ github.ref_name }}
-          name: Scrobblix ${{ github.ref_name }} — Preview
+          name: ${{ github.ref_name == 'v0.1.0-beta.4' && 'Scrobblix v0.1.0-beta.4 - Windows x64 startup fix (unsigned preview)' || format('Scrobblix {0} - Preview', github.ref_name) }}
           prerelease: true
           make_latest: "false"
-          generate_release_notes: true
-          body: |
-            > [!WARNING]
-            > **Unsigned preview build — not a signed installer or production release.** Scrobblix has not yet completed all real-Windows, listening/queue, signing, upgrade/rollback, and distribution qualification gates.
-
-            ## Included downloads
-
-            - **Windows Test Bundle** — unpackaged desktop app, native messaging host, Chromium/Firefox companion files, helper scripts, and setup notes. Follow the included `README-TESTING.txt`.
-            - **Browser Companion** — separate browser/native-host development package. Browser store signing/publication is not implied.
-            - **SHA256SUMS.txt** — SHA-256 hashes for both ZIP downloads.
-
-            ## Data retention in this build
-
-            Scrobblix automatically cleans raw playback diagnostic data older than 30 days at app startup and every 24 hours while it is running. If the app is closed, cleanup waits until the next launch. Your listening history and scrobbles are never deleted by this cleanup.
-
-            The desktop app may require the matching Microsoft Windows App Runtime. Review the repository's release process and known limitations before testing. Do not use a preview build as evidence of stable-release readiness.
+          generate_release_notes: ${{ github.ref_name != 'v0.1.0-beta.4' }}
+          body_path: ${{ github.ref_name == 'v0.1.0-beta.4' && 'docs/releases/v0.1.0-beta.4.md' || 'docs/releases/preview-default.md' }}
           files: release-assets/*
           fail_on_unmatched_files: true
         env:
