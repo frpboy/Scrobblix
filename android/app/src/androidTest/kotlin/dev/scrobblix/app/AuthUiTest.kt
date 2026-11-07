@@ -28,6 +28,9 @@ class AuthUiTest {
             ui.onNodeWithText("Last.fm password").performScrollTo().performTextInput("test-password")
             ui.onNodeWithText("Connect Last.fm").performScrollTo().performClick()
             ui.waitUntil(10000) { store.account()=="CanonicalSynthetic" }
+            // SQLite is committed before the main-thread account state recomposes.
+            // Wait for the connected branch, not just its backing store, before scrolling.
+            ui.waitUntil(10000) { ui.onAllNodesWithText("Connected as CanonicalSynthetic").fetchSemanticsNodes().size==1 }
             ui.onNodeWithText("Connected as CanonicalSynthetic").performScrollTo().assertIsDisplayed()
             assertFalse(store.tracking())
             assertTrue(store.secrets.read("lastfm","CanonicalSynthetic") is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)
@@ -55,6 +58,7 @@ class AuthUiTest {
             assertNull(store.account())
             ui.onNodeWithText("Finish browser connection").performScrollTo().performClick()
             ui.waitUntil(10000) { store.account()=="BrowserSynthetic" }
+            ui.waitUntil(10000) { ui.onAllNodesWithText("Connected as BrowserSynthetic").fetchSemanticsNodes().size==1 }
             ui.onNodeWithText("Connected as BrowserSynthetic").performScrollTo().assertIsDisplayed()
             assertFalse(store.tracking())
         } finally { store.disconnect() }
