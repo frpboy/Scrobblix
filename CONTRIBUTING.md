@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Current contribution guidance  
-> **Last reviewed:** 2026-10-31
+> **Last reviewed:** 2026-11-07
 
 
 Scrobblix accepts bug reports, documentation improvements, test cases, source adapters, browser-site adapters, accessibility fixes, translations, and implementation changes that follow the documented architecture.
@@ -57,12 +57,12 @@ test(gsmtc): cover paused-to-stopped transition
 
 ## Development branches
 
-- `main`: release-intended default branch. GitHub reported branch protection disabled on 2026-10-31; required reviews and status checks must not be assumed to be platform-enforced. See [Governance](GOVERNANCE.md) and [issue #88](https://github.com/frpboy/Scrobblix/issues/88).
+- `main`: release-intended default branch. GitHub protection enabled and read back on 2026-11-07: pull request, up-to-date GitHub Actions `build-and-test`, resolved conversations and linear history required; admins included, force-push/deletion disabled. Independent approval count is zero for the sole-owner workflow; code review remains mandatory. See [Governance](GOVERNANCE.md) and [issue #88](https://github.com/frpboy/Scrobblix/issues/88).
 - `feature/<issue>-<slug>`: ordinary work.
 - `fix/<issue>-<slug>`: bug fixes.
 - `release/<version>`: only when release stabilization requires it.
 
-Contributors must still use focused pull requests. Until branch protection is enabled and verified, the maintainer must manually inspect the latest PR head, required CI results, review feedback, and merge prerequisites before merging.
+Contributors must use focused pull requests. The maintainer must inspect the latest PR head, applicable CI results, review feedback, and merge prerequisites before merging. Android jobs currently live in draft PR133, not main; when present in a proposed Android change they must pass before merge. They are not globally required on unrelated PRs.
 
 ## Validation and merge discipline
 
