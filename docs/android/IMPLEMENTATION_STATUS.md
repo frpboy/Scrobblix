@@ -14,6 +14,8 @@ First version: local-first Last.fm scrobbling from supported players, local hist
 
 ## Still required
 
+- Screenshot and Android recent-app preview capture are enabled by owner request. They may expose the Last.fm account name, listening history and settings; credential entry fields remain visually masked. This is a documented privacy trade-off, not a Play Protect exception.
+
 Actual notification-listener/media-session lifecycle; explicit consent without unrelated notification text; account auth acceptable for mobile; Keystore-backed session storage/backup exclusion; local durable history and account-scoped queue; crash/unknown-outcome recovery parity; source controls; real players/background/battery/permission revocation tests; screenshots/accessibility; app identity and Play/GitHub signing/update strategy; exact Play console eligibility and reviewed disclosures/store text.
 
 Current UI copy is development-only source, not approved store or marketing wording. Last.fm browser-token desktop flow is not assumed approved for mobile; no password collection added. No release date or production qualification is claimed.
