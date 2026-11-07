@@ -94,7 +94,7 @@ jobs:
             adb logcat -d -b crash || true
             # Pull synthetic pixels before the EXIT trap tears down the emulator.
             mkdir -p android-evidence
-            for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
+            for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
             exit 1
           fi
           # Actual process boundary with synthetic data only. Instrumentation is a
@@ -115,7 +115,7 @@ jobs:
           done
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
       - name: Preserve app pixels and test-only APK
         if: always()
@@ -123,7 +123,7 @@ jobs:
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

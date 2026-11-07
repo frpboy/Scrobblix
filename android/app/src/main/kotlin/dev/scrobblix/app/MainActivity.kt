@@ -26,7 +26,13 @@ class MainActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) { AppScreen((application as ScrobblixApp).store) } } }
+        val store=try {(application as ScrobblixApp).store}catch(_:Exception){null}
+        setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) {
+            if(store==null) Column(Modifier.safeDrawingPadding().padding(24.dp)) {
+                Text("Local storage is unavailable")
+                Text("Scrobblix could not safely read or migrate this device's data. Collection, account setup and delivery are disabled. Your data has not been reset.")
+            } else AppScreen(store)
+        } } }
     }
 }
 @Composable
@@ -35,7 +41,9 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     val context=store.context
     var tab by remember { mutableStateOf("Listen") }
     var tracking by remember { mutableStateOf(store.tracking()) }
-    var account by remember { mutableStateOf(store.account()) }
+    var storageUnavailable by remember { mutableStateOf(true) }
+    var connectionHealth by remember { mutableStateOf<String?>("Checking local connection state.") }
+    var account by remember { mutableStateOf<String?>(null) }
     var access by remember { mutableStateOf(false) }
     var history by remember { mutableStateOf(emptyList<Map<String,String?>>()) }
     var sources by remember { mutableStateOf(emptySet<String>()) }
@@ -54,8 +62,12 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
         access=store.hasMediaAccess()
-        account=store.account();tracking=store.tracking();sources=store.knownSources()
-        withContext(Dispatchers.IO) { history=store.recent();states=store.states() }
+        val connection=withContext(Dispatchers.IO){store.accountState()}
+        storageUnavailable=connection is AppStore.AccountState.StorageUnavailable
+        account=(connection as? AppStore.AccountState.Saved)?.snapshot?.account
+        connectionHealth=store.healthFor(connection);tracking=store.tracking();sources=store.knownSources()
+        try {withContext(Dispatchers.IO) { history=store.recent();states=store.states() }}
+        catch(_:Exception){storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
         delay(2000)
     } }
     Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
@@ -74,10 +86,14 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 Text(if(access) "Media access is enabled" else "Media access is off")
                 Button(onClick={context.startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}) { Text("Review media access") }
                 Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
-                    Switch(checked=tracking,onCheckedChange={store.setTracking(it);tracking=it})
+                    Switch(checked=tracking,enabled=!busy && !storageUnavailable,onCheckedChange={enabled ->
+                        busy=true
+                        scope.launch {try {val result=withContext(Dispatchers.IO){store.setTracking(enabled)};message=result.message;tracking=store.tracking()}
+                            catch(_:Exception){message="Local tracking outcome is unavailable. Collection and delivery remain gated."}finally{busy=false}}
+                    })
                     Text("Track listening",Modifier.padding(top=12.dp))
                 }
-                Text(if(account==null) "Local history only. Connect Last.fm in Settings to scrobble future listening." else "Last.fm connected: $account")
+                Text(if(storageUnavailable) "Local connection state unavailable. Do not assume disconnected." else if(account==null) "Local history only. Connect Last.fm in Settings to scrobble future listening." else "Last.fm connected: $account")
                 if(!access && tracking) Text("Tracking waits for media access. Grant it in Android settings when you are ready.")
                 Text("Keep your player running. Android may pause collection in the background; a gap is never counted as listening. Pausing stops new work; a request already sent may still finish.")
             }
@@ -95,16 +111,20 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 if(states.isEmpty()) Text("No scrobbles queued yet.")
                 states.forEach { Text("${it["state"]}: ${it["total"]}") }
                 Text("Offline work stays on this device. Uncertain submissions are held and never retried automatically. Reconnect the same Last.fm account to resume auth-blocked work.")
-                Button(onClick={store.schedule();message="Delivery requested. Android runs it when network access is available."}) { Text("Check pending delivery") }
+                Button(enabled=!busy && !storageUnavailable,onClick={scope.launch {message=withContext(Dispatchers.IO){store.schedule()}}}) { Text("Check pending delivery") }
             }
             "Settings" -> {
                 Text("Last.fm account",style=MaterialTheme.typography.headlineSmall)
+                connectionHealth?.let { Text(it) }
                 Text("Scrobbling sends artist, track, album, duration and play time to Last.fm only after you connect an account and enable tracking. Local history stays on this device. No analytics or cloud sync.")
                 Text("Screenshots and recent-app previews are enabled. They may show your Last.fm account name, listening history and settings; keep captures private.")
                 if(account!=null) {
                     Text("Connected as $account")
-                    Button(onClick={scope.launch { withContext(Dispatchers.IO) { store.disconnect() };account=null;tracking=false;message="Disconnected locally. History and queue are preserved. Revoke the session in Last.fm settings if needed." }}) { Text("Disconnect Last.fm") }
-                } else {
+                    Button(enabled=!busy,onClick={busy=true;scope.launch {try {
+                        val result=withContext(Dispatchers.IO){store.disconnect()};message=result.message
+                        account=store.account();tracking=store.tracking()
+                    }catch(_:Exception){message="Local disconnect outcome is unavailable. Do not assume disconnected."}finally{busy=false}}}) { Text("Disconnect Last.fm") }
+                } else if(!storageUnavailable) {
                     val configured=remember(api,apiRevision) { api ?: LastFmApi.configured(context) }
                     if(configured==null) {
                         Text("This preview has no registered Last.fm API configuration. Sign-in is unavailable; it will not send your credentials or listening data.")
@@ -118,9 +138,9 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                             val keyInput=apiKey;val secretInput=apiSecret;apiKey="";apiSecret="";busy=true
                             scope.launch {
                                 message=try { withContext(Dispatchers.IO) {
-                                    store.disconnect();ApiConfigurationStore(context).write(keyInput,secretInput)
+                                    check(store.disconnect().committed) { "Local disconnect unavailable" };ApiConfigurationStore(context).write(keyInput,secretInput)
                                 };apiRevision++;"API app saved on this device. Sign in to Last.fm next." }
-                                catch(_:Exception) { "Could not save API configuration. Reconnect and try again." }
+                                catch(_:Exception) { "Could not save API configuration safely. Check local connection/storage state; do not repeat browser authorization to fix this." }
                                 busy=false
                             }
                         }) { Text("Save private API configuration") }
@@ -159,9 +179,10 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                     }
                                     if(login!=null) {
                                         message=try {
-                                            withContext(Dispatchers.IO) { store.connect(login.username,login.sessionKey) }
-                                            browserFlowNeedsRestart=false;account=store.account()
-                                            "Last.fm connected. Turn on tracking to scrobble future listening."
+                                            val outcome=withContext(Dispatchers.IO) { store.connect(login.username,login.sessionKey) }
+                                            if(outcome.state==AppStore.ConnectState.Committed)browserFlowNeedsRestart=false
+                                            account=store.account();storageUnavailable=outcome.state==AppStore.ConnectState.StorageUnavailable
+                                            outcome.message
                                         } catch(_:Exception) {
                                             "Last.fm returned a session, but saving the local connection failed. Do not assume it is connected. Your history and queue are preserved; this token will not be retried."
                                         }
@@ -180,9 +201,8 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         Button(enabled=!busy && username.isNotBlank() && password.isNotEmpty(),onClick={
                             busy=true;val input=password;password=""
                             scope.launch { message=try {
-                                withContext(Dispatchers.IO) { val login=configured.login(username,input);store.connect(login.username,login.sessionKey) }
-                                "Last.fm connected. Turn on tracking to scrobble future listening."
-                            } catch(_:Exception) { "Could not connect. Check your credentials or network and try again." }
+                                withContext(Dispatchers.IO) { val login=configured.login(username,input);store.connect(login.username,login.sessionKey).message }
+                            } catch(_:Exception) { "Could not confirm the provider sign-in response. No local connection is confirmed; check the observed error before trying again." }
                             account=store.account();busy=false }
                         }) { Text(if(busy) "Connecting…" else "Connect Last.fm") }
                         }

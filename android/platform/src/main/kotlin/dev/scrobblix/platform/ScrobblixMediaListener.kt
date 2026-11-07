@@ -15,14 +15,16 @@ abstract class ScrobblixMediaListener : NotificationListenerService() {
     private var session:MediaCollectionSession?=null
     protected abstract fun createCollectionSession():MediaCollectionSession
     protected abstract fun currentProviderAccount():Pair<String,String>?
+    protected open fun sampleWithCurrentAuthority(session:MediaCollectionSession) {
+        val account=currentProviderAccount();session.sample(account?.first,account?.second)
+    }
     protected open fun collectionFailed(exception:Exception) { /* app may report only a safe error code */ }
     private val tick=object:Runnable {
         override fun run() {
             check(Looper.myLooper()==worker.looper && Looper.myLooper()!=Looper.getMainLooper())
             if(!connected || !tracking) return
             try {
-                val account=currentProviderAccount()
-                if(connected && tracking) session?.sample(account?.first,account?.second)
+                if(connected && tracking) session?.let(::sampleWithCurrentAuthority)
             } catch(e:Exception) {
                 session?.disconnected()
                 collectionFailed(e)

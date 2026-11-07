@@ -22,10 +22,17 @@ class ProcessRecoveryTest {
         assertNull(s.account());assertFalse(s.tracking())
         assertNull(s.history.read(play))
         s.history.observe(LocalPlay(play,"Synthetic Artist","Synthetic Process Recovery",null,100,60000,30000),null,null,100)
-        s.secrets.write("lastfm",account,"a".repeat(32).toByteArray())
+        s.connect(account,"a".repeat(32))
+        s.setTracking(false)
         assertTrue(s.queue.enqueue(action,"lastfm",account,ActionType.Scrobble,100,play))
-        val lease=s.queue.claim("lastfm",account,"synthetic-before-death",100,100)!!
+        val lease=s.authority.claim(action,"synthetic-before-death",{true},{false},100)!!
         assertEquals(action,lease.id)
+        assertTrue(s.authority.permit(lease,{true},{false},101))
+        assertTrue(s.queue.enqueue(action+"-unsent","lastfm",account,ActionType.Scrobble,100))
+        // Distinct play-less action avoids the per-play uniqueness fence in this synthetic local fixture.
+
+        assertNotNull(s.authority.claim(action+"-unsent","synthetic-unsent",{true},{false},100))
+        assertTrue(s.authority.requireTrackingChoice(102) is dev.scrobblix.core.ConnectionCommit.Committed)
         assertTrue(s.preferences.edit().putInt("synthetic-process-recovery-pid",Process.myPid()).commit())
     }
     @Test fun verifyAfterProcessDeath() {
@@ -34,22 +41,25 @@ class ProcessRecoveryTest {
         try {
             val oldPid=s.preferences.getInt("synthetic-process-recovery-pid",0)
             assertTrue(oldPid>0);assertNotEquals(oldPid,Process.myPid())
-            assertNull(s.account());assertFalse(s.tracking())
+            assertEquals(account,s.account());assertFalse(s.tracking())
             val saved=s.history.read(play)!!
             assertEquals("Synthetic Artist",saved.artist);assertEquals(30000L,saved.confirmedMs)
-            val secret=s.secrets.read("lastfm",account)
+            val secret=s.resolveCredential(s.authority.snapshot())
             assertTrue(secret is SessionSecretStore.ReadResult.Available)
             if(secret is SessionSecretStore.ReadResult.Available) {
                 try { assertArrayEquals("a".repeat(32).toByteArray(),secret.secret) }
                 finally { secret.secret.fill(0) }
             }
-            val row=s.sql.query("SELECT state,attempts,reason FROM android_actions WHERE id=?",listOf(action)).single()
+            assertTrue(s.authority.snapshot().resumeConsentRequired)
+            val unsent=s.sql.query("SELECT state,provider_sends FROM android_actions WHERE id=?",listOf(action+"-unsent")).single()
+            assertEquals("LocalHold",unsent["state"]);assertEquals("0",unsent["provider_sends"])
+            val row=s.sql.query("SELECT state,provider_sends,reason FROM android_actions WHERE id=?",listOf(action)).single()
             assertEquals(ActionState.SubmissionOutcomeUnknown.name,row["state"])
-            assertEquals("1",row["attempts"]);assertEquals("provider.lease_expired",row["reason"])
+            assertEquals("1",row["provider_sends"]);assertEquals("provider.submission_outcome_unknown",row["reason"])
             assertNull(s.queue.claim("lastfm",account,"synthetic-after-death",System.currentTimeMillis(),1000))
         } finally {
-            s.secrets.remove("lastfm",account)
-            s.sql.execute("DELETE FROM android_actions WHERE id=?",listOf(action))
+            s.disconnect()
+            s.sql.execute("DELETE FROM android_actions WHERE id IN (?,?)",listOf(action,action+"-unsent"))
             s.sql.execute("DELETE FROM android_plays WHERE id=?",listOf(play))
             s.preferences.edit().remove("synthetic-process-recovery-pid").commit()
         }

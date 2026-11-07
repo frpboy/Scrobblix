@@ -33,7 +33,9 @@ class AuthUiTest {
             ui.waitUntil(10000) { ui.onAllNodesWithText("Connected as CanonicalSynthetic").fetchSemanticsNodes().size==1 }
             ui.onNodeWithText("Connected as CanonicalSynthetic").performScrollTo().assertIsDisplayed()
             assertFalse(store.tracking())
-            assertTrue(store.secrets.read("lastfm","CanonicalSynthetic") is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)
+            val saved=store.resolveCredential(store.authority.snapshot())
+            assertTrue(saved is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)
+            if(saved is dev.scrobblix.platform.SessionSecretStore.ReadResult.Available)try {assertTrue(saved.secret.isNotEmpty())}finally{saved.secret.fill(0)}
             ui.onNodeWithText("Disconnect Last.fm").performScrollTo().performClick()
             ui.waitUntil(10000) { store.account()==null }
             assertFalse(store.tracking())
