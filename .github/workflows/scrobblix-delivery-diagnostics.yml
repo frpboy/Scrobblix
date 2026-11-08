@@ -26,7 +26,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD:android)" = b2b74bdb9981a066e64cf337e8a4c7146e927d00
+          test "$(git rev-parse HEAD:android)" = a3cb65af446ddd4b0fd3d4d0031f1f0d594c73cf
           test "$(git rev-parse HEAD:tests/fixtures/scrobble-eligibility.tsv)" = ab8dd294725fbb9f322e261b41912ddfad1eaa8e
           test "$(sha256sum tests/fixtures/scrobble-eligibility.tsv | cut -d' ' -f1)" = 66392633a560d237934fbddd8b50b2f99149c0bc71c46363a3455a559186fd65
           test -z "${SCROBBLIX_SIGNING_STORE:-}"
@@ -39,7 +39,13 @@ jobs:
           export PATH="$JAVA_HOME/bin:$PATH"
           # Ordinary pinned repositories only. No mirror, credentials, policy bypass or retries.
           # Host dependency failure must stop before emulator startup. Offline runtime fails closed.
-          timeout --signal=TERM --kill-after=10s 420s android/gradlew -p android :core:compileTestKotlin :platform:assembleDebugAndroidTest :app:assembleDebugAndroidTest --no-daemon
+          timeout --signal=TERM --kill-after=10s 420s android/gradlew -p android -I qa/resolve-qualification.init.gradle :core:compileTestKotlin :platform:assembleDebugAndroidTest :app:assembleDebugAndroidTest resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-online.log"
+          # A separate offline resolution must reproduce the exact artifact receipt before any emulator.
+          timeout --signal=TERM --kill-after=10s 60s android/gradlew -p android --offline -I qa/resolve-qualification.init.gradle resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-offline.log"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-online.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-offline.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
+          test -s "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          cmp "$RUNNER_TEMP/scrobblix-inputs-online.sha256" "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
       - name: Run core, platform and ordinary app synthetic tests with provider egress blocked
         shell: bash
         run: |
