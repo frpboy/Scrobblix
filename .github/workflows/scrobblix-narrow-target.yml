@@ -18,7 +18,7 @@ jobs:
       matrix:
         api: [26, 36]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Bind reviewed target and execute only synthetic explicit phases
@@ -33,7 +33,7 @@ jobs:
         id: evidence
         if: always()
         run: python3 qa/narrow-target-contract.py evidence
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.evidence.outcome == 'success'
         with:
           name: narrow-phases-api${{ matrix.api }}

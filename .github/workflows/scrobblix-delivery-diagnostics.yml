@@ -19,7 +19,7 @@ jobs:
       matrix:
         api: [26, 36]
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       - name: Require exact reviewed Android source
@@ -139,7 +139,7 @@ jobs:
               assert p.is_file() and (p.name in allowed or p.name.startswith('instrumentation-') and p.suffix=='.xml')
           assert sum(p.stat().st_size for p in out.iterdir())<=10*1024*1024, 'Synthetic evidence exceeds cap'
           PY
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always() && steps.evidence.outcome == 'success'
         with:
           name: scrobblix-full-synthetic-api${{ matrix.api }}
