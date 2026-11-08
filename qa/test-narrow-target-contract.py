@@ -70,6 +70,6 @@ printf "%s" "$private" > private-path.txt
         self.assertIn('timeout --kill-after=1s 2s rm -rf',source)
     def test_exact_one_branch_push_only(self):
         s=Path('.github/workflows/scrobblix-narrow-target.yml').read_text()
-        self.assertNotIn('workflow_dispatch:',s);self.assertNotIn('pull_request:',s);self.assertIn('branches: [qa/narrow-target-20261108-once]',s);self.assertNotIn('tags:',s)
+        self.assertNotIn('workflow_dispatch:',s);self.assertNotIn('pull_request:',s);self.assertIn('branches: [qa/narrow-android-signer-20261108-once]',s);self.assertNotIn('tags:',s)
         self.assertIn('EXPECTED_COMMIT: ${{ github.sha }}',s)
 if __name__=='__main__': unittest.main()

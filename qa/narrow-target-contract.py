@@ -52,7 +52,7 @@ def redact_phase(text):
 def evidence():
     import json
     root=Path('narrow-evidence')
-    allowed={'process-prepare.txt','process-verify.txt','update-prepare.txt','update-verify.txt','inputs-online.sha256','inputs-offline.sha256','identity.txt','source.txt','manifest.json','overlay.txt'}
+    allowed={'process-prepare.txt','process-verify.txt','update-prepare.txt','update-verify.txt','inputs-online.sha256','inputs-offline.sha256','identity.txt','source.txt','manifest.json','overlay.txt','signer.json'}
     assert root.is_dir()
     assert {p.name for p in root.iterdir()} <= allowed
     assert all(p.is_file() and not p.is_symlink() and p.stat().st_size<=1024*1024 for p in root.iterdir())
@@ -67,6 +67,11 @@ def evidence():
     if manifest['status']=='pass':
         assert {p.name for p in root.iterdir()} == allowed
         assert manifest['cleanup']=='dead'
+        signer=json.loads((root/'signer.json').read_text())
+        assert signer['status']=='pass' and signer['error_category']=='none'
+        assert set(signer['certificate_sha256'])=={'baseline','test','candidate'}
+        values=list(signer['certificate_sha256'].values())
+        assert len(set(values))==1 and all(re.fullmatch('[0-9a-f]{64}',v) for v in values)
         for name, cls, method in [('process-prepare','ProcessRecoveryTest','prepareBeforeProcessDeath'),('process-verify','ProcessRecoveryTest','verifyAfterProcessDeath'),('update-prepare','SignedUpdateRehearsalTest','preserveSyntheticStateAcrossSignedReleaseUpdate'),('update-verify','SignedUpdateRehearsalTest','preserveSyntheticStateAcrossSignedReleaseUpdate')]:
             phase((root/(name+'.txt')).read_text(), 'dev.scrobblix.app.'+cls, method)
         assert (root/'inputs-online.sha256').read_bytes() == (root/'inputs-offline.sha256').read_bytes()

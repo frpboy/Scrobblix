@@ -1,60 +1,15 @@
 name: Reviewed narrow target qualification
 on:
   push:
-    branches: [qa/narrow-target-20261108-once]
+    branches: [qa/narrow-android-signer-20261108-once]
 permissions:
   contents: read
 concurrency:
   group: narrow-target-${{ github.ref }}
   cancel-in-progress: false
 jobs:
-  windows-console:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-target-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
-    runs-on: windows-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - name: Bind reviewed target
-        shell: bash
-        env:
-          EXPECTED_COMMIT: ${{ github.sha }}
-        run: python3 qa/narrow-target-contract.py source
-      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68
-        with:
-          dotnet-version: 10.0.x
-      - name: Full console assertions including shared eligibility fixtures
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          New-Item -ItemType Directory windows-evidence | Out-Null
-          $result = 1
-          $stage = 'restore'
-          try {
-            dotnet restore tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj *> windows-evidence/console.txt
-            if ($LASTEXITCODE) { throw 'restore-failed' }
-            $stage = 'build'
-            dotnet build tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --no-restore --configuration Release *>> windows-evidence/console.txt
-            if ($LASTEXITCODE) { throw 'build-failed' }
-            $stage = 'run'
-            dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build *>> windows-evidence/console.txt
-            if ($LASTEXITCODE) { throw 'assertions-failed' }
-            $result = 0
-          } finally {
-            if ((Get-Item windows-evidence/console.txt).Length -gt 1048576) { 'bounded-output-exceeded' | Set-Content windows-evidence/console.txt; $result=1 }
-            @{source_tree=(git rev-parse 'HEAD^{tree}'); attempt=$env:GITHUB_RUN_ATTEMPT; result=$result; first_stage=$stage; error_category=$(if ($result -eq 0) {'none'} else {'bounded_command_nonzero'})} | ConvertTo-Json | Set-Content windows-evidence/result.json
-          }
-          exit $result
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
-        if: always()
-        with:
-          name: narrow-windows-console
-          path: windows-evidence/
-          retention-days: 1
-          if-no-files-found: error
   android-phases:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-target-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-android-signer-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 55
     strategy:

@@ -94,11 +94,15 @@ for name in baseline test candidate; do
   "$build_tools/apksigner" sign --ks "$private/test.p12" --ks-key-alias rehearsal --ks-pass pass:disposable-only --key-pass pass:disposable-only "$private/$name.apk"
   "$build_tools/apksigner" verify --verbose --print-certs "$private/$name.apk" > "$private/$name.signature"
 done
-for name in test candidate; do diff <(grep '^Signer #1 certificate SHA-256 digest:' "$private/baseline.signature") <(grep '^Signer #1 certificate SHA-256 digest:' "$private/$name.signature"); done
+cause=signer_output_contract
+printf 'build_tools=%s\n' "$(basename "$build_tools")" >> narrow-evidence/overlay.txt
+sha256sum "$build_tools/lib/apksigner.jar" | awk '{print "apksigner_jar_sha256=" $1}' >> narrow-evidence/overlay.txt
+tool_version=$("$build_tools/apksigner" version)
+python3 qa/signer-output-contract.py narrow-evidence/signer.json "$tool_version" "$private/baseline.signature" "$private/test.signature" "$private/candidate.signature"
 for name in baseline candidate; do "$build_tools/aapt" dump badging "$private/$name.apk" | grep '^package:' > "$private/$name.package"; done
 grep -F "name='com.frpboy.scrobblix' versionCode='$baseline_version'" "$private/baseline.package"
 grep -F "name='com.frpboy.scrobblix' versionCode='$candidate_version'" "$private/candidate.package"
-{ cat "$private/baseline.package" "$private/candidate.package"; grep '^Signer #1 certificate SHA-256 digest:' "$private/baseline.signature"; sha256sum "$private/baseline.apk" "$private/test.apk" "$private/candidate.apk" | sed "s|$private/||"; } > narrow-evidence/identity.txt
+{ cat "$private/baseline.package" "$private/candidate.package"; cat narrow-evidence/signer.json; sha256sum "$private/baseline.apk" "$private/test.apk" "$private/candidate.apk" | sed "s|$private/||"; } > narrow-evidence/identity.txt
 export ANDROID_USER_HOME="$private/android" ANDROID_EMULATOR_HOME="$private/android" ANDROID_AVD_HOME="$private/android/avd"
 mkdir -p "$ANDROID_AVD_HOME"
 test -e /dev/kvm
