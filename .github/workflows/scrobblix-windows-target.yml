@@ -1,0 +1,408 @@
+name: Reviewed Windows current-target qualification
+
+on:
+  push:
+    branches: [qa/windows-target-20261108-once]
+
+concurrency:
+  # GitHub group names are case-insensitive. PR numbers are canonical;
+  # push refs are limited to the exact case-sensitive branch filters below.
+  # Dispatch uses run IDs; reusable calls use a caller-supplied unique key.
+  group: ${{ github.workflow }}-${{ inputs.concurrency_key || github.event.pull_request.number || ((github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/feat/private-beta-readiness')) && github.ref) || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    if: github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false && github.ref == 'refs/heads/qa/windows-target-20261108-once'
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Bind reviewed source and unchanged Windows console provenance
+        shell: bash
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: python3 qa/windows-target-source.py
+
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          dotnet-version: 10.0.x
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 22.x
+          cache: npm
+          cache-dependency-path: browser-extension/package-lock.json
+
+      - name: Validate CI concurrency contract
+        run: node scripts/test-ci-concurrency.mjs
+
+      - name: Restore .NET solution
+        run: dotnet restore Scrobblix.slnx
+
+      - name: Build .NET solution
+        run: dotnet build Scrobblix.slnx --no-restore --configuration Release
+
+      - name: Publish synthetic pipe-authorization test client
+        run: dotnet publish tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/pipe-client
+
+      - name: Run native Windows integration checks
+        run: dotnet run --project tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj --configuration Release --no-build
+        env:
+          SCROBBLIX_PIPE_CLIENT_PATH: artifacts/pipe-client/Scrobblix.PipeClient.exe
+
+      - name: Build isolated self-contained artwork UI probe
+        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=true --output artifacts/ui-probe
+
+      - name: Execute isolated real WinUI artwork fixture probe
+        run: ./scripts/test-artwork-ui.ps1
+
+      - name: Preserve synthetic WinUI renders
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: artwork-ui-qualification
+          path: ${{ runner.temp }}/scrobblix-artwork-ui
+          retention-days: 1
+          if-no-files-found: warn
+
+      - name: Dump WinUI XAML compiler diagnostics on build failure
+        if: failure()
+        shell: pwsh
+        run: |
+          $searchRoot = 'src/Scrobblix.Desktop/obj/Release'
+          if (Test-Path $searchRoot) {
+            $files = Get-ChildItem -Path $searchRoot -Recurse -File -ErrorAction SilentlyContinue |
+              Where-Object { $_.Name -in @('input.json', 'output.json', 'XamlCompiler.log', 'XamlCompiler.err') }
+            foreach ($file in $files) {
+              Write-Output "----- $($file.Name) ($($file.Length) bytes) -----"
+              if ($file.Name -eq 'input.json') {
+                Write-Output "XAML compiler input found: $($file.FullName)"
+                continue
+              }
+
+              $raw = Get-Content -LiteralPath $file.FullName -Raw -ErrorAction SilentlyContinue
+              if ($raw) {
+                foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                  $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                  if ($index -ge 0) {
+                    $startAt = [Math]::Max(0, $index - 240)
+                    $length = [Math]::Min(1200, $raw.Length - $startAt)
+                    Write-Output ("MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
+                  }
+                }
+              }
+            }
+
+            $compiler = Get-ChildItem -Path "$env:USERPROFILE\.nuget\packages\microsoft.windowsappsdk.winui" -Recurse -Filter 'XamlCompiler.exe' -ErrorAction SilentlyContinue | Select-Object -First 1
+            $inputFile = Get-ChildItem -Path $searchRoot -Recurse -Filter 'input.json' -ErrorAction SilentlyContinue | Select-Object -First 1
+            if ($null -ne $compiler -and $null -ne $inputFile) {
+              $replay = Join-Path $inputFile.DirectoryName 'output-diagnostic-replay.json'
+              $stdout = Join-Path $inputFile.DirectoryName 'xaml-compiler-stdout.txt'
+              $stderr = Join-Path $inputFile.DirectoryName 'xaml-compiler-stderr.txt'
+              Write-Output "Replaying compiler with redirected stdout/stderr."
+              $process = Start-Process -FilePath $compiler.FullName -ArgumentList @($inputFile.FullName, $replay) -Wait -PassThru -NoNewWindow -RedirectStandardOutput $stdout -RedirectStandardError $stderr
+              Write-Output "Replay exit code: $($process.ExitCode)"
+              foreach ($logPath in @($stdout, $stderr)) {
+                if (Test-Path $logPath) {
+                  $text = Get-Content -LiteralPath $logPath -Raw -ErrorAction SilentlyContinue
+                  if ($text) {
+                    Write-Output "----- $([System.IO.Path]::GetFileName($logPath)) -----"
+                    Write-Output $text.Substring(0, [Math]::Min(8000, $text.Length))
+                  }
+                }
+              }
+              if (Test-Path $replay) {
+                $raw = Get-Content -LiteralPath $replay -Raw -ErrorAction SilentlyContinue
+                if ($raw) {
+                  foreach ($needle in @('error', 'exception', 'lineNumber', 'XamlParseException', 'Message', 'diagnostic')) {
+                    $index = $raw.IndexOf($needle, [StringComparison]::OrdinalIgnoreCase)
+                    if ($index -ge 0) {
+                      $startAt = [Math]::Max(0, $index - 240)
+                      $length = [Math]::Min(1600, $raw.Length - $startAt)
+                      Write-Output ("REPLAY MATCH [{0}] {1}" -f $needle, $raw.Substring($startAt, $length))
+                    }
+                  }
+                }
+              }
+            }
+          }
+          $crashDumpRoot = Join-Path $env:LOCALAPPDATA 'CrashDumps'
+          if (Test-Path $crashDumpRoot) {
+            Get-ChildItem -Path $crashDumpRoot -Filter '*XamlCompiler*' -File -ErrorAction SilentlyContinue |
+              Select-Object -First 5 FullName, Length, LastWriteTime |
+              Format-Table -AutoSize | Out-String | Write-Output
+          }
+          try {
+            Get-WinEvent -FilterHashtable @{ LogName = 'Application'; StartTime = (Get-Date).AddMinutes(-10) } -MaxEvents 120 -ErrorAction Stop |
+              Where-Object { $_.ProviderName -match 'Application Error|\.NET Runtime|Windows Error Reporting' -and $_.Message -match 'XamlCompiler|Scrobblix' } |
+              Select-Object -First 10 TimeCreated, ProviderName, Id, Message |
+              Format-List | Out-String -Width 220 | Write-Output
+          }
+          catch {
+            Write-Output "Application event-log inspection unavailable: $($_.Exception.GetType().Name)"
+          }
+          exit 0
+      - name: Validate desktop UI contracts
+        run: node scripts/test-desktop-ui-contracts.mjs
+
+      - name: Validate release workflow wiring
+        run: node scripts/test-release-workflow.mjs
+
+      - name: Validate Markdown documentation links and structure
+        run: node scripts/validate-docs.mjs
+
+      # Exact Domain.Tests console already passed on the same production/fixture source
+      # in run42438756642, head ebd5/tree2ec174. Do not count it as run here.
+      - name: Install browser companion dependencies
+        run: npm ci
+        working-directory: browser-extension
+
+      - name: Type-check browser companion
+        run: npm run check
+        working-directory: browser-extension
+
+      - name: Build browser companion
+        run: npm run build
+        working-directory: browser-extension
+
+      - name: Test browser sender and payload validation
+        run: node scripts/test-browser-security.mjs
+
+      - name: Validate Chromium and Firefox manifests
+        run: node scripts/validate-browser-manifests.mjs
+
+      - name: Parse PowerShell helper scripts
+        shell: pwsh
+        run: |
+          $scriptFiles = @(
+            'scripts/update-and-run.ps1',
+            'scripts/setup-browser-companion.ps1',
+            'scripts/install-native-host.ps1',
+            'scripts/uninstall-native-host.ps1'
+          )
+          foreach ($scriptFile in $scriptFiles) {
+            $tokens = $null
+            $parseErrors = $null
+            [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path $scriptFile), [ref]$tokens, [ref]$parseErrors) | Out-Null
+            if ($parseErrors.Count -gt 0) {
+              $parseErrors | ForEach-Object { Write-Error "$scriptFile : $_" }
+              throw "PowerShell parse failed: $scriptFile"
+            }
+          }
+
+      - name: Publish unpackaged Windows application
+        run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=false --output artifacts/Scrobblix/desktop
+
+      - name: Qualify ordinary fresh-profile published startup
+        run: ./scripts/test-ordinary-startup.ps1
+
+      - name: Preserve ordinary startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ordinary-startup-qualification
+          path: ${{ runner.temp }}/scrobblix-ordinary-startup
+          retention-days: 1
+          if-no-files-found: warn
+
+      - name: Publish native messaging host
+        run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/Scrobblix/native-host
+
+      - name: Verify native-host malformed envelope recovery
+        run: node scripts/test-native-host-framing.mjs artifacts/Scrobblix/native-host/Scrobblix.NativeHost.dll
+
+      - name: Assemble local test bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $bundle = 'artifacts/Scrobblix'
+          New-Item -ItemType Directory -Force -Path "$bundle/browser-extension/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$bundle/browser-extension-firefox/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$bundle/scripts" | Out-Null
+          Copy-Item -Path 'browser-extension/manifest.json' -Destination "$bundle/browser-extension/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$bundle/browser-extension-firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$bundle/browser-extension/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$bundle/browser-extension/popup.css" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$bundle/browser-extension-firefox/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$bundle/browser-extension-firefox/popup.css" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension-firefox/dist/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension/README.md" -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$bundle/browser-extension-firefox/README.md" -Force
+          Copy-Item -Path 'browser-extension/package.json' -Destination "$bundle/browser-extension/package.json" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$bundle/browser-extension/dist/" -Recurse -Force
+          Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$bundle/scripts/" -Force
+          Copy-Item -Path 'scripts/uninstall-native-host.ps1' -Destination "$bundle/scripts/" -Force
+          Copy-Item -Path 'docs/OWNER_SETUP_GUIDE.md' -Destination "$bundle/OWNER_SETUP_GUIDE.md" -Force
+          @(
+            'Scrobblix Windows development test bundle'
+            ''
+            '1. Windows x64 only. Extract ALL files to a new folder, then open desktop/Scrobblix.Desktop.exe. Do not run inside the ZIP or copy just the EXE. .NET and Windows App SDK runtimes are included.'
+            '2. Keep your existing app-data folder intact. This bundle does not reset settings/history. It is unsigned: do not disable security protections to run it. If blocked or still silent, report the exact message and Windows System type.'
+            '3. Chromium: load browser-extension unpacked and register its ID with scripts/install-native-host.ps1 -ExtensionId <ID> -NativeHostPublishDirectory .\native-host. Firefox: load browser-extension-firefox as a temporary add-on, then register with -RegisterFirefox -NativeHostPublishDirectory .\native-host. The companion is optional for GSMTC playback.'
+            '4. Do not place Last.fm secrets in this bundle or in Git. Configure them from the app Settings page.'
+            '5. This is a CI verification bundle, not a signed installer or production release.'
+          ) | Set-Content -Path "$bundle/README-TESTING.txt" -Encoding utf8
+          $requiredFiles = @(
+            "$bundle/desktop/Scrobblix.Desktop.exe",
+            "$bundle/desktop/Scrobblix.Desktop.pri",
+            "$bundle/desktop/coreclr.dll",
+            "$bundle/desktop/Microsoft.UI.Xaml.dll",
+            "$bundle/native-host/Scrobblix.NativeHost.exe",
+            "$bundle/browser-extension/manifest.json",
+            "$bundle/browser-extension/popup.html",
+            "$bundle/browser-extension/popup.css",
+            "$bundle/browser-extension/dist/popup.js",
+            "$bundle/browser-extension/dist/service-worker.js",
+            "$bundle/browser-extension/dist/media-observer.js",
+            "$bundle/browser-extension-firefox/manifest.json",
+            "$bundle/browser-extension-firefox/dist/service-worker.js",
+            "$bundle/browser-extension-firefox/dist/media-observer.js",
+            "$bundle/scripts/install-native-host.ps1",
+            "$bundle/scripts/uninstall-native-host.ps1",
+            "$bundle/OWNER_SETUP_GUIDE.md"
+          )
+          foreach ($requiredFile in $requiredFiles) {
+            if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
+              throw "Test bundle is missing required file: $requiredFile"
+            }
+          }
+          node scripts/test-third-party-notices.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Third-party notice tests failed.' }
+          node scripts/collect-third-party-notices.mjs $bundle
+          if ($LASTEXITCODE -ne 0) { throw 'Windows package license collection failed.' }
+          Compress-Archive -Path "$bundle/*" -DestinationPath 'artifacts/Scrobblix-Windows-TestBundle.zip' -Force
+
+          # Publish the browser companion as a separate, smaller development artifact too.
+          $companion = 'artifacts/Scrobblix-BrowserCompanion'
+          New-Item -ItemType Directory -Force -Path "$companion/chromium/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/firefox/dist" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/native-host" | Out-Null
+          New-Item -ItemType Directory -Force -Path "$companion/scripts" | Out-Null
+          Copy-Item -Path 'browser-extension/manifest.json' -Destination "$companion/chromium/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/manifest.firefox.json' -Destination "$companion/firefox/manifest.json" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$companion/chromium/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$companion/chromium/popup.css" -Force
+          Copy-Item -Path 'browser-extension/popup.html' -Destination "$companion/firefox/popup.html" -Force
+          Copy-Item -Path 'browser-extension/popup.css' -Destination "$companion/firefox/popup.css" -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/chromium/dist/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/dist/*' -Destination "$companion/firefox/dist/" -Recurse -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$companion/chromium/README.md" -Force
+          Copy-Item -Path 'browser-extension/README.md' -Destination "$companion/firefox/README.md" -Force
+          Copy-Item -Path 'artifacts/Scrobblix/native-host/*' -Destination "$companion/native-host/" -Recurse -Force
+          Copy-Item -Path 'scripts/install-native-host.ps1' -Destination "$companion/scripts/" -Force
+          Copy-Item -Path 'scripts/uninstall-native-host.ps1' -Destination "$companion/scripts/" -Force
+          @(
+            'Scrobblix Browser Companion - Windows development package'
+            ''
+            'Chrome / Edge: load the chromium folder using chrome://extensions or edge://extensions with Developer mode enabled. Copy the actual extension ID, then register the native host:'
+            '.\scripts\install-native-host.ps1 -ExtensionId "CHROME_EXTENSION_ID" -NativeHostPublishDirectory ".\native-host" -RegisterChrome'
+            'Edge: use -RegisterEdge. Both: pass -ExtensionId @("CHROME_ID","EDGE_ID") -RegisterChrome -RegisterEdge in one command.'
+            ''
+            'Firefox: load firefox\manifest.json temporarily from about:debugging#/runtime/this-firefox, then run .\scripts\install-native-host.ps1 -NativeHostPublishDirectory ".\native-host" -RegisterFirefox -FirefoxExtensionId "scrobblix@frpboy.in".'
+            ''
+            'Restart the browser and Scrobblix after registration. Firefox temporary add-ons are not persistent release installations.'
+            'This is an unsigned development bundle, not a production/store release. No Last.fm credentials are included.'
+            'To unregister the native host, run .\scripts\uninstall-native-host.ps1. Remove the browser extension separately in the browser UI.'
+          ) | Set-Content -Path "$companion/INSTALL.txt" -Encoding utf8
+          $requiredCompanionFiles = @(
+            "$companion/chromium/manifest.json",
+            "$companion/chromium/popup.html",
+            "$companion/chromium/popup.css",
+            "$companion/chromium/dist/popup.js",
+            "$companion/chromium/dist/service-worker.js",
+            "$companion/chromium/dist/media-observer.js",
+            "$companion/firefox/manifest.json",
+            "$companion/firefox/popup.html",
+            "$companion/firefox/popup.css",
+            "$companion/firefox/dist/popup.js",
+            "$companion/firefox/dist/service-worker.js",
+            "$companion/firefox/dist/media-observer.js",
+            "$companion/native-host/Scrobblix.NativeHost.exe",
+            "$companion/scripts/install-native-host.ps1",
+            "$companion/scripts/uninstall-native-host.ps1",
+            "$companion/INSTALL.txt"
+          )
+          foreach ($requiredFile in $requiredCompanionFiles) {
+            if (-not (Test-Path -LiteralPath $requiredFile -PathType Leaf)) {
+              throw "Browser companion artifact is missing required file: $requiredFile"
+            }
+          }
+          node scripts/collect-third-party-notices.mjs $companion
+          if ($LASTEXITCODE -ne 0) { throw 'Browser companion license collection failed.' }
+          Compress-Archive -Path "$companion/*" -DestinationPath 'artifacts/Scrobblix-BrowserCompanion.zip' -Force
+
+      - name: Upload Windows test bundle
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Scrobblix-Windows-TestBundle
+          path: artifacts/Scrobblix-Windows-TestBundle.zip
+          if-no-files-found: error
+          retention-days: 1
+
+      - name: Upload browser companion package
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Scrobblix-BrowserCompanion
+          path: artifacts/Scrobblix-BrowserCompanion.zip
+          if-no-files-found: error
+          retention-days: 1
+
+  portable-zip-startup:
+    # A new runner, no runtime installation step, and the exact final ZIP used for delivery.
+    needs: build-and-test
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: Scrobblix-Windows-TestBundle
+          path: delivered
+      - name: Extract and verify delivered portable bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          Expand-Archive delivered/Scrobblix-Windows-TestBundle.zip -DestinationPath delivered/extracted
+          ./scripts/test-portable-package.ps1 -BundleDirectory delivered/extracted
+      - name: Launch exact extracted ZIP on fresh runner
+        shell: pwsh
+        run: |
+          ./scripts/test-ordinary-startup.ps1 -AppDirectory delivered/extracted/desktop -RequirePrivateRuntime
+          Get-FileHash delivered/Scrobblix-Windows-TestBundle.zip -Algorithm SHA256 | Format-List | Out-String | Set-Content "$env:RUNNER_TEMP/scrobblix-ordinary-startup/tested-zip-sha256.txt"
+      - name: Qualify exact ZIP with known-LF synthetic legacy profile
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          # Preserve the earlier fresh CI profile, never delete or reuse it.
+          Move-Item (Join-Path $env:LOCALAPPDATA 'Scrobblix') (Join-Path $env:RUNNER_TEMP 'scrobblix-fresh-profile-preserved')
+          python scripts/test-legacy-profile.py prepare
+          if ($LASTEXITCODE -ne 0) { throw 'Synthetic legacy fixture setup failed' }
+          ./scripts/test-ordinary-startup.ps1 -AppDirectory delivered/extracted/desktop -RequirePrivateRuntime -SyntheticLegacyProfile
+          python scripts/test-legacy-profile.py verify
+          if ($LASTEXITCODE -ne 0) { throw 'Legacy profile preservation failed' }
+          Get-FileHash delivered/Scrobblix-Windows-TestBundle.zip -Algorithm SHA256 | Format-List | Out-String | Set-Content "$env:RUNNER_TEMP/scrobblix-legacy-startup/tested-zip-sha256.txt"
+      - name: Preserve legacy-profile ZIP startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: legacy-profile-zip-startup
+          retention-days: 1
+          path: ${{ runner.temp }}/scrobblix-legacy-startup
+          if-no-files-found: error
+      - name: Preserve exact ZIP startup evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: portable-zip-startup
+          retention-days: 1
+          path: ${{ runner.temp }}/scrobblix-ordinary-startup
+          if-no-files-found: error

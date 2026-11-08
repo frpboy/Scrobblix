@@ -7,4 +7,5 @@
     <ProjectReference Include="../../src/Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
     <ProjectReference Include="../../src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj" />
   </ItemGroup>
+  <ItemGroup><None Include="../fixtures/scrobble-eligibility.tsv" Link="scrobble-eligibility.tsv" CopyToOutputDirectory="PreserveNewest" /></ItemGroup>
 </Project>

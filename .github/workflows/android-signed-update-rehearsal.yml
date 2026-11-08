@@ -1,0 +1,26 @@
+name: Disposable certificate Android update rehearsal
+on:
+  workflow_dispatch:
+    inputs:
+      approved_rehearsal:
+        description: 'Reviewed isolated disposable-certificate rehearsal only, no owner key or account'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+jobs:
+  signed-update:
+    if: inputs.approved_rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Disposable certificate rehearsal only
+        shell: bash
+        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'

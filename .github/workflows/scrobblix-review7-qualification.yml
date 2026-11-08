@@ -1,0 +1,194 @@
+name: Reviewed Android seven-finding qualification
+on:
+  push:
+    branches: [qa/review7-android-20261108-once]
+permissions:
+  contents: read
+concurrency:
+  group: review7-qualification-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  ordinary-native:
+    if: github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false && github.ref == 'refs/heads/qa/review7-android-20261108-once'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Bind exact independently reviewed source tree
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+        run: python3 qa/review7-source.py
+      - name: Check reviewed local safety contracts
+        run: |
+          python3 qa/test-ordinary-review-guards.py
+          python3 qa/test-signer-output-contract.py
+          python3 scripts/test-android-rehearsal-version.py
+          bash -n scripts/android-signed-update-rehearsal.sh
+      - name: Resolve and compile exact test inputs before emulator startup
+        id: inputs
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          # Ordinary pinned repositories only. No mirror, credentials, policy bypass or retries.
+          # Host dependency failure must stop before emulator startup. Offline runtime fails closed.
+          timeout --signal=TERM --kill-after=10s 420s android/gradlew -p android -I qa/resolve-qualification.init.gradle :core:compileTestKotlin :platform:assembleDebugAndroidTest :app:assembleDebugAndroidTest resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-online.log"
+          # A separate offline resolution must reproduce the exact artifact receipt before any emulator.
+          timeout --signal=TERM --kill-after=10s 60s android/gradlew -p android --offline -I qa/resolve-qualification.init.gradle resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-offline.log"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-online.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-offline.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
+          test -s "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          cmp "$RUNNER_TEMP/scrobblix-inputs-online.sha256" "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
+      - name: Run core, platform and ordinary app synthetic tests with provider egress blocked
+        id: runtime
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-diagnostics"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME" diagnostics-evidence
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+          echo no | avdmanager create avd -n diagnostics -k 'system-images;android-${{ matrix.api }};default;x86_64' --path "$ANDROID_AVD_HOME/diagnostics.avd" --force
+          setsid emulator -avd diagnostics -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/diagnostics-emulator.log 2>&1 &
+          emulator_pid=$!
+          cleanup_guest() {
+            result=$?
+            trap - EXIT
+            kill -TERM -- "-$emulator_pid" 2>/dev/null || true
+            for attempt in 1 2 3; do
+              if ! kill -0 -- "-$emulator_pid" 2>/dev/null; then break; fi
+              sleep 1
+            done
+            kill -KILL -- "-$emulator_pid" 2>/dev/null || true
+            wait "$emulator_pid" 2>/dev/null || true
+            if ! ps -eo pgid=,stat= | awk -v group="$emulator_pid" '$1==group && $2 !~ /^Z/ {live=1} END {exit live+0}'; then result=1; fi
+            RESULT="$result" SOURCE_TREE="$(git rev-parse 'HEAD^{tree}')" API='${{ matrix.api }}' python3 - <<'PYCLEAN'
+          import json,os
+          from pathlib import Path
+          Path('diagnostics-evidence/runtime-manifest.json').write_text(json.dumps(dict(source_tree=os.environ['SOURCE_TREE'],api=os.environ['API'],result=int(os.environ['RESULT']),cleanup='dead' if os.environ['RESULT']=='0' else 'not_proven'))+'\n')
+          PYCLEAN
+            exit "$result"
+          }
+          trap cleanup_guest EXIT
+          timeout 180 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -60 /tmp/diagnostics-emulator.log; exit 1; fi
+          # adbd may restart between boot_completed and root. Recover only transport,
+          # with a bounded budget, and require actual root before installing firewalls.
+          rooted=false
+          for attempt in 1 2 3; do
+            timeout 30 adb wait-for-device
+            timeout 10 adb root || true
+            timeout 30 adb wait-for-device
+            if [ "$(timeout 10 adb shell id -u | tr -d '\r')" = 0 ]; then rooted=true; break; fi
+          done
+          test "$rooted" = true
+          test "$(timeout 10 adb shell getprop ro.build.version.sdk | tr -d '\r')" = '${{ matrix.api }}'
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          result=0
+          android/gradlew -p android :core:test :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.notClass=dev.scrobblix.app.LiveTokenStartQualificationTest,dev.scrobblix.app.ProcessRecoveryTest,dev.scrobblix.app.SignedUpdateRehearsalTest' --offline --no-daemon || result=$?
+          for name in reason-label-queue-0 reason-label-queue-1 reason-label-queue-2 reason-label-queue-3 reason-label-queue-4 reason-label-history-0 reason-label-history-1 reason-label-history-2 reason-label-history-3 reason-label-history-4; do
+            adb pull "/sdcard/Download/scrobblix-$name.png" diagnostics-evidence/ || result=1
+          done
+          exit "$result"
+      - name: Require exact full ordinary synthetic test inventory
+        id: inventory
+        if: always()
+        shell: bash
+        run: |
+          python3 qa/review7-inventory.py
+      - name: Preserve only bounded synthetic XML and pixels
+        id: evidence
+        if: always()
+        shell: bash
+        env:
+          INPUT_OUTCOME: ${{ steps.inputs.outcome }}
+          RUNTIME_OUTCOME: ${{ steps.runtime.outcome }}
+          INVENTORY_OUTCOME: ${{ steps.inventory.outcome }}
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics-evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil,json,os,subprocess
+          out=Path('diagnostics-evidence')
+          for mode in ('online','offline'):
+              receipt=Path(os.environ['RUNNER_TEMP'])/('scrobblix-inputs-'+mode+'.sha256')
+              if receipt.is_file():shutil.copyfile(receipt,out/('inputs-'+mode+'.sha256'))
+          status='pass' if all(os.environ[k]=='success' for k in ('INPUT_OUTCOME','RUNTIME_OUTCOME','INVENTORY_OUTCOME')) else 'failed'
+          (out/'source-manifest.json').write_text(json.dumps(dict(source_tree=subprocess.check_output(['git','rev-parse','HEAD^{tree}'],text=True).strip(),head=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip(),api='${{ matrix.api }}',attempt=os.environ['GITHUB_RUN_ATTEMPT'],status=status,input_outcome=os.environ['INPUT_OUTCOME'],runtime_outcome=os.environ['RUNTIME_OUTCOME'],inventory_outcome=os.environ['INVENTORY_OUTCOME']))+'\n')
+          out=Path('diagnostics-evidence')
+          for module in ('core','platform','app'):
+              root=Path('android')/module/'build'/('test-results/test' if module=='core' else 'outputs/androidTest-results')
+              for n,f in enumerate(root.rglob('TEST-*.xml')):
+                  shutil.copyfile(f,out/('instrumentation-'+module+'-'+str(n)+'.xml'))
+          allowed={'scrobblix-reason-label-queue-3.png', 'scrobblix-reason-label-history-1.png', 'scrobblix-reason-label-queue-2.png', 'scrobblix-reason-label-queue-1.png', 'scrobblix-reason-label-history-2.png', 'scrobblix-reason-label-queue-4.png', 'scrobblix-reason-label-queue-0.png', 'scrobblix-reason-label-history-4.png', 'scrobblix-reason-label-history-3.png', 'scrobblix-reason-label-history-0.png'}
+          if status=='pass':
+              assert all((out/name).is_file() for name in allowed)
+              assert (out/'inputs-online.sha256').read_bytes()==(out/'inputs-offline.sha256').read_bytes()
+              runtime=json.loads((out/'runtime-manifest.json').read_text())
+              assert runtime['result']==0 and runtime['cleanup']=='dead'
+          for p in out.iterdir():
+              assert p.is_file() and (p.name in allowed or p.name in {'runtime-manifest.json','source-manifest.json','inputs-online.sha256','inputs-offline.sha256'} or p.name.startswith('instrumentation-') and p.suffix=='.xml')
+          assert sum(p.stat().st_size for p in out.iterdir())<=10*1024*1024, 'Synthetic evidence exceeds cap'
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: review7-full-synthetic-api${{ matrix.api }}
+          path: diagnostics-evidence/
+          if-no-files-found: error
+          retention-days: 1
+
+  android-phases:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/review7-android-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Bind reviewed target and execute only synthetic explicit phases
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          API: ${{ matrix.api }}
+        run: |
+          python3 qa/review7-source.py
+          export EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          timeout --signal=TERM --kill-after=10s 3000s bash scripts/android-narrow-phases.sh
+      - name: Validate bounded synthetic evidence
+        id: evidence
+        if: always()
+        run: python3 qa/narrow-target-contract.py evidence
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: review7-narrow-phases-api${{ matrix.api }}
+          path: narrow-evidence/
+          retention-days: 1
+          if-no-files-found: error
