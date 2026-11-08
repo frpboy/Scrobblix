@@ -78,11 +78,13 @@ vm.runInContext(observerOutput.slice(helperStart, helperEnd), observerContext);
 for (const url of [
   "https://localhost./a", "https://x.local./a", "https://foo.localhost./a", "https://metadata.google.internal./a",
   "https://[::]/a", "https://[0:0:0:0:0:0:0:1]/a", "https://[fc00::1]/a", "https://[fdff::1]/a",
-  "https://[fe80::1]/a", "https://[febf::1]/a", "https://[ff02::1]/a",
+  "https://[fe80::1]/a", "https://[febf::1]/a", "https://[ff02::1]/a", "https://[2001:db8::1]/a",
+  "https://[2002::1]/a", "https://[2001::1]/a",
   "https://[::ffff:127.0.0.1]/a", "https://[::ffff:10.1.2.3]/a", "https://[::ffff:c0a8:101]/a",
   "https://127.1/a", "https://0x7f000001/a", "https://2130706433/a",
   "https://100.64.0.1/a", "https://100.100.100.200/a", "https://100.127.255.254/a", "https://198.18.0.1/a", "https://198.19.255.254/a",
-  "https://[::ffff:100.100.100.200]/a", "https://[::ffff:198.18.0.1]/a",
+  "https://192.0.2.1/a", "https://198.51.100.1/a", "https://203.0.113.1/a", "https://192.0.0.1/a", "https://192.88.99.1/a", "https://224.0.0.1/a", "https://240.0.0.1/a",
+  "https://[::ffff:100.100.100.200]/a", "https://[::ffff:198.18.0.1]/a", "https://[::ffff:192.0.2.1]/a", "https://[::ffff:224.0.0.1]/a",
 ]) {
   assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), false, url);
   assert.equal(observerContext.toHttpsArtworkUrl(url), undefined, url);
