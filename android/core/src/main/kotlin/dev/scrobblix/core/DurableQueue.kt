@@ -29,7 +29,7 @@ class DurableQueue(private val db: QueueSqlDriver) {
         return db.transaction {
             if(enqueue(id,provider,account,ActionType.NowPlaying,now,playId)) true
             else db.execute("""UPDATE android_actions SET state='Pending',created_ms=?,due_ms=?,
-                reason=NULL,completed_ms=NULL,lease_owner=NULL,lease_expires_ms=NULL
+                reason=NULL,unknown_evidence=NULL,completed_ms=NULL,lease_owner=NULL,lease_expires_ms=NULL
                 WHERE id=? AND provider=? AND account=? AND type='NowPlaying' AND play_id=?
                 AND created_ms<=? AND (state IN ('Accepted','Pending') OR
                     (state='Cancelled' AND reason='provider.nowplaying.expired'))""",
@@ -39,7 +39,7 @@ class DurableQueue(private val db: QueueSqlDriver) {
     fun claim(provider: String, account: String, owner: String, now: Long, leaseMs: Long): ActionLease? {
         require(provider.isNotBlank() && account.isNotBlank() && owner.isNotBlank() && leaseMs > 0)
         return db.transaction {
-            db.execute("""UPDATE android_actions SET state='Cancelled',reason='provider.nowplaying.expired',
+            db.execute("""UPDATE android_actions SET state='Cancelled',unknown_evidence=NULL,reason='provider.nowplaying.expired',
                 completed_ms=?,lease_owner=NULL,lease_expires_ms=NULL WHERE provider=? AND account=?
                 AND type='NowPlaying' AND state IN ('Pending','RetryScheduled','AuthBlocked','RetryExhausted','SubmissionOutcomeUnknown')
                 AND created_ms <= ?""", listOf(now, provider, account, now-300000))
@@ -49,7 +49,7 @@ class DurableQueue(private val db: QueueSqlDriver) {
             if (row == null) null else {
                 val id = row.getValue("id")!!
                 val changed = db.execute("""UPDATE android_actions SET state='InFlight',lease_owner=?,lease_expires_ms=?,
-                    attempts=attempts+1,reason=NULL WHERE id=? AND state IN ('Pending','RetryScheduled')""",
+                    attempts=attempts+1,reason=NULL,unknown_evidence=NULL WHERE id=? AND state IN ('Pending','RetryScheduled')""",
                     listOf(owner, Math.addExact(now,leaseMs), id))
                 check(changed == 1)
                 ActionLease(id, provider, account, ActionType.valueOf(row.getValue("type")!!),owner,row.getValue("attempts")!!.toInt()+1,row["play_id"])
@@ -60,19 +60,21 @@ class DurableQueue(private val db: QueueSqlDriver) {
         require(state in setOf(ActionState.Accepted,ActionState.ProviderIgnored,ActionState.RetryScheduled,
             ActionState.AuthBlocked,ActionState.PermanentFailure,ActionState.SubmissionOutcomeUnknown,ActionState.RetryExhausted))
         require(reason.isNotBlank() && retryDelayMs >= 0)
-        return db.execute("""UPDATE android_actions SET state=?,reason=?,due_ms=?,completed_ms=?,lease_owner=NULL,
+        return db.execute("""UPDATE android_actions SET state=?,reason=?,due_ms=?,completed_ms=?,unknown_evidence=?,lease_owner=NULL,
             lease_expires_ms=NULL WHERE id=? AND provider=? AND account=? AND state='InFlight'
             AND lease_owner=? AND attempts=?""", listOf(state.name,reason,
             if(state==ActionState.RetryScheduled) Math.addExact(now,retryDelayMs) else now,
-            if(state==ActionState.RetryScheduled) null else now,lease.id,lease.provider,lease.account,lease.owner,lease.attempts)) == 1
+            if(state==ActionState.RetryScheduled) null else now,
+            null,lease.id,lease.provider,lease.account,lease.owner,lease.attempts)) == 1
     }
     fun recover(now: Long): Int = db.execute("""UPDATE android_actions
         SET state=CASE WHEN type='Scrobble' THEN 'SubmissionOutcomeUnknown' ELSE 'RetryScheduled' END,
+        unknown_evidence=NULL,
         reason='provider.lease_expired',due_ms=?,lease_owner=NULL,lease_expires_ms=NULL
         WHERE state='InFlight' AND lease_expires_ms IS NOT NULL AND lease_expires_ms<=?""",listOf(now,now))
     fun resumeAuth(provider: String, account: String, now: Long): Int {
         require(provider.isNotBlank() && account.isNotBlank())
-        return db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,completed_ms=NULL,due_ms=?,
+        return db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,unknown_evidence=NULL,completed_ms=NULL,due_ms=?,
             lease_owner=NULL,lease_expires_ms=NULL WHERE provider=? AND account=? AND state='AuthBlocked'""",listOf(now,provider,account))
     }
 }

@@ -366,8 +366,8 @@ class AuthorityUiStateTest {
         }
         try {
             store.connect("SyntheticHistoryPixels","a".repeat(32));store.setTracking(false)
-            store.history.observe(dev.scrobblix.core.LocalPlay("pixel-history","Synthetic Artist","Synthetic Track",null,1,300000,150000),"lastfm","SyntheticHistoryPixels",1)
-            store.sql.execute("UPDATE android_actions SET state='SubmissionOutcomeUnknown',reason='provider.submission_outcome_unknown'")
+            store.history.observe(dev.scrobblix.core.LocalPlay("pixel-history","Synthetic Artist","Synthetic Track","Synthetic Album",1,300000,150000),"lastfm","SyntheticHistoryPixels",1)
+            store.sql.execute("UPDATE android_actions SET state='SubmissionOutcomeUnknown',reason='provider.submission_outcome_unknown',unknown_evidence='FUTURE_RAW_VALUE_MUST_NOT_RENDER'")
             ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},
                 historyReader={if(failHistory.get())throw java.io.IOException("synthetic read failure") else store.recentDiagnostics()},
                 queueReader={_ ->
@@ -378,10 +378,18 @@ class AuthorityUiStateTest {
             ui.onNodeWithText("History",useUnmergedTree=true).performScrollTo().performClick()
             val bound="Recorded actions for current account: SyntheticHistoryPixels"
             ui.waitUntil(10000){ui.onAllNodesWithText(bound).fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Album: Synthetic Album").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("Local play ID (not a Last.fm ID): pixel-history").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText(historyStartText("1")).performScrollTo().assertIsDisplayed()
+            capture("history-local-fields",historyStartText("1"))
             ui.onNodeWithText("Duration: 300 seconds. Threshold: 150 seconds. Listening-time and metadata rule met. This is not delivery confirmation.").performScrollTo().assertIsDisplayed()
             capture("history-eligibility","Duration: 300 seconds. Threshold: 150 seconds. Listening-time and metadata rule met. This is not delivery confirmation.")
             ui.onNodeWithText("Reason: The send result could not be confirmed. No automatic resend.").performScrollTo().assertIsDisplayed()
             capture("history-unknown-action","Reason: The send result could not be confirmed. No automatic resend.")
+            val stage=unknownEvidenceText("FUTURE_RAW_VALUE_MUST_NOT_RENDER")
+            ui.onNodeWithText(stage).performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("FUTURE_RAW_VALUE_MUST_NOT_RENDER").assertDoesNotExist()
+            capture("history-stage-evidence",stage)
             val oldPoll=next()
             settings()
             ui.onNodeWithText("Disconnect Last.fm").performScrollTo().performClick()
@@ -392,6 +400,9 @@ class AuthorityUiStateTest {
             ui.onNodeWithText(bound).assertDoesNotExist()
             ui.onNodeWithText("Saved scrobble - SubmissionOutcomeUnknown: 1").assertDoesNotExist()
             ui.onNodeWithText("Checking current local history and account actions. Previous diagnostics are hidden.").assertExists()
+            ui.onNodeWithText("Album: Synthetic Album").assertDoesNotExist()
+            ui.onNodeWithText("Local play ID (not a Last.fm ID): pixel-history").assertDoesNotExist()
+            ui.onNodeWithText(historyStartText("1")).assertDoesNotExist()
             newPoll.complete(emptyList())
             ui.waitUntil(10000){ui.onAllNodesWithText("No connected account is selected for action inspection.").fetchSemanticsNodes().size==1}
             ui.onNodeWithText(bound).assertDoesNotExist()

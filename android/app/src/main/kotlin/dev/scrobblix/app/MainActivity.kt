@@ -146,6 +146,11 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 if(showHistory)history.forEach { reading -> val play=reading.play;Card(Modifier.fillMaxWidth()) { Column(Modifier.padding(16.dp)) {
                     Text(play["title"] ?: "Unknown track",style=MaterialTheme.typography.titleMedium)
                     Text(play["artist"] ?: "Unknown artist")
+                    play["album"]?.takeIf{it.isNotBlank()}?.let{Text("Album: $it")}
+                    androidx.compose.foundation.text.selection.SelectionContainer {
+                        Column { Text("Local play ID (not a Last.fm ID): ${play["id"] ?: "Unavailable"}")
+                            Text(historyStartText(play["started_ms"])) }
+                    }
                     Text("${(play["confirmed_ms"]?.toLongOrNull() ?: 0)/1000} seconds confirmed")
                     Text(historyEligibilityText(play))
                     if(reading.account==null) Text("No connected account is selected for action inspection.")
@@ -155,6 +160,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         reading.actions.forEach { action ->
                             Text(queueSummaryLine(action+mapOf("total" to "1")))
                             Text("Reason: ${queueReasonText(action["reason"]) ?: "No reason recorded."}")
+                            if(action["state"]=="SubmissionOutcomeUnknown")Text(unknownEvidenceText(action["unknown_evidence"]))
                             val sends=action["provider_sends"]?.toLongOrNull()?.takeIf{it>=0}?.toString() ?: "Unavailable"
                             Text("Provider send permits recorded: $sends. A permit is not proof of acceptance.")
                         }
@@ -377,4 +383,20 @@ internal fun historyEligibilityText(play:Map<String,String?>):String {
     val durationText=duration?.takeIf{it>0}?.let{"Duration: ${it/1000} seconds. "} ?: ""
     val thresholdText=result.thresholdMs?.let{"Threshold: ${it/1000} seconds. "} ?: ""
     return durationText+thresholdText+detail
+}
+
+internal fun historyStartText(value:String?):String {
+    val instant=try { value?.toLongOrNull()?.let(java.time.Instant::ofEpochMilli) }catch(_:Exception){null}
+        ?: return "Playback start unavailable."
+    return "Playback start: $instant UTC; ${instant.atZone(java.time.ZoneId.systemDefault())} local."
+}
+internal fun unknownEvidenceText(value:String?):String=when(dev.scrobblix.core.UnknownEvidence.read(value)) {
+    dev.scrobblix.core.UnknownEvidence.IO_AFTER_SEND_PERMIT->"Local evidence: an I/O error followed a send permit. This does not prove a socket write or Last.fm receipt."
+    dev.scrobblix.core.UnknownEvidence.RESPONSE_JSON_INVALID->"Local evidence: response JSON could not be parsed. Last.fm acceptance is unknown."
+    dev.scrobblix.core.UnknownEvidence.RESPONSE_BODY_LIMIT->"Local evidence: response exceeded the size limit. Last.fm acceptance is unknown."
+    dev.scrobblix.core.UnknownEvidence.RESPONSE_STREAM_ABSENT->"Local evidence: no response stream was available. Last.fm acceptance is unknown."
+    dev.scrobblix.core.UnknownEvidence.BROKER_REPORTED_FORWARD_UNKNOWN->"Local evidence: the connection service reported an uncertain upstream result. Last.fm acceptance is unknown."
+    dev.scrobblix.core.UnknownEvidence.PROVIDER_ERROR_8->"Local evidence: Last.fm API error 8 was received. Acceptance is unknown."
+    dev.scrobblix.core.UnknownEvidence.INTERRUPTED_SEND_RECOVERED->"Local evidence: an expired send-started attempt was recovered. Last.fm receipt and acceptance are unknown."
+    null->"No recognized local stage evidence is available for this outcome. No automatic resend."
 }

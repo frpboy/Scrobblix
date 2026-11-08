@@ -58,7 +58,7 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
                 check(ConnectionSchema.read(db)==prior)
                 check(db.execute("""UPDATE android_connection SET revision=?,account=?,credential_kind=?,credential_ref=?,resume_consent_required=?
                     WHERE slot=1 AND revision=?""", listOf(next.revision,next.account,next.credentialKind,next.credentialRef,if(next.resumeConsentRequired)1 else 0,prior.revision))==1)
-                if(resume) db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,completed_ms=NULL,due_ms=?,
+                if(resume) db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,unknown_evidence=NULL,completed_ms=NULL,due_ms=?,
                     lease_owner=NULL,lease_expires_ms=NULL WHERE provider='lastfm' AND account=? AND state='AuthBlocked'""",listOf(now,next.account))
             }
             return ConnectionCommit.Committed(next)
@@ -95,13 +95,13 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
         db.transaction {
             val a=ConnectionSchema.read(db)
             if(a.account==null || a.resumeConsentRequired)return@transaction null
-            db.execute("""UPDATE android_actions SET state='RetryExhausted',reason='provider.retry_exhausted',completed_ms=?
+            db.execute("""UPDATE android_actions SET state='RetryExhausted',unknown_evidence=NULL,reason='provider.retry_exhausted',completed_ms=?
                 WHERE id=? AND provider='lastfm' AND account=? AND state IN ('Pending','RetryScheduled') AND provider_sends>=8""",listOf(now,id,a.account))
-            db.execute("""UPDATE android_actions SET state='Cancelled',reason='provider.nowplaying.expired',completed_ms=?
+            db.execute("""UPDATE android_actions SET state='Cancelled',unknown_evidence=NULL,reason='provider.nowplaying.expired',completed_ms=?
                 WHERE id=? AND provider='lastfm' AND account=? AND type='NowPlaying' AND state IN ('Pending','RetryScheduled') AND created_ms<=?""",listOf(now,id,a.account,now-300000))
             val row=db.query("SELECT lease_fence FROM android_actions WHERE id=? AND provider='lastfm' AND account=? AND state IN ('Pending','RetryScheduled') AND due_ms<=? AND provider_sends<8",listOf(id,a.account,now)).singleOrNull() ?: return@transaction null
             val fence=Math.addExact(row["lease_fence"]!!.toLong(),1)
-            if(db.execute("""UPDATE android_actions SET state='InFlight',send_phase='UNSENT',connection_revision=?,credential_ref=?,lease_owner=?,lease_fence=?,lease_expires_ms=?
+            if(db.execute("""UPDATE android_actions SET state='InFlight',unknown_evidence=NULL,send_phase='UNSENT',connection_revision=?,credential_ref=?,lease_owner=?,lease_fence=?,lease_expires_ms=?
                 WHERE id=? AND provider='lastfm' AND account=? AND state IN ('Pending','RetryScheduled') AND due_ms<=? AND provider_sends<8""",listOf(a.revision,a.credentialRef,owner,fence,Math.addExact(now,60000),id,a.account,now))!=1)return@transaction null
             Lease(id,a.account,a.revision,a.credentialKind!!,a.credentialRef!!,owner,fence)
         }
@@ -117,12 +117,12 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
         }
     }
     fun releaseUnsent(l:Lease):Boolean=synchronized(lock) {
-        db.execute("""UPDATE android_actions SET state='LocalHold',reason='local.authority_changed_unsent',lease_owner=NULL,lease_expires_ms=NULL
+        db.execute("""UPDATE android_actions SET state='LocalHold',unknown_evidence=NULL,reason='local.authority_changed_unsent',lease_owner=NULL,lease_expires_ms=NULL
             WHERE id=? AND provider='lastfm' AND account=? AND connection_revision=? AND credential_ref=? AND lease_owner=? AND lease_fence=? AND state='InFlight' AND send_phase='UNSENT'""",
             listOf(l.id,l.account,l.revision,l.ref,l.owner,l.fence))==1
     }
     fun failUnsentMetadata(l:Lease,now:Long):Boolean=synchronized(lock) {
-        db.execute("""UPDATE android_actions SET state='PermanentFailure',reason='metadata.missing_payload',completed_ms=?,lease_owner=NULL,lease_expires_ms=NULL
+        db.execute("""UPDATE android_actions SET state='PermanentFailure',unknown_evidence=NULL,reason='metadata.missing_payload',completed_ms=?,lease_owner=NULL,lease_expires_ms=NULL
             WHERE id=? AND provider='lastfm' AND account=? AND connection_revision=? AND credential_ref=? AND lease_owner=? AND lease_fence=? AND state='InFlight' AND send_phase='UNSENT'""",
             listOf(now,l.id,l.account,l.revision,l.ref,l.owner,l.fence))==1
     }
@@ -131,6 +131,7 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
         ConnectionSchema.read(db)
         check(db.query("SELECT id FROM android_actions WHERE provider='lastfm' AND state='InFlight' AND send_phase NOT IN ('UNSENT','SEND_STARTED')").isEmpty())
         db.execute("""UPDATE android_actions SET state=CASE WHEN send_phase='UNSENT' THEN 'LocalHold' WHEN type='Scrobble' THEN 'SubmissionOutcomeUnknown' ELSE 'RetryScheduled' END,
+            unknown_evidence=CASE WHEN send_phase='SEND_STARTED' AND type='Scrobble' THEN 'INTERRUPTED_SEND_RECOVERED' ELSE NULL END,
             reason=CASE WHEN send_phase='UNSENT' THEN 'local.unsent_recovery' WHEN type='Scrobble' THEN 'provider.submission_outcome_unknown' ELSE 'provider.lease_expired' END,
             due_ms=?,lease_owner=NULL,lease_expires_ms=NULL WHERE provider='lastfm' AND state='InFlight' AND lease_expires_ms IS NOT NULL AND lease_expires_ms<=?""",listOf(now,now))
     }
@@ -159,10 +160,11 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
                 changedCredential && result.reason=="provider.auth.invalid_session" -> "local.stale_generation_auth_rejection"
                 else -> result.reason
             }
-            db.execute("""UPDATE android_actions SET state=?,reason=?,due_ms=?,completed_ms=?,lease_owner=NULL,lease_expires_ms=NULL
+            db.execute("""UPDATE android_actions SET state=?,reason=?,due_ms=?,completed_ms=?,unknown_evidence=?,lease_owner=NULL,lease_expires_ms=NULL
                 WHERE id=? AND provider='lastfm' AND account=? AND connection_revision=? AND credential_ref=? AND lease_owner=? AND lease_fence=? AND state='InFlight' AND send_phase='SEND_STARTED'""",
                 listOf(outcome,reason,if(outcome=="RetryScheduled")Math.addExact(now,delay) else now,
-                    if(outcome in listOf("Pending","RetryScheduled"))null else now,l.id,l.account,l.revision,l.ref,l.owner,l.fence))==1
+                    if(outcome in listOf("Pending","RetryScheduled"))null else now,
+                    if(outcome=="SubmissionOutcomeUnknown" && attempt["type"]=="Scrobble")result.unknownEvidence?.name else null,l.id,l.account,l.revision,l.ref,l.owner,l.fence))==1
         }
     }
     /** Exact immutable local review, not a send permit. Historical lease provenance is retained. */
@@ -262,7 +264,7 @@ class ConnectionAuthority(private val db:QueueSqlDriver,private val freshRead:()
                 // Recheck the full eligibility predicate even for caller-created/copied tokens.
                 if(review.rows.any {!validHeld(it,review.snapshot)})return@transaction false
                 for(row in review.rows) {
-                    check(db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,due_ms=?,completed_ms=NULL
+                    check(db.execute("""UPDATE android_actions SET state='Pending',reason=NULL,unknown_evidence=NULL,due_ms=?,completed_ms=NULL
                         WHERE id=? AND provider='lastfm' AND account=? AND type='Scrobble' AND state='LocalHold'
                         AND send_phase='UNSENT' AND reason=? AND attempts=? AND provider_sends=? AND lease_fence=?
                         AND connection_revision IS ? AND credential_ref IS ? AND lease_owner IS NULL AND lease_expires_ms IS NULL""",

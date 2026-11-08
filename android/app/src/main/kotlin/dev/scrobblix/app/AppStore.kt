@@ -148,8 +148,8 @@ class AppStore(val context:Context,
     fun recentDiagnostics():RecentDiagnostics = synchronized(authorityCoordinator) {
         sql.transaction {
             val snapshot=authority.snapshot()
-            val plays=sql.query("SELECT id,artist,title,started_ms,duration_ms,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
-            val actions=if(snapshot.account==null) emptyList() else sql.query("""SELECT play_id,type,state,reason,attempts,provider_sends
+            val plays=sql.query("SELECT id,artist,title,album,started_ms,duration_ms,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
+            val actions=if(snapshot.account==null) emptyList() else sql.query("""SELECT play_id,type,state,reason,unknown_evidence,attempts,provider_sends
                 FROM android_actions WHERE provider='lastfm' AND account=? AND play_id IN
                 (SELECT id FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50) ORDER BY created_ms,id""",listOf(snapshot.account))
             RecentDiagnostics(snapshot,plays.map { play -> RecentPlayReading(play,snapshot.account,actions.filter{it["play_id"]==play["id"]}) })

@@ -225,7 +225,7 @@ class AppRuntimeTest {
         val store=AppStore(context,{listOf(java.util.concurrent.CompletableFuture.completedFuture(Unit))})
         try {
             store.setTracking(false);store.connect("SyntheticHistoryDiagnostic","a".repeat(32))
-            store.sql.execute("INSERT INTO android_plays VALUES('diagnostic-play','Synthetic Artist','Synthetic Track',NULL,1,300000,150000)")
+            store.sql.execute("INSERT INTO android_plays VALUES('diagnostic-play','Synthetic Artist','Synthetic Track','Synthetic Album',1,300000,150000)")
             store.sql.execute("INSERT INTO android_plays VALUES('diagnostic-other','Synthetic Artist','Other Track',NULL,2,NULL,200000)")
             store.queue.enqueue("diagnostic-action","lastfm","SyntheticHistoryDiagnostic",ActionType.Scrobble,0,"diagnostic-play")
             store.queue.enqueue("other-account","lastfm","DifferentAccount",ActionType.Scrobble,0,"diagnostic-play")
@@ -234,6 +234,9 @@ class AppRuntimeTest {
             val rows=store.recentDiagnostics().plays
             val play=rows.single{it.play["id"]=="diagnostic-play"}
             assertEquals("SyntheticHistoryDiagnostic",play.account)
+            assertEquals("Synthetic Album",play.play["album"])
+            assertEquals("1",play.play["started_ms"])
+            assertEquals("diagnostic-play",play.play["id"])
             assertEquals(1,play.actions.size)
             assertEquals("SubmissionOutcomeUnknown",play.actions.single()["state"])
             assertTrue(rows.single{it.play["id"]=="diagnostic-other"}.actions.isEmpty())
@@ -243,6 +246,22 @@ class AppRuntimeTest {
             store.disconnect()
             assertTrue(store.recentDiagnostics().plays.all{it.account==null && it.actions.isEmpty()})
         }finally{store.close();context.noBackupFilesDir.deleteRecursively()}
+    }
+
+    @Test fun unknownEvidenceClassifiesOnlyExactObservedResponseAndNeverPrintsRawValues() {
+        val api=LastFmApi("","","https://broker.invalid/v1/lastfm")
+        fun parse(status:Int,body:JSONObject)=api.parse(ActionType.Scrobble,status,body)
+        assertEquals(dev.scrobblix.core.UnknownEvidence.BROKER_REPORTED_FORWARD_UNKNOWN,parse(502,JSONObject().put("broker_error","upstream_outcome_unknown")).unknownEvidence)
+        for(status in listOf(200,400,500,503))assertNull(parse(status,JSONObject().put("broker_error","upstream_outcome_unknown")).unknownEvidence)
+        assertNull(parse(502,JSONObject().put("broker_error","upstream_outcome_unknown").put("extra","untrusted")).unknownEvidence)
+        assertNull(parse(502,JSONObject().put("broker_error","unexpected-raw-body")).unknownEvidence)
+        assertEquals(dev.scrobblix.core.UnknownEvidence.PROVIDER_ERROR_8,parse(500,JSONObject().put("error",8)).unknownEvidence)
+        assertNull(api.parse(ActionType.NowPlaying,500,JSONObject().put("error",8)).unknownEvidence)
+        assertNull(parse(200,JSONObject()).unknownEvidence)
+        for(raw in listOf("future-enum","secret-like-raw-text","<script>"))assertFalse(unknownEvidenceText(raw).contains(raw))
+        assertEquals("Playback start unavailable.",historyStartText("invalid"))
+        assertTrue(historyStartText("1").contains("1970-01-01T00:00:00.001Z UTC"))
+        assertTrue(historyStartText("1").contains("local."))
     }
 
 }

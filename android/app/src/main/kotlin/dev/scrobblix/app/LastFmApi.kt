@@ -122,9 +122,9 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             val response=stream?.use { stream ->
                 val buffer=java.io.ByteArrayOutputStream();val chunk=ByteArray(4096)
                 while(buffer.size()<=65536) { val count=stream.read(chunk,0,minOf(chunk.size,65537-buffer.size()));if(count<0) break;buffer.write(chunk,0,count) }
-                buffer.toByteArray() } ?: throw java.io.IOException("Empty provider response")
-            if(response.size>65536) throw java.io.IOException("Provider response too large")
-            val body=try { JSONObject(response.toString(Charsets.UTF_8)) } catch(_:Exception) { throw java.io.IOException("Invalid provider response") }
+                buffer.toByteArray() } ?: throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_STREAM_ABSENT)
+            if(response.size>65536) throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_BODY_LIMIT)
+            val body=try { JSONObject(response.toString(Charsets.UTF_8)) } catch(_:Exception) { throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_JSON_INVALID) }
             return status to body
         } finally { bytes.fill(0);connection.disconnect() }
     }
@@ -145,13 +145,14 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
                 429 to "limited" -> ProviderResult(false,"provider.rate_limited",true)
                 503 to "not_configured",503 to "limiter_unavailable" -> ProviderResult(false,"provider.temporary_unavailable",true)
                 400 to "invalid_request" -> ProviderResult(false,"provider.rejected")
+                502 to "upstream_outcome_unknown" -> ProviderResult(false,"provider.submission_outcome_unknown",unknownEvidence=UnknownEvidence.BROKER_REPORTED_FORWARD_UNKNOWN)
                 else -> ProviderResult(false,"provider.submission_outcome_unknown")
             }
         }
         val code=body.opt("error")
         if(code is Int) return when(code) {
             9 -> ProviderResult(false,"provider.auth.invalid_session")
-            8 -> if(type==ActionType.Scrobble) ProviderResult(false,"provider.submission_outcome_unknown") else ProviderResult(false,"provider.temporary_unavailable",true)
+            8 -> if(type==ActionType.Scrobble) ProviderResult(false,"provider.submission_outcome_unknown",unknownEvidence=UnknownEvidence.PROVIDER_ERROR_8) else ProviderResult(false,"provider.temporary_unavailable",true)
             11,16,29 -> ProviderResult(false,"provider.temporary_unavailable",true)
             2,3,4,5,6,7,10,13,26 -> ProviderResult(false,"provider.rejected")
             else -> ProviderResult(false,"provider.submission_outcome_unknown")

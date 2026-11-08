@@ -118,12 +118,26 @@ class AuthorityAppFailureTest {
                     "other-account" -> store.connect("OtherSynthetic","b".repeat(32))
                     "pause" -> store.setTracking(false)
                     "consent" -> store.authority.requireTrackingChoice(5000)
-                    "disconnect" -> store.disconnect()
+                    "disconnect" -> assertTrue(store.disconnect().committed)
                 }
                 read(6000)
-                if(change=="pause" || change=="consent") {assertNull(store.history.read("boundary-2"));store.setTracking(true);read(8000)}
+                if(change in listOf("pause","consent","disconnect")) {
+                    assertNull("$change must not collect before an explicit tracking choice",store.history.read("boundary-2"))
+                    if(change=="pause" || change=="disconnect")assertFalse(store.tracking())
+                    if(change=="disconnect") {
+                        assertNull(store.account())
+                        assertTrue(store.sql.query("SELECT * FROM android_actions").isEmpty())
+                    }
+                    assertEquals(old,store.history.read(old.id))
+                    assertTrue(store.setTracking(true).committed)
+                    read(8000)
+                }
                 val next=store.history.read("boundary-2")!!
                 assertEquals(0L,next.confirmedMs);assertEquals(old,store.history.read(old.id))
+                if(change=="disconnect") {
+                    assertNull(store.account())
+                    assertTrue(store.sql.query("SELECT * FROM android_actions").isEmpty())
+                }
                 assertTrue(store.sql.query("SELECT * FROM android_actions WHERE type='Scrobble'").isEmpty())
             }finally{store.close()}
         }

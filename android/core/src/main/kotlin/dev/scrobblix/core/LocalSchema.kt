@@ -2,14 +2,17 @@ package dev.scrobblix.core
 
 /** New Android schema only. Never imports or alters a Windows database. */
 object LocalSchema {
-    const val VERSION = 2
+    const val VERSION = 3
     fun initialize(db: QueueSqlDriver, legacyAccount:String?=null) = db.transaction {
         val version=db.query("PRAGMA user_version").single().values.single()!!.toInt()
         check(version <= VERSION) { "Database requires a newer Scrobblix version" }
         if(version == VERSION) { ConnectionSchema.read(db);return@transaction }
+        if(version == 2) {
+            addEvidence(db);ConnectionSchema.read(db);return@transaction
+        }
         if(version == 1) {
             ConnectionSchema.migrateInTransaction(db,legacyAccount)
-            db.execute("PRAGMA user_version=2")
+            addEvidence(db)
             return@transaction
         }
         // Android SQLiteConnection creates this locale table before app schema initialization.
@@ -36,6 +39,10 @@ object LocalSchema {
         db.execute("CREATE INDEX android_actions_due ON android_actions(provider,account,state,due_ms,created_ms)")
         db.execute("CREATE UNIQUE INDEX android_play_action ON android_actions(provider,account,type,play_id) WHERE play_id IS NOT NULL")
         ConnectionSchema.migrateInTransaction(db,legacyAccount)
-        db.execute("PRAGMA user_version=2")
+        addEvidence(db)
+    }
+    private fun addEvidence(db:QueueSqlDriver) {
+        db.execute("ALTER TABLE android_actions ADD COLUMN unknown_evidence TEXT")
+        db.execute("PRAGMA user_version=3")
     }
 }
