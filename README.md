@@ -3,10 +3,10 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Public unsigned preview; real-world qualification pending  
-> **Last updated:** 2026-11-06
+> **Last updated:** 2026-11-09
 
 
-Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
+Scrobblix is a local-first Windows listening companion with Last.fm scrobbling. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
 
 This repository is the product and engineering source of truth for the personal open-source project maintained by **Rahul Muraleedharan** under the GitHub account **[`frpboy`](https://github.com/frpboy)**.
 
@@ -20,11 +20,19 @@ Scrobblix must answer three questions immediately:
 
 ## Downloads and preview releases
 
-Current downloadable preview: [v0.1.0-beta.2](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.2). It contains the Windows Test Bundle, optional Browser Companion and SHA-256 checksums. This is not a final stable release.
+Latest published preview checked on 9 November 2026: [v0.1.0-beta.5](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.5). It contains the Windows Test Bundle, optional Browser Companion and SHA-256 checksums. This is not a final stable release.
 
 Version tags trigger the automated [Preview Release workflow](.github/workflows/release.yml). It runs the full Windows CI checks before publishing the desktop test bundle, optional browser companion, and SHA-256 checksums on the [GitHub Releases page](https://github.com/frpboy/Scrobblix/releases).
 
 **Current distribution status:** preview ZIPs are unsigned development test bundles—not a signed installer or stable production release. The app may require the matching Microsoft Windows App Runtime, and real-Windows/listening qualification and installer-signing gates remain open. Read the [release process](docs/RELEASE_PROCESS.md) before downloading or distributing a preview.
+
+## Android and current qualification
+
+The repository also contains an Android Kotlin + Jetpack Compose development preview under `android/`. It has notification-listener/media-session collection, local history, an account-fenced durable queue and Last.fm submission logic. It is not a Windows Browser Companion replacement, a Play release or a qualified owner-phone update. See [Android implementation status](docs/android/IMPLEMENTATION_STATUS.md) for the exact evidence and remaining gates.
+
+PR #154 is merged; its post-merge Windows and Android ordinary checks passed on `de43af3e44cbb856dc485943263ea69b62d0375d`. Main checked when this update was prepared on 9 November 2026 was `5736d1b6fdf858bf8aec2bc7279e14e3668ada48`, after PR #155 browser artwork-URL filtering and passing post-merge Windows CI. These checks do not qualify the separate About candidate or establish historical Unknown-submission causes. Now Playing, a local eligible listen and a saved provider acknowledgement are different states. Unknown submissions are not automatically resent because Last.fm may already have received them.
+
+The shared About/Sponsor pages are in separate reviewed candidate branches, not main or beta.5. Android synthetic capture now includes an isolated actual MainActivity comparison, but API36 navigation glyphs remain visually unusable despite passing tests. Windows native About runtime remains open; browser captures are local previews, not installed-extension proof. There is no Android APK in the public beta.5 release.
 
 ## Recommended implementation baseline
 
@@ -196,7 +204,11 @@ The monorepo model is recommended initially so each code pull request can update
 
 ## Maintainer and support
 
-Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source remains MIT-licensed; third-party components keep their own licenses.
+- Developer: [Rahul Muraleedharan](https://www.frpboy.in/)
+- [GitHub](https://github.com/frpboy) and [LinkedIn](https://www.linkedin.com/in/rahul-muraleedharan-it)
+- [Telegram support requests](https://t.me/FRPboy_Projects)
+
+Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source is Apache-2.0-licensed; third-party components keep their own licenses.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FrpBoy-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/frpboy)
 [![Become a Patron](https://img.shields.io/badge/Become_a_Patron-FrpBoy-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/FrpBoy)

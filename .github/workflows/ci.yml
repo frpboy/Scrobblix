@@ -24,49 +24,89 @@ permissions:
   contents: read
 
 jobs:
+  classify-changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      docs_only: ${{ steps.route.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 0
+      - name: Classify exact changed paths, defaulting to full CI
+        id: route
+        run: python3 scripts/classify-docs-ci.py
+
   build-and-test:
-    runs-on: windows-latest
+    outputs:
+      docs_only: ${{ needs.classify-changes.outputs.docs_only }}
+    needs: classify-changes
+    if: always()
+    runs-on: ${{ needs.classify-changes.outputs.docs_only == 'true' && needs.classify-changes.result == 'success' && 'ubuntu-latest' || 'windows-latest' }}
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
+      - name: Require successful route classification
+        if: ${{ needs.classify-changes.result != 'success' }}
+        shell: bash
+        run: exit 1
+
+      - name: Validate Markdown-only change
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only == 'true' }}
+        run: node scripts/validate-docs.mjs
+
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         with:
           dotnet-version: 10.0.x
 
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         with:
           node-version: 22.x
           cache: npm
           cache-dependency-path: browser-extension/package-lock.json
 
+      - name: Test fail-closed documentation route
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
+        run: python scripts/test-docs-ci.py
+
       - name: Validate CI concurrency contract
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-ci-concurrency.mjs
 
       - name: Restore .NET solution
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet restore Scrobblix.slnx
 
       - name: Build .NET solution
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
       - name: Publish synthetic pipe-authorization test client
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet publish tests/Scrobblix.PipeClient/Scrobblix.PipeClient.csproj --configuration Release --runtime win-x64 --self-contained true -p:PublishSingleFile=true --output artifacts/pipe-client
 
       - name: Run native Windows integration checks
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet run --project tests/Scrobblix.Windows.Tests/Scrobblix.Windows.Tests.csproj --configuration Release --no-build
         env:
           SCROBBLIX_PIPE_CLIENT_PATH: artifacts/pipe-client/Scrobblix.PipeClient.exe
 
       - name: Build isolated self-contained artwork UI probe
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=true --output artifacts/ui-probe
 
       - name: Execute isolated real WinUI artwork fixture probe
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: ./scripts/test-artwork-ui.ps1
 
       - name: Preserve synthetic WinUI renders
-        if: always()
+        if: ${{ always() && needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: artwork-ui-qualification
@@ -75,7 +115,7 @@ jobs:
           if-no-files-found: warn
 
       - name: Dump WinUI XAML compiler diagnostics on build failure
-        if: failure()
+        if: ${{ failure() && needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         shell: pwsh
         run: |
           $searchRoot = 'src/Scrobblix.Desktop/obj/Release'
@@ -152,36 +192,46 @@ jobs:
           }
           exit 0
       - name: Validate desktop UI contracts
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-desktop-ui-contracts.mjs
 
       - name: Validate release workflow wiring
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-release-workflow.mjs
 
       - name: Validate Markdown documentation links and structure
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/validate-docs.mjs
 
       - name: Run domain and infrastructure assertions
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet run --project tests/Scrobblix.Domain.Tests/Scrobblix.Domain.Tests.csproj --configuration Release --no-build
 
       - name: Install browser companion dependencies
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: npm ci
         working-directory: browser-extension
 
       - name: Type-check browser companion
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: npm run check
         working-directory: browser-extension
 
       - name: Build browser companion
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: npm run build
         working-directory: browser-extension
 
       - name: Test browser sender and payload validation
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-browser-security.mjs
 
       - name: Validate Chromium and Firefox manifests
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/validate-browser-manifests.mjs
 
       - name: Parse PowerShell helper scripts
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         shell: pwsh
         run: |
           $scriptFiles = @(
@@ -201,13 +251,15 @@ jobs:
           }
 
       - name: Publish unpackaged Windows application
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet publish src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Release --runtime win-x64 --self-contained true -p:WindowsAppSDKSelfContained=true -p:ScrobblixUiQualification=false --output artifacts/Scrobblix/desktop
 
       - name: Qualify ordinary fresh-profile published startup
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: ./scripts/test-ordinary-startup.ps1
 
       - name: Preserve ordinary startup evidence
-        if: always()
+        if: ${{ always() && needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: ordinary-startup-qualification
@@ -216,12 +268,15 @@ jobs:
           if-no-files-found: warn
 
       - name: Publish native messaging host
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet publish src/Scrobblix.NativeHost/Scrobblix.NativeHost.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/Scrobblix/native-host
 
       - name: Verify native-host malformed envelope recovery
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-native-host-framing.mjs artifacts/Scrobblix/native-host/Scrobblix.NativeHost.dll
 
       - name: Assemble local test bundle
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
@@ -342,6 +397,7 @@ jobs:
           Compress-Archive -Path "$companion/*" -DestinationPath 'artifacts/Scrobblix-BrowserCompanion.zip' -Force
 
       - name: Upload Windows test bundle
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Scrobblix-Windows-TestBundle
@@ -350,6 +406,7 @@ jobs:
           retention-days: 14
 
       - name: Upload browser companion package
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: Scrobblix-BrowserCompanion
@@ -360,6 +417,7 @@ jobs:
   portable-zip-startup:
     # A new runner, no runtime installation step, and the exact final ZIP used for delivery.
     needs: build-and-test
+    if: ${{ needs.build-and-test.outputs.docs_only != 'true' }}
     runs-on: windows-latest
     timeout-minutes: 10
     steps:
