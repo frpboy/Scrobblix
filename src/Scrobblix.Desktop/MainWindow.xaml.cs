@@ -22,6 +22,55 @@ namespace Scrobblix.Desktop;
 
 public sealed partial class MainWindow : Window
 {
+    private bool _aboutFlowActive;
+
+    private async void AboutScrobblixButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_aboutFlowActive) return;
+        _aboutFlowActive = true;
+        try
+        {
+            AboutStatusText.Text = "";
+            var panel = new StackPanel { Spacing = 10, MaxWidth = 440 };
+            panel.Children.Add(new TextBlock { Text = "Windows desktop listening companion", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Developer: Rahul Muraleedharan - https://www.frpboy.in/", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://www.frpboy.in/") });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "GitHub: github.com/frpboy", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://github.com/frpboy") });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "LinkedIn: rahul-muraleedharan-it", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://www.linkedin.com/in/rahul-muraleedharan-it") });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Support requests: Telegram group", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://t.me/FRPboy_Projects") });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Readme / source: Scrobblix", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://github.com/frpboy/Scrobblix") });
+            panel.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Releases: Published releases, not qualification of this build", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://github.com/frpboy/Scrobblix/releases") });
+            panel.Children.Add(new TextBlock { Text = "Credits / licenses: Scrobblix - Apache License 2.0. .NET, WinUI, SQLite and other dependencies retain their own licenses. See source notices for details.", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = "Last.fm is an independent service.", TextWrapping = TextWrapping.Wrap });
+            var assembly = typeof(MainWindow).Assembly;
+            var version = assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion
+                ?? assembly.GetName().Version?.ToString() ?? "Unavailable";
+            panel.Children.Add(new TextBlock { Text = $"Version: {version}", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = $"Application: {assembly.GetName().Name} (Windows desktop)", TextWrapping = TextWrapping.Wrap });
+            panel.Children.Add(new TextBlock { Text = "Local history and credentials remain under the existing privacy controls. About links open externally only when selected. Release links do not qualify this build.", TextWrapping = TextWrapping.Wrap });
+            var about = new ContentDialog {
+                XamlRoot = Content.XamlRoot, Title = "About Scrobblix",
+                Content = new ScrollViewer { Content = panel, MaxHeight = 480, HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled },
+                PrimaryButtonText = "Sponsor", CloseButtonText = "Close", DefaultButton = ContentDialogButton.Close
+            };
+            if (await about.ShowAsync() != ContentDialogResult.Primary) return;
+            var support = new StackPanel { Spacing = 10 };
+            support.Children.Add(new TextBlock { Text = "Optional contributions support the developer. For app help, use Support requests on the About page.", TextWrapping = TextWrapping.Wrap });
+            support.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Buy Me a Coffee", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://buymeacoffee.com/frpboy") });
+            support.Children.Add(new HyperlinkButton { Content = new TextBlock { Text = "Patreon", TextWrapping = TextWrapping.Wrap, MaxWidth = 400 }, NavigateUri = new Uri("https://www.patreon.com/c/FrpBoy") });
+            await new ContentDialog { XamlRoot = Content.XamlRoot, Title = "Support Scrobblix", Content = support, CloseButtonText = "Close" }.ShowAsync();
+        }
+        catch (Exception)
+        {
+            // Keep dialog/metadata failures local; never surface raw exception details.
+            AboutStatusText.Text = "About is unavailable right now. Close any open dialog and try again.";
+        }
+        finally
+        {
+            _aboutFlowActive = false;
+        }
+    }
+
     private readonly TrackingMode _trackingMode = new();
     private string? _displayedPlayId;
     private ProviderActionType? _currentTrackLoveIntent;

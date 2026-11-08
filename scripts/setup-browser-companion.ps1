@@ -82,8 +82,14 @@ try {
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\manifest.firefox.json') -Destination (Join-Path $firefoxRoot 'manifest.json') -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.html') -Destination (Join-Path $chromiumRoot 'popup.html') -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.css') -Destination (Join-Path $chromiumRoot 'popup.css') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\about.html') -Destination (Join-Path $chromiumRoot 'about.html') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\about.js') -Destination (Join-Path $chromiumRoot 'about.js') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\sponsor.html') -Destination (Join-Path $chromiumRoot 'sponsor.html') -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.html') -Destination (Join-Path $firefoxRoot 'popup.html') -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\popup.css') -Destination (Join-Path $firefoxRoot 'popup.css') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\about.html') -Destination (Join-Path $firefoxRoot 'about.html') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\about.js') -Destination (Join-Path $firefoxRoot 'about.js') -Force
+        Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\sponsor.html') -Destination (Join-Path $firefoxRoot 'sponsor.html') -Force
         Copy-Item -Path (Join-Path $repoRoot 'browser-extension\dist\*') -Destination (Join-Path $chromiumRoot 'dist') -Recurse -Force
         Copy-Item -Path (Join-Path $repoRoot 'browser-extension\dist\*') -Destination (Join-Path $firefoxRoot 'dist') -Recurse -Force
         Copy-Item -LiteralPath (Join-Path $repoRoot 'browser-extension\README.md') -Destination (Join-Path $chromiumRoot 'README.md') -Force
@@ -95,12 +101,18 @@ try {
             (Join-Path $chromiumRoot 'manifest.json'),
             (Join-Path $chromiumRoot 'popup.html'),
             (Join-Path $chromiumRoot 'popup.css'),
+            (Join-Path $chromiumRoot 'about.html'),
+            (Join-Path $chromiumRoot 'about.js'),
+            (Join-Path $chromiumRoot 'sponsor.html'),
             (Join-Path $chromiumRoot 'dist\popup.js'),
             (Join-Path $chromiumRoot 'dist\service-worker.js'),
             (Join-Path $chromiumRoot 'dist\media-observer.js'),
             (Join-Path $firefoxRoot 'manifest.json'),
             (Join-Path $firefoxRoot 'popup.html'),
             (Join-Path $firefoxRoot 'popup.css'),
+            (Join-Path $firefoxRoot 'about.html'),
+            (Join-Path $firefoxRoot 'about.js'),
+            (Join-Path $firefoxRoot 'sponsor.html'),
             (Join-Path $firefoxRoot 'dist\popup.js'),
             (Join-Path $firefoxRoot 'dist\service-worker.js'),
             (Join-Path $firefoxRoot 'dist\media-observer.js'),

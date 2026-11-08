@@ -339,6 +339,8 @@
                         <TextBlock x:Name="DataManagementStatusText" Text="No backup operation has been run this session." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                     </StackPanel>
                 </Border>
+                <Button Content="About Scrobblix" Click="AboutScrobblixButton_Click" HorizontalAlignment="Left" />
+                <TextBlock x:Name="AboutStatusText" TextWrapping="Wrap" AutomationProperties.LiveSetting="Polite" />
                 <Button x:Name="ToggleAdvancedDetailsButton" Content="Show advanced details" Click="ToggleAdvancedDetailsButton_Click" HorizontalAlignment="Left" AutomationProperties.HelpText="Show or hide extra local diagnostics guidance." />
                 <Border x:Name="AdvancedSettingsDetails" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}" Visibility="Collapsed">
                     <StackPanel Spacing="8">

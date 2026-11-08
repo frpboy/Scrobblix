@@ -28,3 +28,8 @@ li button:hover { background: #ece6f0; color: #594b7c; text-decoration: underlin
 li button:focus-visible { outline: 2px solid #655789; outline-offset: 1px; }
 li button:active { background: #e1d9e7; }
 footer { border-top: 1px solid #d6d0db; font-size: 12px; padding-top: 12px; }
+
+.about-page { max-width: 520px; overflow-wrap: anywhere; }
+.about-page a { color: #514071; overflow-wrap: anywhere; }
+.about-page h1 { font-size: 20px; }
+a:focus-visible { outline: 2px solid #655789; outline-offset: 3px; }

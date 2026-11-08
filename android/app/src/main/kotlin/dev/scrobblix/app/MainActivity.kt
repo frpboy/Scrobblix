@@ -110,7 +110,12 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         catch(_:Exception){invalidateHistory();queueSummaryCurrent=false;storageUnavailable=true;connectionHealth="Local history/queue could not be read. Their current state cannot be shown; do not assume collection or delivery has stopped."}
         delay(2000)
     } }
-    Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(16.dp)) {
+    val contentScroll = rememberScrollState()
+    LaunchedEffect(tab) { if(tab == "About" || tab == "Sponsor") contentScroll.scrollTo(0) }
+    androidx.activity.compose.BackHandler(enabled=tab == "About" || tab == "Sponsor") {
+        tab = if(tab == "Sponsor") "About" else "Settings"
+    }
+    Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(contentScroll),verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
         Text("Scrobblix",style=MaterialTheme.typography.headlineLarge)
         Text("Your listening, kept local.",style=MaterialTheme.typography.bodyLarge)
@@ -224,7 +229,10 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     }) {Text("Resume reviewed held scrobbles")}
                 }
             }
+            "About" -> { ScrobblixAbout(onBack={tab="Settings"},onSponsor={tab="Sponsor"}) }
+            "Sponsor" -> { ScrobblixSponsor(onBack={tab="About"}) }
             "Settings" -> {
+                TextButton(onClick={tab="About"}) { Text("About Scrobblix") }
                 Text("Last.fm account",style=MaterialTheme.typography.headlineSmall)
                 connectionHealth?.let { Text(it) }
                 Text("Scrobbling sends artist, track, album, duration and play time to Last.fm only after you connect an account and enable tracking. Local history stays on this device. No analytics or cloud sync.")

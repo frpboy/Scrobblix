@@ -196,7 +196,7 @@ The monorepo model is recommended initially so each code pull request can update
 
 ## Maintainer and support
 
-Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source remains MIT-licensed; third-party components keep their own licenses.
+Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source is Apache-2.0-licensed; third-party components keep their own licenses.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FrpBoy-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/frpboy)
 [![Become a Patron](https://img.shields.io/badge/Become_a_Patron-FrpBoy-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/FrpBoy)
