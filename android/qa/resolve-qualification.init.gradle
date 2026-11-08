@@ -1,0 +1,29 @@
+// Review candidate: resolves only exact current test/runtime configurations, no tests or emulator.
+gradle.projectsEvaluated {
+    rootProject.tasks.register('resolveQualificationRuntimeInputs') {
+        doLast {
+            def targets = [':core':['testRuntimeClasspath'], ':platform':['unified-test-platform-gradle-work-action'], ':app':['unified-test-platform-gradle-work-action']]
+            targets.each { name, configurations ->
+                def p=rootProject.project(name)
+                configurations.each { configName ->
+                    def c=p.configurations.getByName(configName)
+                    if(!c.canBeResolved)throw new GradleException('Required test input configuration is not resolvable: '+name+':'+configName)
+                    def files=c.resolve()
+                    if(files.empty)throw new GradleException('Required test input configuration has no files: '+name+':'+configName)
+                    files.sort{it.absolutePath}.each { file ->
+                        if(file.isDirectory()) {
+                            // Core's own compiled test/main classes are local outputs, not downloaded artifacts.
+                            if(name!=':core' || configName!='testRuntimeClasspath')throw new GradleException('Unexpected directory test dependency: '+file.name)
+                            println('QUALIFICATION_LOCAL_OUTPUT '+name+' '+configName+' '+file.name)
+                            return
+                        }
+                        if(!file.isFile())throw new GradleException('Required test input is not a file: '+file.name)
+                        def digest=java.security.MessageDigest.getInstance('SHA-256')
+                        file.withInputStream { stream -> byte[] buffer=new byte[65536];int count;while((count=stream.read(buffer))>0)digest.update(buffer,0,count) }
+                        println('QUALIFICATION_RUNTIME_INPUT '+name+' '+configName+' '+file.name+' '+digest.digest().encodeHex().toString())
+                    }
+                }
+            }
+        }
+    }
+}
