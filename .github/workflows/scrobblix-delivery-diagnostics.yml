@@ -1,0 +1,148 @@
+name: Bounded API26 and API36 source and observability qualification
+on:
+  push:
+    branches: [qa/scrobblix-delivery-diagnostics]
+    paths: ['android/**', '.github/workflows/scrobblix-delivery-diagnostics.yml']
+permissions:
+  contents: read
+concurrency:
+  group: scrobblix-delivery-diagnostics-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  diagnostics:
+    if: github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - name: Require exact reviewed Android source
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git rev-parse HEAD:android)" = a3cb65af446ddd4b0fd3d4d0031f1f0d594c73cf
+          test "$(git rev-parse HEAD:tests/fixtures/scrobble-eligibility.tsv)" = ab8dd294725fbb9f322e261b41912ddfad1eaa8e
+          test "$(sha256sum tests/fixtures/scrobble-eligibility.tsv | cut -d' ' -f1)" = 66392633a560d237934fbddd8b50b2f99149c0bc71c46363a3455a559186fd65
+          test -z "${SCROBBLIX_SIGNING_STORE:-}"
+          test -z "${SCROBBLIX_SIGNING_PASSWORD_FILE:-}"
+      - name: Resolve and compile exact test inputs before emulator startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          # Ordinary pinned repositories only. No mirror, credentials, policy bypass or retries.
+          # Host dependency failure must stop before emulator startup. Offline runtime fails closed.
+          timeout --signal=TERM --kill-after=10s 420s android/gradlew -p android -I qa/resolve-qualification.init.gradle :core:compileTestKotlin :platform:assembleDebugAndroidTest :app:assembleDebugAndroidTest resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-online.log"
+          # A separate offline resolution must reproduce the exact artifact receipt before any emulator.
+          timeout --signal=TERM --kill-after=10s 60s android/gradlew -p android --offline -I qa/resolve-qualification.init.gradle resolveQualificationRuntimeInputs --no-daemon | tee "$RUNNER_TEMP/scrobblix-inputs-offline.log"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-online.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          grep '^QUALIFICATION_RUNTIME_INPUT ' "$RUNNER_TEMP/scrobblix-inputs-offline.log" | sort > "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
+          test -s "$RUNNER_TEMP/scrobblix-inputs-online.sha256"
+          cmp "$RUNNER_TEMP/scrobblix-inputs-online.sha256" "$RUNNER_TEMP/scrobblix-inputs-offline.sha256"
+      - name: Run core, platform and ordinary app synthetic tests with provider egress blocked
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-diagnostics"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME" diagnostics-evidence
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+          echo no | avdmanager create avd -n diagnostics -k 'system-images;android-${{ matrix.api }};default;x86_64' --path "$ANDROID_AVD_HOME/diagnostics.avd" --force
+          emulator -avd diagnostics -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/diagnostics-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          timeout 180 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -60 /tmp/diagnostics-emulator.log; exit 1; fi
+          # adbd may restart between boot_completed and root. Recover only transport,
+          # with a bounded budget, and require actual root before installing firewalls.
+          rooted=false
+          for attempt in 1 2 3; do
+            timeout 30 adb wait-for-device
+            timeout 10 adb root || true
+            timeout 30 adb wait-for-device
+            if [ "$(timeout 10 adb shell id -u | tr -d '\r')" = 0 ]; then rooted=true; break; fi
+          done
+          test "$rooted" = true
+          test "$(timeout 10 adb shell getprop ro.build.version.sdk | tr -d '\r')" = '${{ matrix.api }}'
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          result=0
+          android/gradlew -p android :core:test :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest '-Pandroid.testInstrumentationRunnerArguments.notClass=dev.scrobblix.app.LiveTokenStartQualificationTest,dev.scrobblix.app.ProcessRecoveryTest,dev.scrobblix.app.SignedUpdateRehearsalTest' --offline --no-daemon || result=$?
+          for name in authority-held-counts-unavailable authority-held-counts-recovered history-eligibility history-unknown-action collection-continuity history-local-fields history-stage-evidence; do
+            adb pull "/sdcard/Download/scrobblix-$name.png" diagnostics-evidence/ || result=1
+          done
+          exit "$result"
+      - name: Require exact full ordinary synthetic test inventory
+        if: always()
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          from collections import Counter
+          import xml.etree.ElementTree as E
+          expected={'core': ['dev.scrobblix.core.CollectorContinuityTest#shortMetadataGapKeepsIdentityAndCreditsNoInterruptionTime', 'dev.scrobblix.core.CollectorContinuityTest#exactTenSecondBoundaryAllowsNoGapCreditButLaterSampleResets', 'dev.scrobblix.core.CollectorContinuityTest#noSessionAccessControlOrProcessNeverJoinStoredRows', 'dev.scrobblix.core.CollectorContinuityTest#missingSessionIdentityCannotRepairMetadata', 'dev.scrobblix.core.CollectorContinuityTest#changedSessionSourceOrCompleteTrackResetsInterruption', 'dev.scrobblix.core.CollectorContinuityTest#backwardSeekForwardSeekStaticMissingOrPausedPositionCannotRepair', 'dev.scrobblix.core.CollectorContinuityTest#invalidInterruptionPositionAbandonsCandidateEvenWhenLaterMetadataMatches', 'dev.scrobblix.core.CollectorContinuityTest#backwardsClockDoesNotCarryCandidate', 'dev.scrobblix.core.CollectorContinuityTest#initialMissingMetadataCreatesNoPhantomHistoryOrQueue', 'dev.scrobblix.core.CollectorContinuityTest#conflictingIncompleteSampleEndsCandidateBeforeMatchingMetadataReturns', 'dev.scrobblix.core.CollectorContinuityTest#interruptionDoesNotWriteHistoryOrTouchAnyQueueRow', 'dev.scrobblix.core.CollectorContinuityTest#repeatAndSourceTransitionStillStartNewPlay', 'dev.scrobblix.core.CollectorContinuityTest#unknownActionsAndOtherAccountsRemainByteForByteUnchanged', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#atomicPointerAndAuthResumePreserveUnknownOtherAccountsAndHistory', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#queueFailureRollsBackPointerAndReopenClassifiesPrior', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#commitThenThrowReopenClassifiesCommittedWithoutRepeatingQueue', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#failedCommitAndUnreadableReopenReturnUnavailable', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#tombstonePauseGateSurvivesReopenAndReconnect', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#initializedMissingRowAndOverflowFailClosed', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#oldGenerationCannotPermitAndUnsentReleaseDoesNotBurnProviderBudget', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#recoveryDifferentiatesDurableUnsentAndSendStarted', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#cancellationAndTrackingDenyPermit', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#concurrentPermitAndDisconnectAreSerializedBySharedCoordinatorLock', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#liveGateSuppliersAreEvaluatedInsideCoordinator', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#expiredRecoveryDoesNotStealLiveAndNowPlayingIsNotUnknown', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#dueRetryAndCapAreExplicit', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#badSentinelAndMissingAuthorityReturnTypedUnavailable', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#lateOldGenerationAuthCannotReblockReplacementAndOtherCompletionsStayOldAttempt', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#migrationPreservesLegacyBudgetAndTreatsLegacyInflightAsPossiblySent', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#expiryAtPermitBoundaryDeniesThenUnsentRecoveryHolds', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#nowPlayingFiveMinuteAgeCancellationAndOtherProviderRecoveryIsolation', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#bothPermitDisconnectOrdersWithLatchesAndBoundedJoins', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#unexpectedFreshAuthorityRowDoesNotClaimSuccessOrRollback', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#sameCredentialNewRevisionStillAuthBlocksInvalidSession', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#providerOutcomePolicyRetainsIgnoredPermanentRetryAfterAndExhaustion', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#actualAdapterIoExceptionPolicyAndExpectedCredentialFence', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#failedPauseDurableGatePrecedesPreferenceSimulation', 'dev.scrobblix.core.ConnectionAuthorityPrototypeTest#adapterConsumesStaleAndCappedRowsBeforeValidBacklog', 'dev.scrobblix.core.DurableQueueTest#reopenIsolationRecoveryAndFencedCompletion', 'dev.scrobblix.core.DurableQueueTest#activeLongTrackRefreshIsBoundedAndNeverRewritesInFlightOrUnknownScrobbles', 'dev.scrobblix.core.DurableQueueTest#rollbackAndEphemeralExpiry', 'dev.scrobblix.core.EligibilityTest#sharedWindowsFixtures', 'dev.scrobblix.core.EligibilityTest#pauseResumeAndClockRegression', 'dev.scrobblix.core.EligibilityTest#explicitExclusionsNeverQueue', 'dev.scrobblix.core.HeldReconciliationTest#exactBatchPreservesHistoricalProvenanceAndUnknownOtherAccountsAndHistory', 'dev.scrobblix.core.HeldReconciliationTest#allAuthorityAndRowChangesRefuseWholeBatch', 'dev.scrobblix.core.HeldReconciliationTest#metadataChangeAndAnyLeasePresenceRefuse', 'dev.scrobblix.core.HeldReconciliationTest#boundedStableRemainderDoesNotSelectNewlyInsertedEarlierRow', 'dev.scrobblix.core.HeldReconciliationTest#emptyNoopAndCappedRowsExcluded', 'dev.scrobblix.core.HeldReconciliationTest#transactionFailureRollsBackAllRows', 'dev.scrobblix.core.HeldReconciliationTest#commitThenThrowConfirmsOnlyWithoutSecondMutation', 'dev.scrobblix.core.HeldReconciliationTest#interveningClaimAfterCommitIsUnconfirmedNotFalseFailure', 'dev.scrobblix.core.HeldReconciliationTest#everyHistoricalPredicateAndPayloadChangeRejectsWholeBatch', 'dev.scrobblix.core.HeldReconciliationTest#incorrectUpdateCountRollsBackAndUnverifiableCommitDoesNotRetry', 'dev.scrobblix.core.HeldReconciliationTest#malformedUnchangedProvenanceCannotResumeOrOverflowNextClaim', 'dev.scrobblix.core.HeldReconciliationTest#confirmationUsesExactlyOneSelectAndNoTransactionOrMutation', 'dev.scrobblix.core.ListeningHistoryTest#historyAndQueuePersistAtomicallyAndReopen', 'dev.scrobblix.core.ListeningHistoryTest#transientMetadataGapsPreservePayloadAndUseAccumulatedEligibility', 'dev.scrobblix.core.ListeningHistoryTest#enqueueFailureRollsBackHistoryAndInvalidDataNeverWrites', 'dev.scrobblix.core.LocalSchemaTest#newSchemaIsVersionedIdempotentAndIndexesEnforceSemanticUniqueness', 'dev.scrobblix.core.LocalSchemaTest#futureSchemaAndForeignUnversionedDataFailClosed', 'dev.scrobblix.core.LocalSchemaTest#androidLocaleMetadataIsPreservedButForeignTablesStillFailClosed', 'dev.scrobblix.core.LocalSchemaTest#malformedAndroidMetadataFailsClosed', 'dev.scrobblix.core.LocalSchemaTest#interruptedSchemaCreationRollsBackWithoutVersionMarker', 'dev.scrobblix.core.PlaybackCollectorTest#explicitPlayingSamplesQueueExactlyOnce', 'dev.scrobblix.core.PlaybackCollectorTest#pauseGapRevokeClockAndPlayerChangesDoNotInflate', 'dev.scrobblix.core.PlaybackCollectorTest#seekingDoesNotAwardPositionDeltaAndRepeatStartsNewPlay', 'dev.scrobblix.core.QueueRulesTest#exactProviderAndAccountScope', 'dev.scrobblix.core.QueueRulesTest#unknownAndTerminalNeverClaimOrUnblock', 'dev.scrobblix.core.QueueRulesTest#appendOnlyLeaseIsUnknownNotRetry', 'dev.scrobblix.core.QueueRulesTest#ephemeralNowPlayingExpiresButDurableHistorySurvives', 'dev.scrobblix.core.QueueWorkerTest#realQueueWorkerPreservesAccountAndPayload', 'dev.scrobblix.core.QueueWorkerTest#ambiguousTransportNeverResendsAndAuthNeedsMatchingReconnect', 'dev.scrobblix.core.QueueWorkerTest#retryHintBoundAndExhaustionPersist', 'dev.scrobblix.core.UnknownEvidenceTest#v2MigrationPreservesEveryOldValueAndUnknownHasNoBackfill', 'dev.scrobblix.core.UnknownEvidenceTest#v2InterruptedMigrationRollsBackColumnAndVersion', 'dev.scrobblix.core.UnknownEvidenceTest#everyEvidenceValueLeavesStateReasonSendBudgetAndDueIdentical', 'dev.scrobblix.core.UnknownEvidenceTest#staleCompletionCannotAttachEvidenceOrOverwriteRecoveredAttempt', 'dev.scrobblix.core.UnknownEvidenceTest#evidenceIsDiscardedForAcceptedRetryAuthPermanentAndNowPlaying', 'dev.scrobblix.core.UnknownEvidenceTest#futureUnknownRawValuesAreNeverRenderedAsEnums', 'dev.scrobblix.core.UnknownEvidenceTest#legacyUnfencedWorkerAndRecoveryNeverClaimPermitOrSendStartedEvidence', 'dev.scrobblix.core.UnknownEvidenceTest#authorityRecoveryWithoutPermitIsHeldAndHasNoStageEvidence', 'dev.scrobblix.core.UnknownEvidenceTest#independentHandleReadsFixedEvidenceWithoutEnablingResend', 'dev.scrobblix.core.UnknownEvidenceTest#actualAuthorityWorkerRecordsOnlyFixedIoEvidenceAndKeepsUnknownHeld'], 'platform': ['dev.scrobblix.platform.AndroidStorageTest#actualDriverReopensHistoryAndFencesRecovery', 'dev.scrobblix.platform.AndroidStorageTest#actualDriverRollsBackTransactionAndRejectsFutureVersion', 'dev.scrobblix.platform.CollectionContinuityRuntimeTest#nativeTokensNullableDispatchAndResetPathsNeverInventWritesOrCallbacks', 'dev.scrobblix.platform.GenerationSecretPrototypeTest#separateNamespaceReadbackRefuseOverwriteAndLegacyPreservation', 'dev.scrobblix.platform.GenerationSecretPrototypeTest#fileAliasAndAtomicResidueCollisionsRefuseStaging', 'dev.scrobblix.platform.GenerationSecretPrototypeTest#missingKeyAfterStageReturnsUnavailableWithoutChangingOldLegacySecret', 'dev.scrobblix.platform.GenerationSecretPrototypeTest#injectedStageWriteAndReadbackFailurePreserveExistingLegacyCredential', 'dev.scrobblix.platform.GenerationSecretPrototypeTest#actualReadbackCorruptionAndKeyLossRefusePublicationAndPreserveLegacy', 'dev.scrobblix.platform.ListenerStartupContainmentTest#failedCreationDoesNotKillWorkerAndReconnectCanReportAgain', 'dev.scrobblix.platform.MediaSessionReaderTest#nativeSessionEqualityTagsAreEphemeralAndNeverUseSerializedTokens', 'dev.scrobblix.platform.MediaSessionReaderTest#accessIsRequiredWithoutEnablingNotificationListener', 'dev.scrobblix.platform.MediaSessionReaderTest#nativeSessionMetadataIsReadAndUnsafeFieldsAreRejected', 'dev.scrobblix.platform.SessionSecretStoreTest#actualKeystoreRoundTripAccountIsolationAndRemoval', 'dev.scrobblix.platform.SessionSecretStoreTest#actualKeystoreCorruptionAndLostKeyFailClosed'], 'app': ['dev.scrobblix.app.AppRuntimeTest#freshProfileTabsAndExplicitTracking', 'dev.scrobblix.app.AppRuntimeTest#providerErrorsAndAmbiguousAcceptanceStayConservative', 'dev.scrobblix.app.AppRuntimeTest#mobileAuthUsesReturnedAccountAndSignedRequestsWithoutSavingPassword', 'dev.scrobblix.app.AppRuntimeTest#playerControlsAndLocalDisconnectPersistWithoutDeletingHistory', 'dev.scrobblix.app.AppRuntimeTest#privateApiConfigurationEncryptsAndReopensWithoutBundledSecrets', 'dev.scrobblix.app.AppRuntimeTest#privateApiSetupUiStaysLocalAndPausesTracking', 'dev.scrobblix.app.AppRuntimeTest#browserTokenFlowUsesHttpsSignedRequestsAndCanonicalAccount', 'dev.scrobblix.app.AppRuntimeTest#browserExchangeDiagnosticsNeverExposeUntrustedProviderText', 'dev.scrobblix.app.AppRuntimeTest#sessionKeysAreOpaqueBoundedAsciiNotMd5Signatures', 'dev.scrobblix.app.AppRuntimeTest#browserSessionParserPreservesOpaqueBytesAndRejectsCoercion', 'dev.scrobblix.app.AppRuntimeTest#queueDisplayDistinguishesActionTypesAndNeverReflectsUntrustedReason', 'dev.scrobblix.app.AppRuntimeTest#queueCountsSeparateTypesStatesAndReasonsWithoutMutatingRows', 'dev.scrobblix.app.AppRuntimeTest#historyDiagnosticsKeepExactPlayAndAccountWithoutMutatingUnknown', 'dev.scrobblix.app.AuthUiTest#signInUiStoresReturnedAccountAndDisconnectPreservesLocalData', 'dev.scrobblix.app.AuthUiTest#browserAuthorizationUiUsesReturnedIdentityWithoutPassword', 'dev.scrobblix.app.AuthUiTest#failedBrowserExchangeDoesNotReuseOneUseToken', 'dev.scrobblix.app.AuthUiTest#restoredCompositionExplainsLostPendingTokenWithoutExchange', 'dev.scrobblix.app.AuthorityAppFailureTest#pauseWriteFailureReturnsTypedOutcomeAndDurableGateSurvivesReopen', 'dev.scrobblix.app.AuthorityAppFailureTest#asynchronousSetupFailureDoesNotMislabelCommittedAccountAndCanRepair', 'dev.scrobblix.app.AuthorityAppFailureTest#unavailableAuthorityIsNotDisconnectedOrCredentialSignInFailure', 'dev.scrobblix.app.AuthorityAppFailureTest#noLegacyPreferenceDoesNotAdoptOrphanOrStalePreference', 'dev.scrobblix.app.AuthorityAppFailureTest#consentGateBlocksEveryCollectionCallbackAndRevisionResetsSameAccount', 'dev.scrobblix.app.AuthorityAppFailureTest#actualAuthorityAndControlFencesDiscardInterruptedCollectorIdentity', 'dev.scrobblix.app.AuthorityAppFailureTest#preexistingMissingAndCorruptLegacyCredentialRemainSavedButUnusable', 'dev.scrobblix.app.AuthorityAppFailureTest#pendingCancellationReconcilesNewReconnectAndEnableWithoutSecondManualAction', 'dev.scrobblix.app.AuthorityAppFailureTest#synchronousCancelFailureCannotBeClearedByOlderEnqueueSuccess', 'dev.scrobblix.app.AuthorityAppFailureTest#throwingPausePreferenceAfterTombstoneStillReturnsCommittedDisconnect', 'dev.scrobblix.app.AuthorityUiStateTest#collectionDiagnosticIsProcessOnlyAndNotDeliveryProofPixels', 'dev.scrobblix.app.AuthorityUiStateTest#unavailableAuthorityDisablesLoginAndShowsExplicitState', 'dev.scrobblix.app.AuthorityUiStateTest#durableConsentGateIsVisibleForSavedSyntheticAccount', 'dev.scrobblix.app.AuthorityUiStateTest#asynchronousLocalSetupErrorDoesNotInviteNewAuthorization', 'dev.scrobblix.app.AuthorityUiStateTest#heldScrobbleReviewShowsExactAccountMetadataAndExplicitAction', 'dev.scrobblix.app.AuthorityUiStateTest#delayedReviewFromPreviousAccountNeverBecomesClickable', 'dev.scrobblix.app.AuthorityUiStateTest#heldReviewControlRemainsReachableAtTwoTimesComposeFontScale', 'dev.scrobblix.app.AuthorityUiStateTest#twoActualResumeTapsWhileSuspendedInvokeOnlyShownBatchOnce', 'dev.scrobblix.app.AuthorityUiStateTest#heldResumeConsentIsDisabledAndExplained', 'dev.scrobblix.app.AuthorityUiStateTest#latePreClickPollCannotOverwriteRefreshAndFailedPollHidesCountsUntilRecovery', 'dev.scrobblix.app.AuthorityUiStateTest#failedPostCommitCountRefreshKeepsCommittedMessageAndHidesOldSummary', 'dev.scrobblix.app.AuthorityUiStateTest#historyDiagnosticsFenceDelayedOldPollAfterDisconnectAndHideReadFailure', 'dev.scrobblix.app.BrokerRuntimeTest#numericPayloadAndFixedBrowserConsentNeverRequireDeveloperKeysOrPassword', 'dev.scrobblix.app.BrokerRuntimeTest#onlyExactPreForwardRejectionsRetryWhileUnknownOrMixedOutcomesStayHeld', 'dev.scrobblix.app.BrokerRuntimeTest#invalidDestinationsAndAuthorizationUrlsAreRejected', 'dev.scrobblix.app.BrokerRuntimeTest#opaqueRequestTokensAndSessionKeysRemainSeparateFromStrictApiKeys', 'dev.scrobblix.app.BrokerRuntimeTest#freshConfigurationUsesPinnedBrokerWhileSavedOwnerCredentialsKeepDirectRoute', 'dev.scrobblix.app.HeldReconciliationAppTest#missingCredentialBlocksResumeAndDoesNotSchedule', 'dev.scrobblix.app.HeldReconciliationAppTest#staleAccountAndEmptyTokenNeverSchedule', 'dev.scrobblix.app.HeldReconciliationAppTest#committedQueueOutcomeSurvivesDeferredSchedulerAndDoubleTapIsNoop', 'dev.scrobblix.app.HeldReconciliationAppTest#corruptCredentialBlocksWithoutSchedule', 'dev.scrobblix.app.HeldReconciliationAppTest#availabilityCheckZeroesTheActualReturnedByteArray', 'dev.scrobblix.app.HeldReconciliationAppTest#independentReadonlyHandleSupportsAtomicConfirmationSnapshot', 'dev.scrobblix.app.LayoutRuntimeTest#largeFontAndLandscapeKeepControlsReachable', 'dev.scrobblix.app.ListenerLifecycleTest#actualBoundListenerCollectsOnlyAfterOptInAndStopsOnPauseAndRevocation', 'dev.scrobblix.app.StartupContainmentTest#unavailableStartupIsAttemptedOnceAndNeverRetainsExceptionText', 'dev.scrobblix.app.StartupContainmentTest#availableStartupHasOneIdentityAcrossCallers', 'dev.scrobblix.app.StartupContainmentTest#futureDatabaseStartupFailsClosedWithoutResetOrSchedulerOperations', 'dev.scrobblix.app.AppRuntimeTest#unknownEvidenceClassifiesOnlyExactObservedResponseAndNeverPrintsRawValues']}
+          for module,names in expected.items():
+              base=Path('android')/module/'build'
+              files=list((base/('test-results/test' if module=='core' else 'outputs/androidTest-results')).rglob('TEST-*.xml'))
+              assert files, f'{module}: XML absent'
+              actual=[]
+              for f in files:
+                  root=E.parse(f).getroot()
+                  for suite in root.iter():
+                      if suite.tag not in ('testsuite','testsuites'): continue
+                      for key in ('failures','errors','skipped'):
+                          value=suite.get(key,'0')
+                          assert value.isascii() and value.isdecimal() and int(value)==0, f'{module}: nonzero/malformed {key}'
+                      count=suite.get('tests','')
+                      assert count.isascii() and count.isdecimal() and int(count)==sum(1 for _ in suite.iter('testcase')), f'{module}: tests count mismatch/malformed'
+                  assert not list(root.iter('failure')) and not list(root.iter('error')) and not list(root.iter('skipped')), f'{module}: failed/error/skipped'
+                  actual += [t.attrib['classname']+'#'+t.attrib['name'] for t in root.iter('testcase')]
+              assert Counter(actual)==Counter(names), f'{module}: exact method set differs, missing={Counter(names)-Counter(actual)}, unexpected={Counter(actual)-Counter(names)}'
+              print('EXACT_SYNTHETIC_METHODS',module,len(actual),'zero failures/errors/skips')
+          PY
+      - name: Preserve only bounded synthetic XML and pixels
+        id: evidence
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p diagnostics-evidence
+          python3 - <<'PY'
+          from pathlib import Path
+          import shutil
+          out=Path('diagnostics-evidence')
+          for module in ('core','platform','app'):
+              root=Path('android')/module/'build'/('test-results/test' if module=='core' else 'outputs/androidTest-results')
+              for n,f in enumerate(root.rglob('TEST-*.xml')):
+                  shutil.copyfile(f,out/('instrumentation-'+module+'-'+str(n)+'.xml'))
+          allowed={'scrobblix-authority-held-counts-unavailable.png','scrobblix-authority-held-counts-recovered.png','scrobblix-history-eligibility.png','scrobblix-history-unknown-action.png','scrobblix-collection-continuity.png','scrobblix-history-local-fields.png','scrobblix-history-stage-evidence.png'}
+          for p in out.iterdir():
+              assert p.is_file() and (p.name in allowed or p.name.startswith('instrumentation-') and p.suffix=='.xml')
+          assert sum(p.stat().st_size for p in out.iterdir())<=10*1024*1024, 'Synthetic evidence exceeds cap'
+          PY
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: scrobblix-full-synthetic-api${{ matrix.api }}
+          path: diagnostics-evidence/
+          if-no-files-found: error
+          retention-days: 1

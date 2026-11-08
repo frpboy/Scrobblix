@@ -18,24 +18,24 @@ class PlaybackCollectorTest {
         assertEquals(1,db.query("SELECT id FROM android_actions").size)
     }
     @Test fun pauseGapRevokeClockAndPlayerChangesDoNotInflate() = scenario { collector,_ ->
-        val first=collector.observe(sample,0,0,null,null)
-        assertEquals(2000L,collector.observe(sample.copy(playing=false),2000,2000,null,null).confirmedMs)
-        assertEquals(2000L,collector.observe(sample.copy(playing=false),4000,4000,null,null).confirmedMs)
+        val first=collector.observe(sample,0,0,null,null)!!
+        assertEquals(2000L,collector.observe(sample.copy(playing=false),2000,2000,null,null)!!.confirmedMs)
+        assertEquals(2000L,collector.observe(sample.copy(playing=false),4000,4000,null,null)!!.confirmedMs)
         collector.unavailable()
-        val resumed=collector.observe(sample,5000,5000,null,null)
+        val resumed=collector.observe(sample,5000,5000,null,null)!!
         assertNotEquals(first.id,resumed.id);assertEquals(0L,resumed.confirmedMs)
-        val gap=collector.observe(sample,100000,100000,null,null)
+        val gap=collector.observe(sample,100000,100000,null,null)!!
         assertNotEquals(resumed.id,gap.id);assertEquals(0L,gap.confirmedMs)
-        val backward=collector.observe(sample,100001,99999,null,null)
+        val backward=collector.observe(sample,100001,99999,null,null)!!
         assertNotEquals(gap.id,backward.id);assertEquals(0L,backward.confirmedMs)
-        val other=collector.observe(sample.copy(player="other"),100002,100000,null,null)
+        val other=collector.observe(sample.copy(player="other"),100002,100000,null,null)!!
         assertNotEquals(backward.id,other.id);assertEquals(0L,other.confirmedMs)
     }
     @Test fun seekingDoesNotAwardPositionDeltaAndRepeatStartsNewPlay() = scenario { collector,_ ->
         collector.observe(sample,0,0,null,null)
-        val sought=collector.observe(sample.copy(positionMs=120000),2000,2000,null,null)
+        val sought=collector.observe(sample.copy(positionMs=120000),2000,2000,null,null)!!
         assertEquals(2000L,sought.confirmedMs)
-        val repeated=collector.observe(sample.copy(positionMs=0),4000,4000,null,null)
+        val repeated=collector.observe(sample.copy(positionMs=0),4000,4000,null,null)!!
         assertNotEquals(sought.id,repeated.id);assertEquals(0L,repeated.confirmedMs)
     }
 }

@@ -96,6 +96,52 @@ class AuthorityAppFailureTest {
             assertEquals(2,samples);assertTrue(resets>=3)
         }finally{store.close()}
     }
+    @Test fun actualAuthorityAndControlFencesDiscardInterruptedCollectorIdentity() {
+        for(change in listOf("same-account","other-account","pause","consent","disconnect"))scenario {context ->
+            val store=AppStore(context,{listOf(CompletableFuture.completedFuture(Unit))})
+            try {
+                store.setTracking(true);store.connect("Synthetic","a".repeat(32))
+                var identity=0
+                val collector=dev.scrobblix.core.PlaybackCollector(store.history,newId={"boundary-${++identity}"})
+                val sample=dev.scrobblix.core.PlaybackSample("synthetic-player","artist","title",null,170000,0,true,"synthetic-session")
+                var revision:Long?=null
+                fun read(tick:Long,incomplete:Boolean=false) {
+                    revision=store.withCollectionSnapshot(revision,{collector.unavailable()}) {snapshot ->
+                        assertTrue(Thread.holdsLock(store.authorityCoordinator))
+                        collector.observe(sample.copy(positionMs=tick,title=if(incomplete)null else "title"),tick,tick,"lastfm",snapshot.account)
+                    }
+                }
+                read(0);read(2000);read(4000,true)
+                val old=store.history.read("boundary-1")!!;assertEquals(2000L,old.confirmedMs)
+                when(change) {
+                    "same-account" -> store.connect("Synthetic","b".repeat(32))
+                    "other-account" -> store.connect("OtherSynthetic","b".repeat(32))
+                    "pause" -> store.setTracking(false)
+                    "consent" -> store.authority.requireTrackingChoice(5000)
+                    "disconnect" -> assertTrue(store.disconnect().committed)
+                }
+                read(6000)
+                if(change in listOf("pause","consent","disconnect")) {
+                    assertNull("$change must not collect before an explicit tracking choice",store.history.read("boundary-2"))
+                    if(change=="pause" || change=="disconnect")assertFalse(store.tracking())
+                    if(change=="disconnect") {
+                        assertNull(store.account())
+                        assertTrue(store.sql.query("SELECT * FROM android_actions").isEmpty())
+                    }
+                    assertEquals(old,store.history.read(old.id))
+                    assertTrue(store.setTracking(true).committed)
+                    read(8000)
+                }
+                val next=store.history.read("boundary-2")!!
+                assertEquals(0L,next.confirmedMs);assertEquals(old,store.history.read(old.id))
+                if(change=="disconnect") {
+                    assertNull(store.account())
+                    assertTrue(store.sql.query("SELECT * FROM android_actions").isEmpty())
+                }
+                assertTrue(store.sql.query("SELECT * FROM android_actions WHERE type='Scrobble'").isEmpty())
+            }finally{store.close()}
+        }
+    }
     @Test fun preexistingMissingAndCorruptLegacyCredentialRemainSavedButUnusable() {
         for(corrupt in listOf(false,true))scenario { context ->
             context.getSharedPreferences("controls",Context.MODE_PRIVATE).edit().putString("account","legacy").commit()

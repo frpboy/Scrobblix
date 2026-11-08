@@ -29,8 +29,8 @@ class AuthorityQueueWorker(private val authority:ConnectionAuthority,private val
         }
         if(!authority.permit(lease,tracking,cancelled,clock())) { authority.releaseUnsent(lease);return false }
         val result=try { transport.submit(type,play,sessionKey) }
-        catch(_:java.io.IOException) {
-            if(type==ActionType.Scrobble)ProviderResult(false,"provider.submission_outcome_unknown")
+        catch(error:java.io.IOException) {
+            if(type==ActionType.Scrobble)ProviderResult(false,"provider.submission_outcome_unknown",unknownEvidence=(error as? ResponseEvidenceIOException)?.evidence ?: UnknownEvidence.IO_AFTER_SEND_PERMIT)
             else ProviderResult(false,"provider.temporary_unavailable",true)
         }
         // Unexpected exceptions leave SEND_STARTED intact for conservative crash recovery.

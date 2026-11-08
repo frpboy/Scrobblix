@@ -105,12 +105,28 @@ class AuthorityUiStateTest {
     private fun show(store:AppStore) {
         ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser launch allowed")})}}
     }
+    @Test fun collectionDiagnosticIsProcessOnlyAndNotDeliveryProofPixels() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(false)
+            store.recordCollectionDiagnostic(dev.scrobblix.core.CollectionDiagnostic.MetadataRecoveredWithoutGapCredit)
+            ui.setContent {MaterialTheme {AppScreen(store)}}
+            val text="Latest collection event in this process: MetadataRecoveredWithoutGapCredit. This is not a delivery result."
+            ui.onNodeWithText(text).performScrollTo().assertIsDisplayed()
+            capture("collection-continuity",text)
+        }finally{store.close()}
+    }
     @Test fun unavailableAuthorityDisablesLoginAndShowsExplicitState() {
         val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
         try {
             store.sql.execute("DELETE FROM android_connection")
-            show(store);settings()
+            val dependentReads=java.util.concurrent.atomic.AtomicInteger()
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser launch allowed")},
+                historyReader={dependentReads.incrementAndGet();throw java.io.IOException("synthetic unavailable authority read")},
+                queueReader={_ ->dependentReads.incrementAndGet();throw java.io.IOException("synthetic unavailable authority read")})}}
+            settings()
             ui.waitUntil(10000){ui.onAllNodesWithText("Local connection storage unavailable. Delivery is paused.").fetchSemanticsNodes().size==1}
+            ui.waitForIdle();assertEquals(0,dependentReads.get())
             ui.onNodeWithText("Local connection storage unavailable. Delivery is paused.").performScrollTo().assertIsDisplayed()
             ui.onNodeWithText("Authorize in browser").assertDoesNotExist()
             ui.onNodeWithText("Disconnect Last.fm").assertDoesNotExist()
@@ -163,8 +179,8 @@ class AuthorityUiStateTest {
             ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
             ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
             ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).performScrollTo().assertIsDisplayed()
-            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
-            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            ui.waitUntil(10000){ui.onAllNodesWithText("Saved scrobble - Pending: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Saved scrobble - LocalHold: 1").assertDoesNotExist()
             capture("authority-held-result","1 reviewed held scrobbles resumed locally.",partial=true)
         }finally{store.close()}
     }
@@ -246,7 +262,7 @@ class AuthorityUiStateTest {
             ui.waitUntil(10000){calls.get()==1}
             assertEquals("LocalHold",store.sql.query("SELECT state FROM android_actions").single()["state"])
             ui.onNodeWithText("Resume reviewed held scrobbles").assertDoesNotExist()
-            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            ui.onNodeWithText("Saved scrobble - LocalHold: 1").assertDoesNotExist()
             gate.complete(Unit)
             ui.waitUntil(10000){store.sql.query("SELECT state FROM android_actions").single()["state"]=="Pending"}
             assertEquals(1,calls.get())
@@ -278,8 +294,8 @@ class AuthorityUiStateTest {
             ui.waitUntil(10000){requests.isNotEmpty()}
             return checkNotNull(requests.poll()) {"Expected suspended poll"}
         }
-        val held=listOf(mapOf("state" to "LocalHold","total" to "1"))
-        val pending=listOf(mapOf("state" to "Pending","total" to "1"))
+        val held=listOf(mapOf("type" to "Scrobble","state" to "LocalHold","reason" to "local.unsent_recovery","total" to "1"))
+        val pending=listOf(mapOf("type" to "Scrobble","state" to "Pending","reason" to null,"total" to "1"))
         try {
             store.setTracking(true);store.connect("SyntheticPollRace","a".repeat(32));seedHeld(store,"poll-held","SyntheticPollRace")
             ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},queueReader={refresh ->
@@ -290,24 +306,24 @@ class AuthorityUiStateTest {
             })}}
             next().complete(held)
             ui.onNodeWithText("Queue",useUnmergedTree=true).performScrollTo().performClick()
-            ui.waitUntil(10000){ui.onAllNodesWithText("LocalHold: 1").fetchSemanticsNodes().size==1}
+            ui.waitUntil(10000){ui.onAllNodesWithText("Saved scrobble - LocalHold: 1").fetchSemanticsNodes().size==1}
             ui.onNodeWithText("Review held scrobbles").performScrollTo().performClick()
             ui.waitUntil(10000){ui.onAllNodesWithText("Resume reviewed held scrobbles").fetchSemanticsNodes().size==1}
             val oldPoll=next() // This read started before the explicit mutation epoch.
             ui.onNodeWithText("Resume reviewed held scrobbles").performScrollTo().performClick()
-            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            ui.waitUntil(10000){ui.onAllNodesWithText("Saved scrobble - Pending: 1").fetchSemanticsNodes().size==1}
             oldPoll.complete(held)
             val failingPoll=next() // Its arrival proves the late old poll already returned.
-            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            ui.onNodeWithText("Saved scrobble - LocalHold: 1").assertDoesNotExist()
             failingPoll.completeExceptionally(java.io.IOException("synthetic queue read failure"))
             ui.waitUntil(10000){ui.onAllNodesWithText("Checking current delivery counts.").fetchSemanticsNodes().size==1}
-            ui.onNodeWithText("Pending: 1").assertDoesNotExist()
+            ui.onNodeWithText("Saved scrobble - Pending: 1").assertDoesNotExist()
             ui.onNodeWithText("Checking current delivery counts.").performScrollTo().assertIsDisplayed()
             capture("authority-held-counts-unavailable","Checking current delivery counts.")
             next().complete(pending)
-            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
-            ui.onNodeWithText("Pending: 1").performScrollTo().assertIsDisplayed()
-            capture("authority-held-counts-recovered","Pending: 1")
+            ui.waitUntil(10000){ui.onAllNodesWithText("Saved scrobble - Pending: 1").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Saved scrobble - Pending: 1").performScrollTo().assertIsDisplayed()
+            capture("authority-held-counts-recovered","Saved scrobble - Pending: 1")
         }finally{outstanding.forEach{it.cancel()};store.close()}
     }
     @Test fun failedPostCommitCountRefreshKeepsCommittedMessageAndHidesOldSummary() {
@@ -331,12 +347,77 @@ class AuthorityUiStateTest {
             releaseRefresh.complete(Unit)
             ui.waitForIdle()
             ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).assertExists()
-            ui.onNodeWithText("LocalHold: 1").assertDoesNotExist()
+            ui.onNodeWithText("Saved scrobble - LocalHold: 1").assertDoesNotExist()
             ui.onNodeWithText("Checking current delivery counts.").assertExists()
             allowRecovery.set(true)
-            ui.waitUntil(10000){ui.onAllNodesWithText("Pending: 1").fetchSemanticsNodes().size==1}
+            ui.waitUntil(10000){ui.onAllNodesWithText("Saved scrobble - Pending: 1").fetchSemanticsNodes().size==1}
             ui.onNodeWithText("1 reviewed held scrobbles resumed locally.",substring=true).assertExists()
         }finally{releaseRefresh.complete(Unit);store.close()}
+    }
+
+    @Test fun historyDiagnosticsFenceDelayedOldPollAfterDisconnectAndHideReadFailure() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        val requests=java.util.concurrent.LinkedBlockingQueue<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
+        val outstanding=java.util.concurrent.CopyOnWriteArrayList<kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>>()
+        val failHistory=java.util.concurrent.atomic.AtomicBoolean(false)
+        fun next():kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>> {
+            ui.waitUntil(10000){requests.isNotEmpty()}
+            return checkNotNull(requests.poll())
+        }
+        try {
+            store.connect("SyntheticHistoryPixels","a".repeat(32));store.setTracking(false)
+            store.history.observe(dev.scrobblix.core.LocalPlay("pixel-history","Synthetic Artist","Synthetic Track","Synthetic Album",1,300000,150000),"lastfm","SyntheticHistoryPixels",1)
+            store.sql.execute("UPDATE android_actions SET state='SubmissionOutcomeUnknown',reason='provider.submission_outcome_unknown',unknown_evidence='FUTURE_RAW_VALUE_MUST_NOT_RENDER'")
+            ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser")},
+                historyReader={if(failHistory.get())throw java.io.IOException("synthetic read failure") else store.recentDiagnostics()},
+                queueReader={_ ->
+                    val deferred=kotlinx.coroutines.CompletableDeferred<List<Map<String,String?>>>()
+                    outstanding.add(deferred);requests.put(deferred);deferred.await()
+                })}}
+            next().complete(emptyList())
+            ui.onNodeWithText("History",useUnmergedTree=true).performScrollTo().performClick()
+            val bound="Recorded actions for current account: SyntheticHistoryPixels"
+            ui.waitUntil(10000){ui.onAllNodesWithText(bound).fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Album: Synthetic Album").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("Local play ID (not a Last.fm ID): pixel-history").performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText(historyStartText("1")).performScrollTo().assertIsDisplayed()
+            capture("history-local-fields",historyStartText("1"))
+            ui.onNodeWithText("Duration: 300 seconds. Threshold: 150 seconds. Listening-time and metadata rule met. This is not delivery confirmation.").performScrollTo().assertIsDisplayed()
+            capture("history-eligibility","Duration: 300 seconds. Threshold: 150 seconds. Listening-time and metadata rule met. This is not delivery confirmation.")
+            ui.onNodeWithText("Reason: The send result could not be confirmed. No automatic resend.").performScrollTo().assertIsDisplayed()
+            capture("history-unknown-action","Reason: The send result could not be confirmed. No automatic resend.")
+            val stage=unknownEvidenceText("FUTURE_RAW_VALUE_MUST_NOT_RENDER")
+            ui.onNodeWithText(stage).performScrollTo().assertIsDisplayed()
+            ui.onNodeWithText("FUTURE_RAW_VALUE_MUST_NOT_RENDER").assertDoesNotExist()
+            capture("history-stage-evidence",stage)
+            val oldPoll=next()
+            settings()
+            ui.onNodeWithText("Disconnect Last.fm").performScrollTo().performClick()
+            ui.waitUntil(10000){store.account()==null}
+            oldPoll.complete(emptyList())
+            val newPoll=next()
+            ui.onNodeWithText("History",useUnmergedTree=true).performScrollTo().performClick()
+            ui.onNodeWithText(bound).assertDoesNotExist()
+            ui.onNodeWithText("Saved scrobble - SubmissionOutcomeUnknown: 1").assertDoesNotExist()
+            ui.onNodeWithText("Checking current local history and account actions. Previous diagnostics are hidden.").assertExists()
+            ui.onNodeWithText("Album: Synthetic Album").assertDoesNotExist()
+            ui.onNodeWithText("Local play ID (not a Last.fm ID): pixel-history").assertDoesNotExist()
+            ui.onNodeWithText(historyStartText("1")).assertDoesNotExist()
+            newPoll.complete(emptyList())
+            ui.waitUntil(10000){ui.onAllNodesWithText("No connected account is selected for action inspection.").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText(bound).assertDoesNotExist()
+            val beforeSwitch=next()
+            store.connect("SyntheticReplacement","b".repeat(32))
+            beforeSwitch.complete(emptyList())
+            val switchedPoll=next()
+            ui.onNodeWithText("No connected account is selected for action inspection.").assertDoesNotExist()
+            switchedPoll.complete(emptyList())
+            ui.waitUntil(10000){ui.onAllNodesWithText("Recorded actions for current account: SyntheticReplacement").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText(bound).assertDoesNotExist()
+            val preFailure=next();failHistory.set(true);preFailure.complete(emptyList())
+            ui.waitUntil(10000){ui.onAllNodesWithText("Checking current local history and account actions. Previous diagnostics are hidden.").fetchSemanticsNodes().size==1}
+            ui.onNodeWithText("Recorded actions for current account: SyntheticReplacement").assertDoesNotExist()
+        }finally{outstanding.forEach{it.cancel()};store.close()}
     }
 
 }

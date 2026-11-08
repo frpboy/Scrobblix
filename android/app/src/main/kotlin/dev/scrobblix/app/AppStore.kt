@@ -37,6 +37,9 @@ class AppStore(val context:Context,
     }
     val authorityCoordinator=coordinators.computeIfAbsent(context.getDatabasePath("listening.db").canonicalPath){Any()}
     @Volatile private var setupState:String?=null
+    @Volatile var collectionDiagnostic:CollectionDiagnostic?=null
+        private set
+    fun recordCollectionDiagnostic(value:CollectionDiagnostic) {collectionDiagnostic=value}
     sealed interface AccountState {
         data class Saved(val snapshot:ConnectionSnapshot,val credentialHealth:String?):AccountState
         data object Disconnected:AccountState
@@ -139,8 +142,21 @@ class AppStore(val context:Context,
         if(allowed) values.remove(name) else values.add(name)
         preferences.edit().putStringSet("blocked-sources",values).apply()
     }
-    fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC LIMIT 50")
-    fun states()=sql.query("SELECT state,COUNT(*) AS total FROM android_actions GROUP BY state ORDER BY state")
+    data class RecentPlayReading(val play:Map<String,String?>,val account:String?,val actions:List<Map<String,String?>>)
+    data class RecentDiagnostics(val snapshot:ConnectionSnapshot,val plays:List<RecentPlayReading>)
+    /** SELECT-only local transaction on the existing connection; no nonblocking-connection claim. */
+    fun recentDiagnostics():RecentDiagnostics = synchronized(authorityCoordinator) {
+        sql.transaction {
+            val snapshot=authority.snapshot()
+            val plays=sql.query("SELECT id,artist,title,album,started_ms,duration_ms,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
+            val actions=if(snapshot.account==null) emptyList() else sql.query("""SELECT play_id,type,state,reason,unknown_evidence,attempts,provider_sends
+                FROM android_actions WHERE provider='lastfm' AND account=? AND play_id IN
+                (SELECT id FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50) ORDER BY created_ms,id""",listOf(snapshot.account))
+            RecentDiagnostics(snapshot,plays.map { play -> RecentPlayReading(play,snapshot.account,actions.filter{it["play_id"]==play["id"]}) })
+        }
+    }
+    fun recent()=sql.query("SELECT artist,title,confirmed_ms FROM android_plays ORDER BY started_ms DESC,id DESC LIMIT 50")
+    fun states()=sql.query("SELECT type,state,reason,COUNT(*) AS total FROM android_actions GROUP BY type,state,reason ORDER BY type,state,reason")
     fun reviewHeld():ConnectionAuthority.HeldReview?=synchronized(authorityCoordinator) {authority.reviewHeld()}
     fun resumeHeld(review:ConnectionAuthority.HeldReview):LocalOutcome=synchronized(authorityCoordinator) {
         if(review.rows.isEmpty())return@synchronized LocalOutcome(false,"No held scrobbles selected. Nothing was resumed.")
@@ -163,7 +179,7 @@ class AppStore(val context:Context,
     enum class ConnectState { Committed, NotCommitted, StorageUnavailable, InvalidInput, StageFailed }
     data class ConnectOutcome(val state:ConnectState,val message:String)
     fun connect(name:String,key:String):ConnectOutcome=synchronized(authorityCoordinator) {
-        if(!ConnectionSchema.validAccount(name) || !Regex("[a-fA-F0-9]{32}").matches(key))
+        if(!ConnectionSchema.validAccount(name) || !LastFmApi.validSessionKey(key))
             return@synchronized ConnectOutcome(ConnectState.InvalidInput,"The returned account/session format is invalid. No local connection was changed.")
         val generation=java.util.UUID.randomUUID().toString()
         val bytes=key.toByteArray(Charsets.UTF_8)
@@ -288,7 +304,7 @@ class PlaybackListener:ScrobblixMediaListener() {
     }
     override fun currentProviderAccount()=store.account()?.let { "lastfm" to it }
     override fun createCollectionSession()=MediaCollectionSession(
-        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history)) { play,playing ->
+        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history,diagnostic=store::recordCollectionDiagnostic)) { play,playing ->
             val name=store.account()
             if(playing && name!=null && !play.artist.isNullOrBlank() && !play.title.isNullOrBlank()) {
                 store.queue.refreshNowPlaying("lastfm",name,play.id,System.currentTimeMillis())

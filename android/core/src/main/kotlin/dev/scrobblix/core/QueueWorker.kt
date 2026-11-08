@@ -2,7 +2,7 @@ package dev.scrobblix.core
 
 /** A transport adapter must explicitly classify ambiguity, not call a timeout rejection. */
 data class ProviderResult(val accepted: Boolean, val reason: String, val transient: Boolean = false,
-    val retryAfterMs: Long? = null)
+    val retryAfterMs: Long? = null, val unknownEvidence:UnknownEvidence? = null)
 fun interface ScrobbleTransport { fun submit(type: ActionType, play: LocalPlay, sessionKey: String): ProviderResult }
 
 /** Synchronous worker boundary for an Android scheduler. Does not obtain credentials or start itself. */

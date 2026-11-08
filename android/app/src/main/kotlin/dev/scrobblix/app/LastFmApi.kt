@@ -41,6 +41,7 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             // An invalid explicit endpoint fails closed, never reroutes credentials.
             return try { LastFmApi("","",broker) } catch(_:Exception) { null }
         }
+        internal fun validSessionKey(key:String)=key.matches(Regex("[A-Za-z0-9_-]{32}"))
         internal fun signature(values:Map<String,String>,secret:String):String = MessageDigest.getInstance("MD5")
             .digest((values.toSortedMap().entries.joinToString("") { it.key+it.value }+secret).toByteArray(Charsets.UTF_8))
             .joinToString("") { "%02x".format(it) }
@@ -65,16 +66,36 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             fields.count { it[0]=="api_key" && it[1].matches(Regex("[a-fA-F0-9]{32}")) }==1) { "Invalid authorization parameters." }
         return BrowserAuthorization(token,url)
     }
+    /** Fixed diagnostics only. Never retain provider text, URL, token or session in errors. */
+    class BrowserExchangeFailure(val diagnostic:String):Exception(diagnostic)
     fun completeBrowserAuthorization(authorization:BrowserAuthorization):Login {
         require(authorization.token.matches(Regex("[A-Za-z0-9_-]{32}"))) { "Invalid authorization token." }
-        val (status,body)=request(mapOf("method" to "auth.getSession","token" to authorization.token))
-        check(status in 200..299 && !body.has("error")) { "Last.fm authorization is not complete or has expired." }
-        return parseLogin(body)
+        val (status,body)=try {
+            request(mapOf("method" to "auth.getSession","token" to authorization.token))
+        } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+        catch(_:java.net.SocketTimeoutException) { throw BrowserExchangeFailure("Network timeout during session exchange.") }
+        catch(_:java.io.IOException) { throw BrowserExchangeFailure("Network or response-format failure during session exchange.") }
+        val providerCode=(body.opt("error") as? Int)?.takeIf {it in 1..999}
+        if(providerCode!=null) throw BrowserExchangeFailure("Last.fm rejected the session exchange (HTTP $status, API code $providerCode).")
+        if(body.has("broker_error")) {
+            val reason=when(body.optString("broker_error")) {
+                "limited" -> "Connection service rate limit."
+                "not_configured" -> "Connection service is not configured."
+                "limiter_unavailable" -> "Connection service limiter is unavailable."
+                "invalid_request" -> "Connection service rejected the request format."
+                "upstream_outcome_unknown" -> "Connection service could not confirm the Last.fm response."
+                else -> "Connection service returned an unrecognized response."
+            }
+            throw BrowserExchangeFailure("$reason HTTP $status.")
+        }
+        if(status !in 200..299 || body.has("error")) throw BrowserExchangeFailure("Session exchange failed (HTTP $status).")
+        return try {parseLogin(body)} catch(_:IllegalStateException) {throw BrowserExchangeFailure("Last.fm session response format was invalid.")}
     }
     private fun parseLogin(body:JSONObject):Login {
         val session=body.optJSONObject("session") ?: throw IllegalStateException("Last.fm sign-in response was invalid.")
-        val name=session.optString("name");val key=session.optString("key")
-        check(name.isNotBlank() && name.length<=255 && name.none { it.isISOControl() } && key.matches(Regex("[a-fA-F0-9]{32}"))) { "Last.fm sign-in response was not valid." }
+        val name=session.opt("name") as? String ?: throw IllegalStateException("Last.fm sign-in response was invalid.")
+        val key=session.opt("key") as? String ?: throw IllegalStateException("Last.fm sign-in response was invalid.")
+        check(name.isNotBlank() && name.length<=255 && name.none { it.isISOControl() } && validSessionKey(key)) { "Last.fm sign-in response was not valid." }
         return Login(name,key)
     }
     fun login(username:String,password:String):Login {
@@ -101,9 +122,9 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
             val response=stream?.use { stream ->
                 val buffer=java.io.ByteArrayOutputStream();val chunk=ByteArray(4096)
                 while(buffer.size()<=65536) { val count=stream.read(chunk,0,minOf(chunk.size,65537-buffer.size()));if(count<0) break;buffer.write(chunk,0,count) }
-                buffer.toByteArray() } ?: throw java.io.IOException("Empty provider response")
-            if(response.size>65536) throw java.io.IOException("Provider response too large")
-            val body=try { JSONObject(response.toString(Charsets.UTF_8)) } catch(_:Exception) { throw java.io.IOException("Invalid provider response") }
+                buffer.toByteArray() } ?: throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_STREAM_ABSENT)
+            if(response.size>65536) throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_BODY_LIMIT)
+            val body=try { JSONObject(response.toString(Charsets.UTF_8)) } catch(_:Exception) { throw ResponseEvidenceIOException(UnknownEvidence.RESPONSE_JSON_INVALID) }
             return status to body
         } finally { bytes.fill(0);connection.disconnect() }
     }
@@ -124,13 +145,14 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
                 429 to "limited" -> ProviderResult(false,"provider.rate_limited",true)
                 503 to "not_configured",503 to "limiter_unavailable" -> ProviderResult(false,"provider.temporary_unavailable",true)
                 400 to "invalid_request" -> ProviderResult(false,"provider.rejected")
+                502 to "upstream_outcome_unknown" -> ProviderResult(false,"provider.submission_outcome_unknown",unknownEvidence=UnknownEvidence.BROKER_REPORTED_FORWARD_UNKNOWN)
                 else -> ProviderResult(false,"provider.submission_outcome_unknown")
             }
         }
         val code=body.opt("error")
         if(code is Int) return when(code) {
             9 -> ProviderResult(false,"provider.auth.invalid_session")
-            8 -> if(type==ActionType.Scrobble) ProviderResult(false,"provider.submission_outcome_unknown") else ProviderResult(false,"provider.temporary_unavailable",true)
+            8 -> if(type==ActionType.Scrobble) ProviderResult(false,"provider.submission_outcome_unknown",unknownEvidence=UnknownEvidence.PROVIDER_ERROR_8) else ProviderResult(false,"provider.temporary_unavailable",true)
             11,16,29 -> ProviderResult(false,"provider.temporary_unavailable",true)
             2,3,4,5,6,7,10,13,26 -> ProviderResult(false,"provider.rejected")
             else -> ProviderResult(false,"provider.submission_outcome_unknown")

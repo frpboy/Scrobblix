@@ -49,7 +49,7 @@ class BrokerRuntimeTest {
         }
         var rejected=false;try { api.beginBrowserAuthorization() } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
     }
-    @Test fun opaqueRequestTokensStaySeparateFromApiAndSessionKeys() {
+    @Test fun opaqueRequestTokensAndSessionKeysRemainSeparateFromStrictApiKeys() {
         for(broker in listOf(false,true)) {
             for(token in listOf("Zg_-".repeat(8),"_".repeat(32),"-".repeat(32))) {
                 var received:String?=null
@@ -74,8 +74,12 @@ class BrokerRuntimeTest {
         val token="Zg_-".repeat(8)
         val badApiKey=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("token",token).put("authorizationUrl","https://www.last.fm/api/auth/?api_key=$token&token=$token") }
         var rejected=false;try { badApiKey.beginBrowserAuthorization() } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
-        val badSessionKey=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key",token)) }
-        rejected=false;try { badSessionKey.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(_:IllegalStateException) { rejected=true };assertTrue(rejected)
+        val opaqueSession=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key",token)) }
+        assertEquals(token,opaqueSession.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")).sessionKey)
+        for(key in listOf(token+"\n",token.dropLast(1),"+".repeat(32),"/".repeat(32))) {
+            val invalidSession=LastFmApi("","","https://broker.invalid/v1/lastfm") { 200 to JSONObject().put("session",JSONObject().put("name","Synthetic").put("key",key)) }
+            rejected=false;try { invalidSession.completeBrowserAuthorization(LastFmApi.BrowserAuthorization(token,"https://www.last.fm/api/auth/")) } catch(f:LastFmApi.BrowserExchangeFailure) { rejected=true;assertEquals("Last.fm session response format was invalid.",f.diagnostic) };assertTrue(rejected)
+        }
     }
 
     @Test fun freshConfigurationUsesPinnedBrokerWhileSavedOwnerCredentialsKeepDirectRoute() {

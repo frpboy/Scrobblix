@@ -12,7 +12,7 @@ class LocalSchemaTest {
     }
     @Test fun newSchemaIsVersionedIdempotentAndIndexesEnforceSemanticUniqueness() = scenario { db ->
         LocalSchema.initialize(db);LocalSchema.initialize(db)
-        assertEquals("2",db.query("PRAGMA user_version").single().values.single())
+        assertEquals("3",db.query("PRAGMA user_version").single().values.single())
         val queue=DurableQueue(db)
         assertTrue(queue.enqueue("first","lastfm","a",ActionType.Scrobble,0,"play"))
         assertFalse(queue.enqueue("different-id","lastfm","a",ActionType.Scrobble,0,"play"))
@@ -37,7 +37,7 @@ class LocalSchemaTest {
         db.execute("DROP TABLE foreign_data")
         LocalSchema.initialize(db);LocalSchema.initialize(db)
         assertEquals("en_US",db.query("SELECT locale FROM android_metadata").single()["locale"])
-        assertEquals("2",db.query("PRAGMA user_version").single().values.single())
+        assertEquals("3",db.query("PRAGMA user_version").single().values.single())
     }
     @Test fun malformedAndroidMetadataFailsClosed() = scenario { db ->
         db.execute("CREATE TABLE android_metadata(secret TEXT)")
@@ -55,6 +55,6 @@ class LocalSchemaTest {
         assertEquals("0",db.query("PRAGMA user_version").single().values.single())
         assertTrue(db.query("SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'").isEmpty())
         LocalSchema.initialize(db)
-        assertEquals("2",db.query("PRAGMA user_version").single().values.single())
+        assertEquals("3",db.query("PRAGMA user_version").single().values.single())
     }
 }
