@@ -1,0 +1,7 @@
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+    <application>
+        <!-- Compose's debug-only host must use the actual app's light bar policy. -->
+        <activity android:name="androidx.activity.ComponentActivity"
+            android:theme="@style/AppTheme" tools:replace="android:theme" />
+    </application>
+</manifest>

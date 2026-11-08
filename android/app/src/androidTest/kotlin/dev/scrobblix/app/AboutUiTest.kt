@@ -84,6 +84,15 @@ class AboutUiTest {
                     val host=hosts.singleOrNull()
                     if(host===ui.activity) {
                         val decor=ui.activity.window.decorView
+                        val controller=androidx.core.view.WindowCompat.getInsetsController(ui.activity.window,decor)
+                        val lightStatus=controller.isAppearanceLightStatusBars
+                        val lightNavigation=controller.isAppearanceLightNavigationBars
+                        val contrast=if(android.os.Build.VERSION.SDK_INT>=29) ui.activity.window.isNavigationBarContrastEnforced.toString() else "unsupported"
+                        val modeId=ui.activity.resources.getIdentifier("config_navBarInteractionMode","integer","android")
+                        val navigationMode=if(modeId!=0) ui.activity.resources.getInteger(modeId).toString() else "unavailable"
+                        println("ABOUT_BAR_APPEARANCE label=$label statusLight=$lightStatus navigationLight=$lightNavigation contrastEnforced=$contrast navigationMode=$navigationMode flags=${decor.systemUiVisibility}")
+                        assertTrue("Actual status-bar dark-icon policy required",lightStatus)
+                        assertTrue("Actual navigation-bar dark-icon policy required",lightNavigation)
                         val visible=android.graphics.Rect();decor.getWindowVisibleDisplayFrame(visible)
                         val actual=android.graphics.Rect();val hasBounds=decor.getGlobalVisibleRect(actual)
                         val display=android.graphics.Point();ui.activity.windowManager.defaultDisplay.getRealSize(display)

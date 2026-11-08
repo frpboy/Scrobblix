@@ -1,6 +1,18 @@
-# About boundary proposal v7 - SYSTEM INSETS / LIGHT BAR POLICY, LOCAL HELD
+# About boundary proposal v8 - LIGHT NAVIGATION THEME PARITY, LOCAL HELD
 
-Base exactreviewed fd81dfbdee52d8416ce5bffcde0bc334f4c20d91/tree ded91bb584aef446e261843ce7d5c067f5bd129f. New delta not pushed/dispatched. No silent retry or release claim.
+Base actualreviewed/executed6153ae8fca8b6170b2f2dcedcb1bc84332861b5f/tree63e163bbecebdab48917958aeeff93a694e7005f. NewdeltaNOTpushed/dispatched, no unchangedruntime retry.
+
+## V7 actual partial visual result and grounded v8 boundary
+
+Run42512014320 exact6153 attempt1SUCCESSbothAPI26/36 with oneAboutUiTest/API, pinnedprep/root/build/install/emissionPASS. All16PNGbytes/sourcebindingsverified. NativeAPI36identitynowfullyreadableabovebars1x/2x and statusiconsdark, butthree-buttonnavigationiconsremainwhiteonlightsurface. No all-bar/accessibilityclearance. Existing actualevidence preserved.
+
+Mergeddebugmanifest showed synthetic androidx.activity.ComponentActivity uses library Theme.Material.Light.NoActionBar ratherthanproductionAppTheme. ProductionAppTheme declares windowLightStatusBar=true but omitted windowLightNavigationBar. ExactAndroidXactivity1.11.0andcore1.16.0source setsbothlightappearance; AOSPAndroid16PhoneWindow reads theme lightNav defaultfalse and reapplies appearanceondecorinstall. This is a grounded possibleoverrideboundary, NOTproof of observedtiming/rootcause.
+
+V8 adds android:windowLightNavigationBar=true to actualalready-lightAppTheme (API26min, no newversion/dependency). Debug-onlymanifest overrides ComposeComponentActivitytheme to SAMEAppTheme with tools:replace; no releaseactivity/permission/exportchanges. Instrumentationcapture nowprintsactualcontrollerstatus/navigationlightappearance+legacyflags, API29+navigationcontrast-enforced flag and platform config_navBarInteractionMode integer (or unavailable) and failsclosedif eitherdark-iconpolicyabsent onverifiedhost. No inferencefromflagsalone: originalnativepixelsstillrequiredforcontrast. Existinginsets/stableframes/scroll/testassertions/root/prep/logcodec/workflowunchanged. No extra padding/repeatedpassed suites.
+
+Actual localprocessDebugManifest+production/instrumentationKotlincompilePASS1m3. Parsedmergedmanifest confirms exactComponentActivitytheme=@style/AppTheme. Capture/runtime/pixelsUNTESTEDv8. AllSettings/back/URI/copy/metadatafailure/Windows/extension/accessibility/installer/providerUnknowngatesremain distinct.
+
+Owning sources inspected: https://dl.google.com/dl/android/maven2/androidx/activity/activity/1.11.0/activity-1.11.0-sources.jar ; https://dl.google.com/dl/android/maven2/androidx/core/core/1.16.0/core-1.16.0-sources.jar ; https://raw.githubusercontent.com/aosp-mirror/platform_frameworks_base/android16-release/core/java/com/android/internal/policy/PhoneWindow.java .
 
 ## Actual recovered-endpoint qualification and v7 delta
 
