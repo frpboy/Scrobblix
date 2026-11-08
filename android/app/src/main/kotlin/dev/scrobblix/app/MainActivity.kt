@@ -30,7 +30,9 @@ import kotlinx.coroutines.withContext
 internal fun ComponentActivity.configureScrobblixWindow() {
     enableEdgeToEdge(
         statusBarStyle=SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT),
-        navigationBarStyle=SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT)
+        // Retain platform contrast protection for three-button navigation (API29+).
+        // The actual app is light, so older APIs use a light scrim with dark icons.
+        navigationBarStyle=SystemBarStyle.auto(0xfffaf7ff.toInt(),0x801b1b1b.toInt(),detectDarkMode={false})
     )
 }
 

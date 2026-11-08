@@ -90,7 +90,10 @@ class AboutUiTest {
                         val contrast=if(android.os.Build.VERSION.SDK_INT>=29) ui.activity.window.isNavigationBarContrastEnforced.toString() else "unsupported"
                         val modeId=ui.activity.resources.getIdentifier("config_navBarInteractionMode","integer","android")
                         val navigationMode=if(modeId!=0) ui.activity.resources.getInteger(modeId).toString() else "unavailable"
-                        println("ABOUT_BAR_APPEARANCE label=$label statusLight=$lightStatus navigationLight=$lightNavigation contrastEnforced=$contrast navigationMode=$navigationMode flags=${decor.systemUiVisibility}")
+                        // sendStatus is retained by `am instrument -w`; stdout/logcat is not.
+                        val diagnostic="ABOUT_BAR_APPEARANCE label=$label statusLight=$lightStatus navigationLight=$lightNavigation contrastEnforced=$contrast navigationMode=$navigationMode flags=${decor.systemUiVisibility}"
+                        check(diagnostic.length<512 && label.matches(Regex("[a-z0-9.-]+")))
+                        instrumentation.sendStatus(0,android.os.Bundle().apply { putString("stream",diagnostic+"\n") })
                         assertTrue("Actual status-bar dark-icon policy required",lightStatus)
                         assertTrue("Actual navigation-bar dark-icon policy required",lightNavigation)
                         val visible=android.graphics.Rect();decor.getWindowVisibleDisplayFrame(visible)

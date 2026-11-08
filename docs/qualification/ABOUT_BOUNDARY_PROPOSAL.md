@@ -1,6 +1,18 @@
-# About boundary proposal v8 - LIGHT NAVIGATION THEME PARITY, LOCAL HELD
+# About boundary proposal v9 - PLATFORM NAVIGATION CONTRAST / RETAINED DIAGNOSTICS
 
-Base actualreviewed/executed6153ae8fca8b6170b2f2dcedcb1bc84332861b5f/tree63e163bbecebdab48917958aeeff93a694e7005f. NewdeltaNOTpushed/dispatched, no unchangedruntime retry.
+Basef8016b9c849b9c71b6139ab43467ea36569c4748/tree785673be97695c99055adc370f3cf51c37544f07. NewdeltaLOCALnotpushed/dispatched.
+
+## V8b actual result and narrow v9 boundary
+
+Run42514249695 exactf8016 attempt1SUCCESSbothAPI26/36 withOK(1test)/API and16sourceboundhashverifiedoriginalPNGs. Identityinset/statuscontrastremainedcorrect, API36threebuttonnavigationglyphsstillWHITEonlightsurface. Actualcontrollerlightbitsassertedtruebutrenderedcontrastfailed. Lostprintlnvaluesmeanactualnumericnavmode/contrastflagnotretained. Visibleglyphsestablishthreebuttonmode,notnumericresourcevalue. Theme/controllerchangesdidnotclosepixelgate.
+
+V9 changes sharednavigationBarStylefromlight(transparent,transparent) toauto(lightScrim0xfffaf7ff,darkScrim0x801b1b1b,detectDarkMode={false}). Statusstyleandallinsetsunchanged. This retainsactualapp-lightpolicy whileexactAndroidXactivity1.11.0API29+source autoenableswindow.isNavigationBarContrastEnforced. Platformcanprotectthreebuttoncontrastwithscrimratherthanrelyingsolelyrequestedicon-tintbits. API26useslightnavscrim/darkiconrequest. Exactplatformresultunprovenuntilnativepixels, notguaranteedfix. No appdrawnbar, hiddennavigation,permission/auth/securitychange.
+
+DiagnostictransportnowInstrumentation.sendStatus(0,Bundle(stream=...)) toowningam-instrument-wresponse, notprintln/logcat. Fixedfieldslabel/lightstatus/lightnav/contrastEnforced/navigationMode/legacyflags, line<512charsandfixedsyntheticlabelregex, neveraccount/privatecontent. Existing10sboundedcapturepollmeansfiniteemissions; jobouter25minretained. No arbitrarylogcatdump/artifact/cache/codecchange. Assertlightbitsstillfailclosed, butpixelsarefinalcontrastproof.
+
+Actualproduction+instrumentationKotlincompilePASS53s3executed41uptodate. No newnativeexecution orunchangedtestsreplayed. Requiresindependentchangedboundaryreview+serializeafterPR155CI, oneboundedexactsourceattemptonlyifeligible. OtherSettings/back/URI/copy/metadatafailureruntime/Windows/extension/accessibility/installer/providerUnknownlimitsremainopen.
+
+Owningsemanticsinspected https://dl.google.com/dl/android/maven2/androidx/activity/activity/1.11.0/activity-1.11.0-sources.jar and https://developer.android.com/develop/ui/views/layout/edge-to-edge . Contrast-enforcedplatformscrim isdocumentedthreebuttonpath, notthirdpartymirrorinference.
 
 ## V7 actual partial visual result and grounded v8 boundary
 
