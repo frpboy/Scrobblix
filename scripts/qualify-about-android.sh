@@ -8,6 +8,8 @@ if [ "${ABOUT_ARGV_FIXTURE:-0}" = 1 ]; then
 fi
 export JAVA_HOME="$JAVA_HOME_17_X64"
 export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+# Resolve only the exact checksum-pinned toolchain before emulator startup.
+python3 scripts/prepare-about-gradle.py
 export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-android"
 export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
 export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"

@@ -1,6 +1,14 @@
-# About boundary proposal v5 - CHANGED HARNESS, LOCAL HELD
+# About boundary proposal v6 - PINNED TOOLCHAIN PREP, LOCAL HELD
 
-Base previous executed candidate4d300f01fb855893469a2460dc18be8f0ab8ba37/treee86aeae3b490fed0c3b6cee954382029445b8edb. No production About change in this delta. This local correction is NOT pushed or dispatched and supersedes v4 proposal status. Exact new tree must be reviewed before any next execution.
+Base previous executed candidatead87a4c4065947a82f8c9a99f73e3d95c9735c2c/treeb5db90b23df44d8c25e36bd29360ad1e285d07de. No production About change in this delta. This local correction is NOT pushed or dispatched and supersedes v5 proposal status. Exact new tree must be reviewed before any next execution.
+
+## Actual v5 download blocker and v6 delta
+
+Run42464481379 attempt1 exactad87a4c completedFAILURE. Both API26/36 verified rootUID0 on attempt1 and reached Gradle after unchanged guest IPv4/IPv6egress checks. Both then failed before compilation/install/instrumentation: API26 distributionSocketTimeout10000ms, API36sameURLHTTP504. No v5nativepixels. Root success on that run does not prove historicalclosedtransportcause; capture helper remains locallycompiled/nativeUNTESTED.
+
+V6 adds a prep-only helper BEFORE emulator/SDKprovisioning. Uses exact existingWrapperJAR in temporary directory with clonedproperties, changes ONLY temporary networkTimeout60000/retries2/retryBackOffMs1000; exact version9.6.0, services.gradle.orgURL and SHA256 are asserted and preserved. Invokes WrapperMain --version, not a build task, with240s subprocess deadline; existing pinned distribution is then reused by unchanged source wrapper. No cache action/remote upload/artifact, no production config change or alternate mirror/checksum/version fallback. Timeout failure/HTTPfailure stop before emulator startup; no instrumentation retry. Temporary directory cleaned on success/error. Subprocess deadline is not a process-group kill guarantee; outer job25min cap retained.
+
+Three mocked process fixtures validate exactargv/JAR/properties, sourceunchanged, cleanup onsuccess/timeout/nonzero. Actual local helper --version returned Gradle9.6.0 from alreadycached toolchain, which proves helper/Wrapper location works locally but NOT freshnetworkdownload/CI qualification. No compile/test rerun because capture/root sources are byte-identicalv5. Official owning semantics: https://docs.gradle.org/current/userguide/gradle_wrapper.html (Wrapper timeout/retries/checksum/cache reuse). No new execution proposed without exactchangedboundaryreview and freshpreflight.
 
 ## Prior actual result and changed boundary
 
