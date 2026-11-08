@@ -41,7 +41,7 @@ function toHttpsArtworkUrl(candidate: string | undefined): string | undefined {
     const firstV6 = parseInt(v6Parts[0] || "0", 16);
     const secondV6 = parseInt(v6Parts[1] || "0", 16);
     // Security concern: reject loopback, unspecified, ULA, link-local, multicast, documentation, 6to4, and Teredo IPv6 addresses to prevent internal network scanning.
-    if (host.includes(":") && (host === "::" || host === "::1" || firstV6 === 0x2002 || (firstV6 === 0x2001 && (secondV6 === 0xdb8 || secondV6 === 0)) || (firstV6 & 0xfe00) === 0xfc00 || (firstV6 & 0xffc0) === 0xfe80 || (firstV6 & 0xff00) === 0xff00)) return undefined;
+    if (host.includes(":") && (host === "::" || host === "::1" || firstV6 === 0x2002 || (firstV6 === 0x3fff && (secondV6 & 0xf000) === 0) || (firstV6 === 0x2001 && (secondV6 === 0xdb8 || secondV6 === 0)) || (firstV6 & 0xfe00) === 0xfc00 || (firstV6 & 0xffc0) === 0xfe80 || (firstV6 & 0xff00) === 0xff00)) return undefined;
     return url.href;
   } catch {
     return undefined;

@@ -80,6 +80,7 @@ for (const url of [
   "https://[::]/a", "https://[0:0:0:0:0:0:0:1]/a", "https://[fc00::1]/a", "https://[fdff::1]/a",
   "https://[fe80::1]/a", "https://[febf::1]/a", "https://[ff02::1]/a", "https://[2001:db8::1]/a",
   "https://[2002::1]/a", "https://[2001::1]/a",
+  "https://[3fff::]/a", "https://[3fff::1]/a", "https://[3fff:fff:ffff:ffff:ffff:ffff:ffff:ffff]/a",
   "https://[::ffff:127.0.0.1]/a", "https://[::ffff:10.1.2.3]/a", "https://[::ffff:c0a8:101]/a",
   "https://127.1/a", "https://0x7f000001/a", "https://2130706433/a",
   "https://100.64.0.1/a", "https://100.100.100.200/a", "https://100.127.255.254/a", "https://198.18.0.1/a", "https://198.19.255.254/a",
@@ -90,6 +91,12 @@ for (const url of [
   assert.equal(observerContext.toHttpsArtworkUrl(url), undefined, url);
 }
 for (const url of ["https://cdn.example/art.jpg", "https://[2606:4700:4700::1111]/a", "https://[::ffff:8.8.8.8]/a", "https://[fe7f::1]/a", "https://[fec0::1]/a"]) {
+  assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), true, url);
+  assert.equal(observerContext.toHttpsArtworkUrl(url), new URL(url).href, url);
+}
+
+// Exact /20 boundary: 3fff:0000:: through 3fff:0fff:ffff:... only.
+for (const url of ["https://[3ffe:ffff:ffff:ffff:ffff:ffff:ffff:ffff]/a", "https://[3fff:1000::]/a", "https://[4000::]/a"]) {
   assert.equal(isPlaybackObservation({ state: "playing", artworkUrl: url }), true, url);
   assert.equal(observerContext.toHttpsArtworkUrl(url), new URL(url).href, url);
 }
