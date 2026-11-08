@@ -1,5 +1,8 @@
 """Fail closed to full CI. Only nonempty Markdown-only changes may use docs CI.
 Uses immutable event commit identities and git objects, never a truncated API file list.
+PR checkout supplies this classifier and workflow. Its unchanged-classifier invariant
+is an efficiency contract for reviewed changes, not a security boundary against a
+PR that edits the classifier/workflow itself. Such changes require ordinary review.
 """
 import json,os,pathlib,re,subprocess
 

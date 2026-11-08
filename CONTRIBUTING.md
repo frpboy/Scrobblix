@@ -68,6 +68,9 @@ Contributors must use focused pull requests. The maintainer must inspect the lat
 
 Document changes should identify which checks were run and their exact candidate SHA. Windows CI covers the repository's configured build/assertion/browser/manifest/package checks and the Markdown validator; it does not prove live Last.fm, installed-browser, GUI accessibility, or signed-installer behavior. Never mark those manual checks PASS without evidence. Read the repo's [real-world manual test matrix](Scrobblix-Docs/12_Testing/REAL_WORLD_MANUAL_TEST_MATRIX.md).
 
+The Markdown-only CI route keeps `build-and-test` running and validates documentation on a standard Ubuntu runner. `portable-zip-startup` is deliberately skipped for these documentation-only changes; it must not be newly required as a merge gate for that route. Unknown, mixed, source, workflow and manual/tag cases keep the full build route. A PR checkout supplies its own classifier and workflow, so the unchanged-classifier rule is an efficiency contract for reviewed changes, not a security boundary against a PR editing classification itself. Such changes still need source review and full CI. Introducing the fastpath itself is a workflow/script change and cannot use its own documentation-only route to avoid the initial full-CI checks or their cache/artifact admission requirements.
+
+
 ## Developer certificate
 
 By contributing, you certify that you have the right to submit the work under the repository license. A Developer Certificate of Origin sign-off may be enabled later if contributor volume warrants it.
