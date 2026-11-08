@@ -50,6 +50,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var currentAuthority by remember {mutableStateOf<dev.scrobblix.core.ConnectionSnapshot?>(null)}
     var account by remember { mutableStateOf<String?>(null) }
     var access by remember { mutableStateOf(false) }
+    var collectionDiagnostic by remember {mutableStateOf<dev.scrobblix.core.CollectionDiagnostic?>(null)}
     var history by remember { mutableStateOf(emptyList<AppStore.RecentPlayReading>()) }
     var historySnapshot by remember {mutableStateOf<dev.scrobblix.core.ConnectionSnapshot?>(null)}
     var historyCurrent by remember {mutableStateOf(false)}
@@ -78,6 +79,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
         access=store.hasMediaAccess()
+        collectionDiagnostic=store.collectionDiagnostic
         val connection=withContext(Dispatchers.IO){store.accountState()}
         storageUnavailable=connection is AppStore.AccountState.StorageUnavailable
         if(storageUnavailable)queueSummaryCurrent=false
@@ -133,6 +135,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 }
                 Text(if(storageUnavailable) "Local connection state unavailable. Do not assume disconnected." else if(account==null) "Local history only. Connect Last.fm in Settings to scrobble future listening." else "Last.fm connected: $account")
                 if(!access && tracking) Text("Tracking waits for media access. Grant it in Android settings when you are ready.")
+                collectionDiagnostic?.let { Text("Latest collection event in this process: ${it.name}. This is not a delivery result.") }
                 Text("Keep your player running. Android may pause collection in the background; a gap is never counted as listening. Pausing stops new work; a request already sent may still finish.")
             }
             "History" -> {

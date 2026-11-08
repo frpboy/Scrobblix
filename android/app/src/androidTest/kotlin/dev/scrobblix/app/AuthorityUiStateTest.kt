@@ -105,6 +105,17 @@ class AuthorityUiStateTest {
     private fun show(store:AppStore) {
         ui.setContent {MaterialTheme {AppScreen(store,null,{throw AssertionError("No browser launch allowed")})}}
     }
+    @Test fun collectionDiagnosticIsProcessOnlyAndNotDeliveryProofPixels() {
+        val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
+        try {
+            store.setTracking(false)
+            store.recordCollectionDiagnostic(dev.scrobblix.core.CollectionDiagnostic.MetadataRecoveredWithoutGapCredit)
+            ui.setContent {MaterialTheme {AppScreen(store)}}
+            val text="Latest collection event in this process: MetadataRecoveredWithoutGapCredit. This is not a delivery result."
+            ui.onNodeWithText(text).performScrollTo().assertIsDisplayed()
+            capture("collection-continuity",text)
+        }finally{store.close()}
+    }
     @Test fun unavailableAuthorityDisablesLoginAndShowsExplicitState() {
         val store=AppStore(context(),{listOf(CompletableFuture.completedFuture(Unit))})
         try {

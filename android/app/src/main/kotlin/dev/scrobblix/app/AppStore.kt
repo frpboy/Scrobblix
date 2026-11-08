@@ -37,6 +37,9 @@ class AppStore(val context:Context,
     }
     val authorityCoordinator=coordinators.computeIfAbsent(context.getDatabasePath("listening.db").canonicalPath){Any()}
     @Volatile private var setupState:String?=null
+    @Volatile var collectionDiagnostic:CollectionDiagnostic?=null
+        private set
+    fun recordCollectionDiagnostic(value:CollectionDiagnostic) {collectionDiagnostic=value}
     sealed interface AccountState {
         data class Saved(val snapshot:ConnectionSnapshot,val credentialHealth:String?):AccountState
         data object Disconnected:AccountState
@@ -301,7 +304,7 @@ class PlaybackListener:ScrobblixMediaListener() {
     }
     override fun currentProviderAccount()=store.account()?.let { "lastfm" to it }
     override fun createCollectionSession()=MediaCollectionSession(
-        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history)) { play,playing ->
+        MediaSessionReader(this,ComponentName(this,PlaybackListener::class.java),store::sourceAllowed,store::discoverSources),PlaybackCollector(store.history,diagnostic=store::recordCollectionDiagnostic)) { play,playing ->
             val name=store.account()
             if(playing && name!=null && !play.artist.isNullOrBlank() && !play.title.isNullOrBlank()) {
                 store.queue.refreshNowPlaying("lastfm",name,play.id,System.currentTimeMillis())
