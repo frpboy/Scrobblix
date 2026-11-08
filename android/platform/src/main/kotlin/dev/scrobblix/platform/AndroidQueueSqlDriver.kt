@@ -13,9 +13,9 @@ class AndroidQueueSqlDriver(private val database: SQLiteDatabase) : QueueSqlDriv
                 is Number -> statement.bindLong(index+1,value.toLong())
                 else -> statement.bindString(index+1,value.toString())
             } }
-            statement.execute()
+            // Fetch the count on the executing connection, including when WAL is enabled.
+            return statement.executeUpdateDelete()
         }
-        return database.rawQuery("SELECT changes()", null).use { cursor -> cursor.moveToFirst();cursor.getInt(0) }
     }
     @Synchronized
     override fun query(sql: String, args: List<Any?>): List<Map<String,String?>> =

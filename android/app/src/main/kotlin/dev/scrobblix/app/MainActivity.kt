@@ -363,6 +363,11 @@ internal fun queueReasonText(reason:String?):String?=when(reason) {
     "provider.retry_exhausted"->"Automatic attempts reached their limit."
     "provider.ignored.1","provider.ignored.2","provider.ignored.3","provider.ignored.4","provider.ignored.5"->"Last.fm reported that this action was ignored."
     "local.unsent_recovery"->"This attempt was held before a send permit."
+    "local.authority_changed_unsent"->"Connection authority changed before a send permit. This action is held locally."
+    "metadata.missing_payload"->"Required local track metadata was unavailable. This action was not sent."
+    "provider.nowplaying.expired"->"This Now Playing update expired and was cancelled."
+    "local.stale_generation_auth_rejection"->"An older credential was rejected. This action was queued again under current authority."
+    "provider.action_unsupported"->"This action type is not supported by the Last.fm transport."
     else->"A different local delivery reason was recorded."
 }
 

@@ -11,6 +11,30 @@ import org.junit.runner.RunWith
 /** Actual Android SQLite driver tests, synthetic local data only. */
 @RunWith(AndroidJUnit4::class)
 class AndroidStorageTest {
+    @Test fun walDriverReturnsExecutingStatementCountsAndPreservesTransactions() {
+        val context=InstrumentationRegistry.getInstrumentation().targetContext
+        val path=context.getDatabasePath("wal-counts-"+java.util.UUID.randomUUID()+".db")
+        path.parentFile!!.mkdirs()
+        val sqlite=SQLiteDatabase.openOrCreateDatabase(path,null)
+        try {
+            assertTrue(sqlite.enableWriteAheadLogging())
+            val db=AndroidQueueSqlDriver(sqlite);val queue=DurableQueue(db);queue.initialize()
+            // Outside a transaction, reads can use a separate WAL connection.
+            assertTrue(queue.enqueue("first","lastfm","synthetic",ActionType.Scrobble,0))
+            assertFalse(queue.enqueue("first","lastfm","synthetic",ActionType.Scrobble,0))
+            assertEquals(1,db.execute("UPDATE android_actions SET due_ms=? WHERE id=?",listOf(1,"first")))
+            assertEquals(0,db.execute("UPDATE android_actions SET due_ms=? WHERE id=?",listOf(1,"missing")))
+            db.transaction { assertTrue(queue.enqueue("committed","lastfm","synthetic",ActionType.Scrobble,0)) }
+            assertThrows(IllegalStateException::class.java) { db.transaction {
+                assertTrue(queue.enqueue("rolled-back","lastfm","synthetic",ActionType.Scrobble,0))
+                error("synthetic rollback")
+            } }
+            assertTrue(db.query("SELECT id FROM android_actions WHERE id=?",listOf("rolled-back")).isEmpty())
+            assertEquals(1,db.query("SELECT id FROM android_actions WHERE id=?",listOf("committed")).size)
+            assertEquals(1,db.execute("DELETE FROM android_actions WHERE id=?",listOf("first")))
+            assertEquals(0,db.execute("DELETE FROM android_actions WHERE id=?",listOf("first")))
+        } finally { sqlite.close();SQLiteDatabase.deleteDatabase(path) }
+    }
     @Test fun actualDriverReopensHistoryAndFencesRecovery() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val path=context.getDatabasePath("instrumentation-only.db")

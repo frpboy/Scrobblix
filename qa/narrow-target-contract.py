@@ -18,7 +18,7 @@ def source():
     assert re.fullmatch('[0-9a-f]{40}', expected), 'Expected full tree required'
     assert git('rev-parse', 'HEAD^{tree}') == expected, 'Unreviewed source tree'
     assert not git('status', '--porcelain'), 'Checkout modified'
-    assert git('rev-parse', 'HEAD:android') == 'a3cb65af446ddd4b0fd3d4d0031f1f0d594c73cf'
+    assert git('rev-parse', 'HEAD:android') == '61169e8e2ff5f12e8d9c9b241e26837711c9b5bd'
     assert git('rev-parse', 'HEAD:tests/fixtures/scrobble-eligibility.tsv') == 'ab8dd294725fbb9f322e261b41912ddfad1eaa8e'
     assert not os.environ.get('SCROBBLIX_SIGNING_STORE') and not os.environ.get('SCROBBLIX_SIGNING_PASSWORD_FILE')
     print('REVIEWED_SOURCE_TREE', expected)

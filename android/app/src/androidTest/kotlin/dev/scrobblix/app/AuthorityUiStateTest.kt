@@ -110,10 +110,54 @@ class AuthorityUiStateTest {
         try {
             store.setTracking(false)
             store.recordCollectionDiagnostic(dev.scrobblix.core.CollectionDiagnostic.MetadataRecoveredWithoutGapCredit)
-            ui.setContent {MaterialTheme {AppScreen(store)}}
+            val fontScale=androidx.compose.runtime.mutableStateOf(1f)
+            ui.setContent {
+                val density=androidx.compose.ui.platform.LocalDensity.current
+                androidx.compose.runtime.CompositionLocalProvider(
+                    androidx.compose.ui.platform.LocalDensity provides androidx.compose.ui.unit.Density(density.density,fontScale.value)
+                ) { MaterialTheme {AppScreen(store)} }
+            }
             val text="Latest collection event in this process: MetadataRecoveredWithoutGapCredit. This is not a delivery result."
             ui.onNodeWithText(text).performScrollTo().assertIsDisplayed()
             capture("collection-continuity",text)
+            // Synthetic rows only, tracking paused and scheduler stubbed above. No send action.
+            store.connect("SyntheticReasonLabels","a".repeat(32))
+            val reasons=listOf(
+                "local.authority_changed_unsent" to "Connection authority changed before a send permit. This action is held locally.",
+                "metadata.missing_payload" to "Required local track metadata was unavailable. This action was not sent.",
+                "provider.nowplaying.expired" to "This Now Playing update expired and was cancelled.",
+                "local.stale_generation_auth_rejection" to "An older credential was rejected. This action was queued again under current authority.",
+                "provider.action_unsupported" to "This action type is not supported by the Last.fm transport."
+            )
+            reasons.forEachIndexed { index,(reason,_) ->
+                val id="synthetic-reason-$index"
+                store.history.observe(dev.scrobblix.core.LocalPlay(id,"Synthetic reason artist","Synthetic reason track $index",null,index.toLong(),300000,150000),"lastfm","SyntheticReasonLabels",index.toLong())
+                val state=when(reason) {
+                    "local.authority_changed_unsent"->"LocalHold"
+                    "provider.nowplaying.expired"->"Cancelled"
+                    "local.stale_generation_auth_rejection"->"Pending"
+                    else->"PermanentFailure"
+                }
+                val type=when(reason) {
+                    "provider.nowplaying.expired"->"NowPlaying"
+                    "provider.action_unsupported"->"Love"
+                    else->"Scrobble"
+                }
+                store.sql.execute("UPDATE android_actions SET type=?,state=?,reason=? WHERE play_id=?",listOf(type,state,reason,id))
+            }
+            val before=store.sql.query("SELECT * FROM android_actions ORDER BY id")
+            for ((tab,scale) in listOf("Queue" to 1f,"History" to 2f)) {
+                ui.runOnIdle {fontScale.value=scale}
+                ui.onNodeWithText(tab,useUnmergedTree=true).performScrollTo().performClick()
+                reasons.forEachIndexed { index,(_,label) ->
+                    val expected="Reason: $label"
+                    ui.waitUntil(10000){ui.onAllNodesWithText(expected).fetchSemanticsNodes().isNotEmpty()}
+                    ui.onNodeWithText(expected).performScrollTo().assertIsDisplayed()
+                    capture("reason-label-${tab.lowercase()}-$index",expected)
+                }
+            }
+            assertFalse(store.tracking())
+            assertEquals(before,store.sql.query("SELECT * FROM android_actions ORDER BY id"))
         }finally{store.close()}
     }
     @Test fun unavailableAuthorityDisablesLoginAndShowsExplicitState() {

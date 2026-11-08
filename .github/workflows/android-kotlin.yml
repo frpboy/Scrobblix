@@ -19,8 +19,8 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: android-kotlin-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: true
+  group: android-kotlin-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 jobs:
   kotlin-platform:
     runs-on: ubuntu-latest

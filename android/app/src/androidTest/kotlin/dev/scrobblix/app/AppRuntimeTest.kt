@@ -185,6 +185,14 @@ class AppRuntimeTest {
         assertFalse(queueSummaryLine(mapOf("type" to secretLike,"state" to secretLike,"total" to secretLike)).contains(secretLike))
         assertFalse(queueReasonText(secretLike)!!.contains(secretLike))
         assertEquals("The send result could not be confirmed. No automatic resend.",queueReasonText("provider.submission_outcome_unknown"))
+        val reasons=mapOf(
+            "local.authority_changed_unsent" to "Connection authority changed before a send permit. This action is held locally.",
+            "metadata.missing_payload" to "Required local track metadata was unavailable. This action was not sent.",
+            "provider.nowplaying.expired" to "This Now Playing update expired and was cancelled.",
+            "local.stale_generation_auth_rejection" to "An older credential was rejected. This action was queued again under current authority.",
+            "provider.action_unsupported" to "This action type is not supported by the Last.fm transport."
+        )
+        reasons.forEach { (reason,label) -> assertEquals(label,queueReasonText(reason)) }
     }
 
     private fun diagnosticContext():Context {

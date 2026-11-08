@@ -26,9 +26,9 @@ for name in baseline test candidate; do
   "$build_tools/apksigner" sign --ks "$private/test.p12" --ks-key-alias rehearsal --ks-pass pass:disposable-only --key-pass pass:disposable-only "$private/$name.apk"
   "$build_tools/apksigner" verify --verbose --print-certs "$private/$name.apk" > "$private/$name.signature"
 done
-for name in test candidate; do
-  diff <(grep '^Signer #1 certificate SHA-256 digest:' "$private/baseline.signature") <(grep '^Signer #1 certificate SHA-256 digest:' "$private/$name.signature")
-done
+# Strict nonempty, single-certificate equality for all three exact artifacts.
+# Supports the default BuildTools37 V3.0 label and fails closed on unknown formats.
+python3 qa/signer-output-contract.py "$private/signer.json" "${build_tools##*/}" "$private/baseline.signature" "$private/test.signature" "$private/candidate.signature"
 for name in baseline candidate; do
   "$build_tools/aapt" dump badging "$private/$name.apk" | grep '^package:' > "$private/$name.package"
 done
