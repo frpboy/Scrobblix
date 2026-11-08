@@ -50,7 +50,7 @@ def decode(text,directory):
             if name not in metadata or not isinstance(r['index'],int) or not 0<=r['index']<metadata[name]['chunks'] or r['index']in parts[name] or len(r['data'])>CHUNK:raise ValueError('Chunk inventory')
             parts[name][r['index']]=r['data']
         else:raise ValueError('Unknown record')
-    if set(metadata)!=set(NAMES) or end is None or end.get('files')!=8:raise ValueError('Incomplete files/end')
+    if set(metadata)!=set(NAMES) or end is None or end.get('files')!=len(NAMES):raise ValueError('Incomplete files/end')
     recovered={}
     for name,m in metadata.items():
         if len(parts[name])!=m['chunks']:raise ValueError('Missing chunk')

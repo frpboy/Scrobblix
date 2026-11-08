@@ -1,4 +1,4 @@
-name: Candidate-only narrow About qualification (registered path)
+name: Candidate-only source-reviewed effective bar diagnostic
 on:
   workflow_dispatch:
     inputs:
@@ -9,7 +9,7 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: scrobblix-about-boundary-once-20261108
+  group: scrobblix-effective-bars-once-20261109
   cancel-in-progress: false
 jobs:
   android-about-runtime:
@@ -19,7 +19,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        api: [26, 36]
+        api: [36]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -33,6 +33,4 @@ jobs:
         shell: bash
         env:
           ABOUT_API: ${{ matrix.api }}
-        run: bash scripts/qualify-about-android.sh
-      - name: Emit bounded synthetic screenshot diagnostic records (no artifact storage)
-        run: python3 scripts/about-pixel-log.py encode android-about-evidence
+        run: bash scripts/qualify-about-effective-bars.sh
