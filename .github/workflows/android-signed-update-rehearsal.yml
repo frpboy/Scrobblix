@@ -1,16 +1,19 @@
-name: Disposable certificate Android update rehearsal
+name: Candidate-only narrow About qualification (registered path)
 on:
   workflow_dispatch:
     inputs:
-      approved_rehearsal:
-        description: 'Reviewed isolated disposable-certificate rehearsal only, no owner key or account'
-        type: boolean
-        default: false
+      expected_sha:
+        description: 'Exact independently reviewed full candidate commit SHA; required'
+        required: true
+        type: string
 permissions:
   contents: read
+concurrency:
+  group: scrobblix-about-boundary-once-20261108
+  cancel-in-progress: false
 jobs:
-  signed-update:
-    if: inputs.approved_rehearsal
+  android-about-runtime:
+    if: github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false && github.run_attempt == 1
     runs-on: ubuntu-latest
     timeout-minutes: 25
     strategy:
@@ -21,6 +24,15 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Disposable certificate rehearsal only
+      - name: Require exact reviewed commit, first attempt and narrow event
         shell: bash
-        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'
+        env:
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+        run: python3 scripts/guard-about-qualification.py
+      - name: About only, synthetic external handler, emulator egress blocked
+        shell: bash
+        env:
+          ABOUT_API: ${{ matrix.api }}
+        run: bash scripts/qualify-about-android.sh
+      - name: Emit bounded synthetic screenshot diagnostic records (no artifact storage)
+        run: python3 scripts/about-pixel-log.py encode android-about-evidence

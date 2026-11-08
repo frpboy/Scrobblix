@@ -45,6 +45,11 @@ jobs:
       - name: Validate CI concurrency contract
         run: node scripts/test-ci-concurrency.mjs
 
+      - name: Validate shared About content and failure boundaries
+        run: |
+          node scripts/test-about-pages.mjs
+          node scripts/test-about-failure-boundaries.mjs
+
       - name: Restore .NET solution
         run: dotnet restore Scrobblix.slnx
 
