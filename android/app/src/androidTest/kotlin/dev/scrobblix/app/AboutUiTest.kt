@@ -1,9 +1,12 @@
 package dev.scrobblix.app
 
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
@@ -28,17 +31,19 @@ class AboutUiTest {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         @Suppress("DEPRECATION")
         val expectedVersion=context.packageManager.getPackageInfo(context.packageName,0).versionName ?: "Unavailable"
+        ui.runOnUiThread { ui.activity.configureScrobblixWindow() }
         ui.setContent {
             val density=LocalDensity.current.density
             CompositionLocalProvider(LocalDensity provides Density(density,scale),LocalUriHandler provides object:UriHandler {
                 override fun openUri(uri:String) { opened=uri;throw android.content.ActivityNotFoundException() }
             }) {
-                MaterialTheme {
-                    Column(Modifier.verticalScroll(rememberScrollState())) {
+                MaterialTheme { Surface(Modifier.fillMaxSize()) {
+                    // Match production AppScreen: insets outside the scroll viewport.
+                    Column(Modifier.safeDrawingPadding().verticalScroll(rememberScrollState())) {
                         if(sponsor) ScrobblixSponsor(onBack={sponsor=false})
                         else ScrobblixAbout(onBack={},onSponsor={sponsor=true})
                     }
-                }
+                } }
             }
         }
         for(textScale in listOf(1f,2f)) {

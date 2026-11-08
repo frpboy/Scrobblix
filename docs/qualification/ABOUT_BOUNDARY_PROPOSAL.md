@@ -1,6 +1,16 @@
-# About boundary proposal v6 - PINNED TOOLCHAIN PREP, LOCAL HELD
+# About boundary proposal v7 - SYSTEM INSETS / LIGHT BAR POLICY, LOCAL HELD
 
-Base previous executed candidatead87a4c4065947a82f8c9a99f73e3d95c9735c2c/treeb5db90b23df44d8c25e36bd29360ad1e285d07de. No production About change in this delta. This local correction is NOT pushed or dispatched and supersedes v5 proposal status. Exact new tree must be reviewed before any next execution.
+Base exactreviewed fd81dfbdee52d8416ce5bffcde0bc334f4c20d91/tree ded91bb584aef446e261843ce7d5c067f5bd129f. New delta not pushed/dispatched. No silent retry or release claim.
+
+## Actual recovered-endpoint qualification and v7 delta
+
+Run42510647109 attempt1 exactfd81 SUCCESS both API26/36: pinnedprep/rootUID0firstattempt, Gradle/Kotlin/install, OK(1test)/API, owningemissionstep5success. All16PNGbytes/inventory/SHA validated from separately bound owningsteps. Both1x topframes nowrendered. API26eightimages readable in scrollviewports. API36systemnavigationoverlay faded/obscured bottomidentity and white statusicons lackedcontrast. This is a real visual defect in the synthetic host, not an established production padding bug. Production already uses Surface(fillMaxSize)+AppScreen.safeDrawingPadding; fixture lacked both.
+
+V7 changes TWO Kotlin files only plus this evidence note. Production MainActivity delegates existing enableEdgeToEdge to shared internal ComponentActivity.configureScrobblixWindow. It explicitly uses SystemBarStyle.light with transparentlight/darkscrims for status/navigation because actual MaterialTheme currently always uses default LIGHTscheme, irrespective of OSmode. SystemBarStyle.light selects DARK icons on API26/36. If productionthemebecomesdynamic/dark, this policy must change with it. Existing production safeDrawingPadding is preserved, not doubled. No navigation/auth/account/store/lifecycle/security logic changes.
+
+SyntheticAboutUiTest invokes exactsharedwindowpolicy onUIthread, wraps content in production-parity Surface(fillMaxSize), and places safeDrawingPadding OUTSIDEverticalScroll so scroll destinations exclude bars. No AppStore/worker/provider added. Existing 1x/2x, runtimeidentity, syntheticthrowingURI, Sponsor navigation and stable-nonblankcapture all unchanged. Exact production+instrumentationKotlin compilation passed locally; no new native pixels yet. Next qualification must inspect original identity/Sponsor/top frames both APIs for barcontrast and no content overlay; success of compilation/semantics alone will not close it. Real Settings entry/systemBack/URI/copy/metadatafailure/Windows/native-extension/accessibility remain separate.
+
+No workflow/logcodec/root/prep/sourcepin changes. Same candidate-only manualworkflow, standardpublic Ubuntu API26+36×25min outerjobcap, noartifact/cache/credential/provider/privatecontent publication. A new changed-source runtime requires independent exacttree review and fresh eligibility/source/trigger checks. Previous fullsuite tests/logcodec fixtures are byteidentical and not repeated.
 
 ## Actual v5 download blocker and v6 delta
 

@@ -8,6 +8,7 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.SystemBarStyle
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -22,10 +23,21 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+/** MaterialTheme currently uses its default light scheme on every device mode.
+ * Keep dark system-bar icons paired with that actual light surface, not OS mode.
+ * If app theme selection changes, this policy must change with it.
+ */
+internal fun ComponentActivity.configureScrobblixWindow() {
+    enableEdgeToEdge(
+        statusBarStyle=SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT),
+        navigationBarStyle=SystemBarStyle.light(android.graphics.Color.TRANSPARENT,android.graphics.Color.TRANSPARENT)
+    )
+}
+
 class MainActivity:ComponentActivity() {
     override fun onCreate(savedInstanceState:Bundle?) {
         super.onCreate(savedInstanceState)
-        enableEdgeToEdge()
+        configureScrobblixWindow()
         val store=(application as ScrobblixApp).storeOrNull()
         setContent { MaterialTheme { Surface(Modifier.fillMaxSize()) {
             if(store==null) Column(Modifier.safeDrawingPadding().padding(24.dp)) {
