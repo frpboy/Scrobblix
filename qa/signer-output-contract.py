@@ -14,7 +14,7 @@ def parse(text):
     prefixes=[];digests=[]
     for line in lines:
         if 'certificate SHA-256 digest:' not in line: continue
-        match=re.fullmatch(r'(Signer #1|V(?:2|3|3\.1|3\.2|4) Signer:) certificate SHA-256 digest: ([0-9a-fA-F]{64})',line)
+        match=re.fullmatch(r'(Signer #1|V(?:2|3|3\.0|3\.1|3\.2|4) Signer:) certificate SHA-256 digest: ([0-9a-fA-F]{64})',line)
         if not match: raise ContractError('certificate_digest_malformed')
         prefixes.append(match[1]);digests.append(match[2].lower())
     if not digests: raise ContractError('certificate_digest_missing')

@@ -25,4 +25,10 @@ class SignerContractTest(unittest.TestCase):
   with self.assertRaises(Error):receipt({'baseline':'','test':'','candidate':''},'0.9')
  def test_receipt_has_only_public_values(self):
   result=receipt({'baseline':a,'test':b,'candidate':b},'0.9');self.assertEqual(set(result),{'status','error_category','tool_version','certificate_sha256'})
+ def test_actual37_default_v30_signer(self):
+  text=Path('qa/fixtures/apksigner37-default-sign-public.txt').read_text()
+  self.assertEqual('d298ef01639ffaf14bad651cd0ed8485f88523d1af7df1db16001b7c9115f52b',parse(text))
+ def test_unapproved_hybrid_lineage_and_unknown_prefix_rejected(self):
+  for label in ['V3.2 Hybrid Classical Signer:','V3.2 Hybrid PQC Signer:','V3.0 Signer (minSdkVersion=28, maxSdkVersion=99):','V9 Signer:']:
+   with self.assertRaises(Error):parse(b.replace('V2 Signer:',label))
 if __name__=='__main__':unittest.main()

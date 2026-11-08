@@ -1,7 +1,7 @@
 name: Reviewed narrow target qualification
 on:
   push:
-    branches: [qa/narrow-android-signer-20261108-once]
+    branches: [qa/narrow-android-v30-20261108-once]
 permissions:
   contents: read
 concurrency:
@@ -9,7 +9,7 @@ concurrency:
   cancel-in-progress: false
 jobs:
   android-phases:
-    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-android-signer-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-android-v30-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
     runs-on: ubuntu-latest
     timeout-minutes: 55
     strategy:
