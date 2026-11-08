@@ -34,8 +34,14 @@ if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-emulator.log; exit 1; fi
 # All instrumentation uses synthetic identities. Once a default endpoint
 # exists, block emulator egress so queued fixture work cannot reach it.
 # ADB uses the emulator transport, not this guest IP output path.
-adb root
-adb wait-for-device
+# Root is a bounded guest-readiness handshake, not an app/test retry.
+# Failure is fail-closed before firewall verification, compilation or install.
+if ! timeout 80 bash scripts/about-adb-root-ready.sh; then
+  timeout 5 adb get-state || true
+  timeout 5 adb shell getprop sys.boot_completed || true
+  tail -80 /tmp/scrobblix-emulator.log
+  exit 1
+fi
 adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
 adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
 adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT

@@ -44,36 +44,81 @@ class AboutUiTest {
         for(textScale in listOf(1f,2f)) {
             ui.runOnIdle { scale=textScale }
             ui.onNodeWithText("About Scrobblix").performScrollTo().assertIsDisplayed()
-            capture("about-${textScale}-top")
+            capture("about-${textScale}-top","About Scrobblix")
             ui.onNodeWithText("Version: $expectedVersion").performScrollTo().assertIsDisplayed()
             ui.onNodeWithText("Package: ${context.packageName}").performScrollTo().assertIsDisplayed()
-            capture("about-${textScale}-identity")
+            capture("about-${textScale}-identity","Package: ${context.packageName}")
             ui.onNodeWithText("Developer").performScrollTo().performClick()
             ui.runOnIdle { assertEquals("https://www.frpboy.in/",opened) }
             ui.onNodeWithText("Could not open this link. Select and copy it to a browser:").performScrollTo().assertIsDisplayed()
             ui.onNodeWithText("https://www.frpboy.in/").performScrollTo().assertIsDisplayed()
-            capture("about-${textScale}-failure")
+            capture("about-${textScale}-failure","https://www.frpboy.in/")
             ui.onNodeWithText("Sponsor",useUnmergedTree=true).performScrollTo().performClick()
             ui.onNodeWithText("Support Scrobblix").performScrollTo().assertIsDisplayed()
             ui.onNodeWithText("Buy Me a Coffee").assertExists()
             ui.onNodeWithText("Patreon").assertExists()
-            capture("sponsor-${textScale}")
+            capture("sponsor-${textScale}","Support Scrobblix")
             ui.onNodeWithText("Back to About").performScrollTo().performClick()
             ui.onNodeWithText("About Scrobblix").performScrollTo().assertIsDisplayed()
         }
     }
 
-    private fun capture(label:String) {
+    private fun capture(label:String,expectedContent:String) {
         ui.waitForIdle()
         val instrumentation=InstrumentationRegistry.getInstrumentation()
-        assertTrue("Focused actual activity required",ui.activity.window.decorView.hasWindowFocus())
-        val bitmap=checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        val deadline=android.os.SystemClock.elapsedRealtime()+10000
+        var prior:android.graphics.Bitmap?=null
+        var stable=false
         try {
+            while(android.os.SystemClock.elapsedRealtime()<deadline && !stable) {
+                var bounds:android.graphics.Rect?=null
+                fun verifyHost() { ui.runOnIdle {
+                    bounds=null
+                    val hosts=androidx.test.runner.lifecycle.ActivityLifecycleMonitorRegistry.getInstance()
+                        .getActivitiesInStage(androidx.test.runner.lifecycle.Stage.RESUMED)
+                    val host=hosts.singleOrNull()
+                    if(host===ui.activity) {
+                        val decor=ui.activity.window.decorView
+                        val visible=android.graphics.Rect();decor.getWindowVisibleDisplayFrame(visible)
+                        val actual=android.graphics.Rect();val hasBounds=decor.getGlobalVisibleRect(actual)
+                        val display=android.graphics.Point();ui.activity.windowManager.defaultDisplay.getRealSize(display)
+                        val screen=android.graphics.Rect(0,0,display.x,display.y)
+                        val inset=decor.rootWindowInsets
+                        val expected=if(inset!=null) android.graphics.Rect(inset.systemWindowInsetLeft,inset.systemWindowInsetTop,display.x-inset.systemWindowInsetRight,display.y-inset.systemWindowInsetBottom) else android.graphics.Rect()
+                        if(decor.hasWindowFocus() && decor.isShown && hasBounds && !expected.isEmpty && screen.contains(expected) && visible.contains(expected) && actual.contains(expected) && screen.contains(actual)) bounds=expected
+                    }
+                } }
+                verifyHost()
+                instrumentation.waitForIdleSync()
+                if(bounds!=null) {
+                    ui.onNodeWithText(expectedContent).assertIsDisplayed()
+                    val frame=instrumentation.uiAutomation.takeScreenshot()
+                    if(frame!=null) {
+                        verifyHost()
+                        ui.onNodeWithText(expectedContent).assertIsDisplayed()
+                        val content=bounds
+                        // Status bar pixels cannot make a blank application frame pass.
+                        // Require varied RGB pixels inside the verified app viewport.
+                        var rendered=false
+                        if(content!=null && content.left>=0 && content.top>=0 && content.right<=frame.width && content.bottom<=frame.height) {
+                            val first=frame.getPixel(content.left,content.top) and 0x00ffffff
+                            outer@ for(y in content.top until content.bottom) for(x in content.left until content.right) {
+                                if((frame.getPixel(x,y) and 0x00ffffff)!=first) { rendered=true;break@outer }
+                            }
+                        }
+                        stable=rendered && prior?.sameAs(frame)==true
+                        prior?.recycle();prior=if(rendered)frame else null
+                        if(!rendered)frame.recycle()
+                    } else { prior?.recycle();prior=null }
+                } else { prior?.recycle();prior=null }
+                if(!stable)Thread.sleep(100)
+            }
+            assertTrue("Focused resumed full-window host and two identical nonblank app frames required: $label",stable)
             val file=java.io.File(instrumentation.targetContext.cacheDir,"scrobblix-$label.png")
             java.io.FileOutputStream(file).use { output ->
-                check(bitmap.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))
+                check(prior!!.compress(android.graphics.Bitmap.CompressFormat.PNG,100,output))
                 output.flush();output.fd.sync()
             }
-        } finally { bitmap.recycle() }
+        } finally { prior?.recycle() }
     }
 }
