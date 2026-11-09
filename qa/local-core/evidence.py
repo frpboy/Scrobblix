@@ -21,9 +21,9 @@ try:
                   'probe_head','run_id','run_attempt','playback_wall_seconds','scope','account_count',
                   'provider_action_count','egress','cleanup','not_proven'}
         assert set(result)==expected
-        assert result['source_commit']=='da37da0caa8edf5653a9b02483a4e37d739179cf'
-        assert result['package_sha256']=='5191988d22cd2c9c6ee8c6942dec43dd85d1882115790ef4123d8f06de604afc'
-        assert result['package_bytes']==136124914
+        assert result['source_commit']=='67422ae7bba6b7e3a38de5bcc0a395b6151db5d5'
+        assert result['package_sha256']=='03af74a8686a2620d125c9d302da0ccbd11a1393c17fcc2075620eea09259245'
+        assert result['package_bytes']==136124791
         assert result['account_count']==0 and result['provider_action_count']==0
         assert result['run_attempt']=='1'
         for key in ('app_sha256','driver_sha256','probe_head'):

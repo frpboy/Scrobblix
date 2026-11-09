@@ -2,7 +2,7 @@ param([Parameter(Mandatory)][string]$PackageZip,
       [Parameter(Mandatory)][string]$DriverExe)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-$expectedZip = '5191988d22cd2c9c6ee8c6942dec43dd85d1882115790ef4123d8f06de604afc'
+$expectedZip = '03af74a8686a2620d125c9d302da0ccbd11a1393c17fcc2075620eea09259245'
 if ($env:GITHUB_ACTIONS -cne 'true' -or $env:RUNNER_OS -cne 'Windows' -or
     $env:GITHUB_RUN_ATTEMPT -cne '1' -or -not [Environment]::UserInteractive) {
     throw 'host_guard_failed'
@@ -212,7 +212,7 @@ public static class LocalCoreWindow {
 }
 if ($success) {
     [ordered]@{
-        status='ASSERTIONS_PASS_VISUAL_REVIEW_PENDING'; source_commit='da37da0caa8edf5653a9b02483a4e37d739179cf';
+        status='ASSERTIONS_PASS_VISUAL_REVIEW_PENDING'; source_commit='67422ae7bba6b7e3a38de5bcc0a395b6151db5d5';
         package_sha256=$expectedZip; package_bytes=(Get-Item $PackageZip).Length;
         app_sha256=(Get-FileHash $app -Algorithm SHA256).Hash.ToLowerInvariant();
         driver_sha256=(Get-FileHash $DriverExe -Algorithm SHA256).Hash.ToLowerInvariant();

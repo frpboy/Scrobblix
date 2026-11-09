@@ -1,19 +1,19 @@
-name: Reviewed existing Windows package local-core EOL qualification
+name: Reviewed current-main Windows package local-core qualification
 on:
   push:
-    branches: [qa/local-core-eol-reviewed-20261109]
+    branches: [qa/local-core-main67422-20261109]
 permissions:
   contents: read
   actions: read
 concurrency:
-  group: scrobblix-local-core-eol-20261109
+  group: scrobblix-local-core-main67422-20261109
   cancel-in-progress: false
 jobs:
   ordinary-local-core:
     if: >-
       github.repository == 'frpboy/Scrobblix' &&
       github.event.repository.private == false &&
-      github.ref == 'refs/heads/qa/local-core-eol-reviewed-20261109' &&
+      github.ref == 'refs/heads/qa/local-core-main67422-20261109' &&
       github.run_attempt == 1
     runs-on: windows-latest
     timeout-minutes: 15
@@ -39,13 +39,13 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-          gh api repos/frpboy/Scrobblix/actions/runs/42523442072 > "$RUNNER_TEMP/source-run.json"
-          gh api repos/frpboy/Scrobblix/actions/artifacts/13633913382 > "$RUNNER_TEMP/source-artifact.json"
+          gh api repos/frpboy/Scrobblix/actions/runs/42626308433 > "$RUNNER_TEMP/source-run.json"
+          gh api repos/frpboy/Scrobblix/actions/artifacts/13678284303 > "$RUNNER_TEMP/source-artifact.json"
           python qa/local-core/check-source.py "$RUNNER_TEMP/source-run.json" "$RUNNER_TEMP/source-artifact.json"
           # curl strips Authorization on cross-host redirects. Never use --location-trusted.
           curl --fail --silent --show-error --location \
             -H "Authorization: Bearer $GH_TOKEN" -H 'Accept: application/vnd.github+json' \
-            https://api.github.com/repos/frpboy/Scrobblix/actions/artifacts/13633913382/zip \
+            https://api.github.com/repos/frpboy/Scrobblix/actions/artifacts/13678284303/zip \
             --output "$RUNNER_TEMP/windows-artifact.zip"
           python qa/local-core/unpack-artifact.py "$RUNNER_TEMP/windows-artifact.zip" "$RUNNER_TEMP/Scrobblix-Windows-TestBundle.zip"
       - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
