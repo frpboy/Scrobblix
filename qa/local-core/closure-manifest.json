@@ -5,8 +5,8 @@
   "qa/local-core/driver/Driver.csproj": "6830a72c052ba9bc115296abae004cee861fca4d130b620b65208cefa8770329",
   "qa/local-core/driver/Program.cs": "111ed0ec6e6b10d144c1bd2f8b09c82cc1cbacc079268b19bd497f5181d198c2",
   "qa/local-core/evidence.py": "a10f06d6e335446683ef972e9248dad6e5c0c2d555293dfd0525bbbe1d2753aa",
-  "qa/local-core/read-state.py": "5fd7390608451cb93129ce712e7027c5db24718036ab718ffd0ff7350ffa01da",
+  "qa/local-core/read-state.py": "88807a0cd15ecf6b0313d96071d08dc870c6b94a123686c6dcb2de78c294079d",
   "qa/local-core/run.ps1": "84dabd6d647f5cbe6fd7a06a078a2e4db343f4d411f4809c9881bedcb7e94299",
-  "qa/local-core/test_read_state.py": "5a116911b0cc65969b59fe40773e295e3af788a66c49154e743b0fee4c525ed6",
+  "qa/local-core/test_read_state.py": "cdc94b5448c03cb8350124e0add69d9a36c496655ef7a15ea1af7cc5b1ff6cb3",
   "qa/local-core/unpack-artifact.py": "1a5edae74a3e67496e5d0f514d7e5dd80ed8e9f1c32d6bd279ccf0ee21cc8d83"
 }

@@ -1,4 +1,5 @@
 import importlib.util
+from contextlib import closing
 import pathlib
 import sqlite3
 import tempfile
@@ -57,7 +58,7 @@ class Checks(unittest.TestCase):
         self.reject('stable',before)
     def test_readonly(self):
         uri=self.path.resolve().as_uri()+'?mode=ro'
-        with sqlite3.connect(uri,uri=True) as db:
+        with closing(sqlite3.connect(uri,uri=True)) as db:
             with self.assertRaises(sqlite3.OperationalError): db.execute('INSERT INTO accounts VALUES(1)')
 
 if __name__=='__main__': unittest.main()

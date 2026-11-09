@@ -1,5 +1,6 @@
 """Bounded readonly assertions over a fresh synthetic profile. No row dumps."""
 import argparse
+from contextlib import closing
 import json
 import pathlib
 import sqlite3
@@ -10,7 +11,7 @@ TITLE = 'Scrobblix synthetic local-core 90s'
 
 def state(path):
     uri = pathlib.Path(path).resolve().as_uri() + '?mode=ro'
-    with sqlite3.connect(uri, uri=True, timeout=1.0) as db:
+    with closing(sqlite3.connect(uri, uri=True, timeout=1.0)) as db:
         db.execute('PRAGMA query_only=ON')
         db.execute('BEGIN')
         # Counts only, never account identifiers/credentials/config/history contents.
