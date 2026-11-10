@@ -64,8 +64,9 @@ grep -F 'Status: ok' "$private/start.txt"
 pid=$(adb shell pidof com.frpboy.scrobblix | tr -d '\r'); [[ $pid =~ ^[0-9]+$ ]]
 sleep 10
 [[ $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') = "$pid" ]]
-python qa/alpha1-install/acquire.py "$evidence" "$pid" "$api"
+python qa/alpha1-install/qualify.py "$evidence" "$pid" "$api"
 adb shell am force-stop com.frpboy.scrobblix
 [[ -z $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') ]]
 kill "$emulator_pid"; wait "$emulator_pid" || true
 emulator_pid=''
+python qa/alpha1-install/result.py "$evidence" "$api"

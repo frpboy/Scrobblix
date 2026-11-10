@@ -1,4 +1,4 @@
-name: Exact signed Android alpha acquisition only, no qualification
+name: Exact signed Android alpha XML assertions, visual review remains separate
 on:
   workflow_dispatch:
 permissions:
@@ -40,7 +40,7 @@ jobs:
         env:
           SCROBBLIX_ALPHA1_TRANSPORT: ${{ secrets.SCROBBLIX_ALPHA1_TRANSPORT }}
         run: python qa/alpha1-install/decrypt.py
-      - name: Fresh isolated installation and bounded diagnostic acquisition only
+      - name: Fresh isolated installation and bounded XML assertions only
         shell: bash
         run: bash qa/alpha1-install/run.sh '${{ matrix.api }}'
       - name: Remove temporary plaintext APK
@@ -51,7 +51,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: exact-alpha1-acquisition-api${{ matrix.api }}
+          name: exact-alpha1-xml-api${{ matrix.api }}
           path: ${{ runner.temp }}/alpha1-evidence/
           retention-days: 7
           if-no-files-found: warn
