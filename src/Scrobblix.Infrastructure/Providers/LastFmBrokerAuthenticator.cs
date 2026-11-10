@@ -33,7 +33,7 @@ public sealed class LastFmBrokerAuthenticator(HttpClient client, Uri endpoint, I
         using var result=await PostAsync(new { method="auth.getSession",token },cancellationToken);
         var session=result.RootElement.GetProperty("session");
         var name=session.GetProperty("name").GetString();var key=session.GetProperty("key").GetString();
-        if(string.IsNullOrWhiteSpace(name) || name.Length>255 || name.Any(char.IsControl) || key is null || !Hex.IsMatch(key))
+        if(string.IsNullOrWhiteSpace(name) || name.Length>255 || name.Any(char.IsControl) || key is null || !RequestToken.IsMatch(key))
             throw new InvalidOperationException("Last.fm session response was invalid.");
         await credentials.StoreAsync(LastFmDesktopAuthenticator.CredentialResource,name,key,cancellationToken);
         return new LastFmSession(name);

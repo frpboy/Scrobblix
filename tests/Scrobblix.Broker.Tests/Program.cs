@@ -72,7 +72,13 @@ foreach(var requestToken in new[]{new string('x',31),new string('x',33),new stri
 capture.RequestToken=string.Concat(Enumerable.Repeat("Zg_-",8));capture.PublicKey=capture.RequestToken;
 var keyRejected=false;try{await auth.BeginAsync(default);}catch(InvalidOperationException){keyRejected=true;}Check(keyRejected,"API key remains hex-only");
 capture.PublicKey=new string('c',32);capture.SessionKey=capture.RequestToken;credentials.Key=null;
-keyRejected=false;try{await auth.CompleteAsync(capture.RequestToken,default);}catch(InvalidOperationException){keyRejected=true;}Check(keyRejected && credentials.Key is null,"nonhex session key never stored");
+await auth.CompleteAsync(capture.RequestToken,default);
+Check(credentials.Key==capture.SessionKey,"bounded opaque session key stored without normalization");
+foreach(var sessionKey in new[]{new string('x',31),new string('x',33),new string('x',31)+"&",new string('x',31)+" ",new string('x',31)+"é",new string('x',32)+"\n"}) {
+ capture.SessionKey=sessionKey;credentials.Key=null;keyRejected=false;
+ try{await auth.CompleteAsync(capture.RequestToken,default);}catch(InvalidOperationException){keyRejected=true;}
+ Check(keyRejected && credentials.Key is null,"malformed session key never stored");
+}
 Console.WriteLine("PASS synthetic broker client: no app secret/signature/password, fixed endpoint/browser host, scoped methods and credential boundary");
 static void Check(bool ok,string message){if(!ok)throw new InvalidOperationException(message);}
 sealed class Capture:HttpMessageHandler {
