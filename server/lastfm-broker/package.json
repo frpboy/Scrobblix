@@ -1,0 +1,7 @@
+{
+  "name": "scrobblix-lastfm-broker",
+  "private": true,
+  "type": "module",
+  "scripts": { "test": "node --test broker.test.mjs counter.test.mjs response.test.mjs" },
+  "engines": { "node": ">=22.13" }
+}

@@ -448,23 +448,51 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         const string apiKeyResource = "Scrobblix.LastFm.ApiKey";
         const string apiSecretResource = "Scrobblix.LastFm.ApiSecret";
         const string applicationCredentialUser = "application";
-        var client = new HttpClient { Timeout = TimeSpan.FromSeconds(15) };
-        LastFmDesktopAuthenticator? authenticator = null;
+        // Never redirect a POST carrying a session key to another host.
+        var client = new HttpClient(new HttpClientHandler { AllowAutoRedirect = false }) { Timeout = TimeSpan.FromSeconds(15) };
+        ILastFmAuthenticator? authenticator = null;
         ProviderActionProcessor? processor = null;
         LastFmAuthorization? authorization = null;
+        DateTimeOffset authorizationStartedUtc = default;
+        var brokerConfigured = false;
+        // Verified public broker by default; an explicit engineering override never silently falls back.
+        var brokerSetting = LastFmConnectionDefaults.ResolveBrokerEndpoint(Environment.GetEnvironmentVariable("SCROBBLIX_LASTFM_BROKER_ENDPOINT"));
 
         bool ConfigureCredentials(string? apiKey, string? apiSecret)
         {
-            if (!LastFmRuntimeConfiguration.TryCreate(apiKey, apiSecret, out var configuration))
+            LastFmScrobbleProvider provider;
+            brokerConfigured = false;
+            if (LastFmRuntimeConfiguration.TryCreate(apiKey, apiSecret, out var configuration))
             {
-                authenticator = null;
-                processor = null;
+                // An existing user-owned API app keeps its direct route and existing session identity.
+                authenticator = new LastFmDesktopAuthenticator(client, configuration.ApiKey, configuration.ApiSecret, credentialStore);
+                provider = new LastFmScrobbleProvider(client, configuration.ApiKey, configuration.ApiSecret);
+                metadataEnricher.UpdateLastFmApiKey(configuration.ApiKey);
+            }
+            else if (Uri.TryCreate(brokerSetting, UriKind.Absolute, out var endpoint))
+            {
+                try
+                {
+                    provider = new LastFmScrobbleProvider(client, endpoint);
+                    authenticator = new LastFmBrokerAuthenticator(client, endpoint, credentialStore);
+                    brokerConfigured = true;
+                    // Do not borrow a developer key for unrelated metadata requests.
+                    metadataEnricher.UpdateLastFmApiKey(null);
+                }
+                catch (ArgumentException)
+                {
+                    authenticator = null;processor = null;
+                    metadataEnricher.UpdateLastFmApiKey(null);
+                    return false;
+                }
+            }
+            else
+            {
+                authenticator = null;processor = null;
                 metadataEnricher.UpdateLastFmApiKey(null);
                 return false;
             }
 
-            authenticator = new LastFmDesktopAuthenticator(client, configuration.ApiKey, configuration.ApiSecret, credentialStore);
-            var provider = new LastFmScrobbleProvider(client, configuration.ApiKey, configuration.ApiSecret);
             processor = new ProviderActionProcessor(
                 new SqliteProviderActionStore(connectionString),
                 provider,
@@ -485,7 +513,6 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                         getNotificationService()?.NotifyDeliveryNeedsAttention(action.Artist, action.Title, outcome, reasonCode);
                     }
                 });
-            metadataEnricher.UpdateLastFmApiKey(configuration.ApiKey);
             return true;
         }
 
@@ -493,13 +520,15 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         logger.Info("LASTFM", hasConfiguration ? "Last.fm API configuration is available; awaiting account state." : "Last.fm API credentials are not configured; local history remains enabled.");
         if (hasConfiguration)
         {
-            _window!.SetLastFmCredentialsStatus(credentialsFromCredentialLocker
+            _window!.SetLastFmCredentialsStatus(brokerConfigured
+                ? "Connect through Last.fm in your browser. No developer API keys are needed. The Scrobblix service handles session keys and track details in transit; local history stays on this device."
+                : credentialsFromCredentialLocker
                 ? "API key and shared secret are stored in Windows Credential Locker."
                 : "API credentials were loaded from environment variables. You can save them securely here.");
         }
         else
         {
-            _window!.SetLastFmCredentialsStatus("Enter your Last.fm API key and shared secret here, then save securely.");
+            _window!.SetLastFmCredentialsStatus("The connection service is not configured in this engineering build. Local history remains available. Advanced users can use their own API app.");
             _window.SetLastFmUnavailable();
         }
 
@@ -544,6 +573,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
                 logger.Info("LASTFM_AUTH", "Starting desktop authorization request.");
                 var pendingAuthorization = await authenticator.BeginAsync(cancellationToken);
                 authorization = pendingAuthorization;
+                authorizationStartedUtc = DateTimeOffset.UtcNow;
                 if (!await global::Windows.System.Launcher.LaunchUriAsync(pendingAuthorization.AuthorizationUri))
                 {
                     logger.Error("LASTFM_AUTH", "Windows could not open the Last.fm approval page.");
@@ -566,8 +596,9 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
         _window.CompleteLastFmRequested += async () =>
         {
-            if (authenticator is null || authorization is null)
+            if (authenticator is null || authorization is null || DateTimeOffset.UtcNow - authorizationStartedUtc >= TimeSpan.FromHours(1))
             {
+                authorization = null;
                 _window.SetLastFmConnectionError();
                 return;
             }
