@@ -6,6 +6,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Added
 
+- Privacy-safe Windows support bundles now use informational build identity and schema 3 startup timing, with constant auth/artwork outcome codes. Startup elapsed time begins at App construction, not OS process launch. This improves diagnosis without changing queue, credential or provider behavior and does not claim a real-device startup/artwork fix.
+
 - Raw playback observation retention: raw diagnostic observations are now automatically pruned after 30 days (owner-approved policy, issue #98). Cleanup runs in bounded cancellation-safe batches off the UI thread, logs only row counts, and never touches canonical listening history, scrobbles or provider actions.
 
 - Artwork cache retention: cached artwork files older than 30 days are now automatically deleted unless still referenced by retained listening history (owner-approved policy, issue #122). Cleanup runs off the UI thread in bounded cancellation-safe batches, skips locked files for the next cycle, removes orphaned temporary files after a 1-day grace period, bounds the in-memory GSMTC artwork key map, and never touches listening history, provider queues or non-artwork files.
