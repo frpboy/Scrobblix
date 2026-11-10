@@ -139,3 +139,7 @@ console.log("Desktop UI contract checks passed. Source-level checks do not repla
 assert.ok(code.includes("HistoryRowsMatch(_historyRecords, plays)") && code.includes("_historyRecords = plays;"), "Skip unchanged display work but retain latest export records.");
 assert.ok(code.includes('if (HistoryView.Visibility == Visibility.Visible) RenderHistory();') && code.includes('destination == "history" && _historyNeedsRender'), "History renders lazily on visibility without losing hidden updates.");
 assert.ok(code.includes("CancelRetiredHistoryArtwork();") && code.includes("state.Generation++;") && code.includes("state.Pending?.Cancel();"), "Retired history image work is canceled and fenced.");
+
+// Queue copy must not misreport delivery as disabled for an already connected account.
+assert.ok(!xaml.includes("Last.fm delivery remains off until an account is configured."), "Queue must not unconditionally claim delivery is disabled.");
+assert.ok(xaml.includes('x:Name="QueueConnectionGuidanceText"') && xaml.includes("Manage your Last.fm connection in Settings. Provider outcomes are shown per action below; local history is kept independently."), "Queue guidance must distinguish connection management, action outcomes and local history.");
