@@ -52,6 +52,8 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 |---|---|
 | [Windows installer guide](docs/WINDOWS_INSTALLER.md) | Per-user installer, ZIP-to-installed-app transition, retained data, exact CI qualification and remaining signing/rollback limits. |
 
+The user-facing [Getting Started](Scrobblix-Docs/17_UserDocumentation/GETTING_STARTED.md) and [Installation](Scrobblix-Docs/17_UserDocumentation/INSTALLATION.md) guides describe the beta.9 Setup.exe transition and retained-data limits.
+
 ## Supporting Markdown guides
 
 | File | Purpose |
