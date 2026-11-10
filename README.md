@@ -10,6 +10,17 @@ Scrobblix is a local-first listening-history and Last.fm scrobbling project for 
 
 This repository is the product and engineering source of truth for the personal open-source project maintained by **Rahul Muraleedharan** under the GitHub account **[`frpboy`](https://github.com/frpboy)**.
 
+
+## Windows screenshots
+
+Actual Windows beta 8 screens shared by the maintainer. About shows the recorded source revision (`9decebcc`) and the internal assembly version (`1.0.0`), which is separate from the GitHub preview tag. The build is unsigned; these screens do not establish provider delivery or performance on other PCs.
+
+![Scrobblix Windows About page with build identity and developer links](docs/screenshots/windows/about-build-information.jpg)
+
+![Scrobblix Windows About support links, collapsed Sponsor entry, and license credits](docs/screenshots/windows/about-support-license.jpg)
+
+The Sponsor entry expands to Buy Me a Coffee and Patreon.
+
 ## Product promise
 
 Scrobblix must answer three questions immediately:
