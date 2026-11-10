@@ -7,8 +7,8 @@ android {
         applicationId = "com.frpboy.scrobblix"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.1.0-test.2"
+        versionCode = 7
+        versionName = "0.1.0-alpha.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
     buildFeatures { compose = true; buildConfig = true }
