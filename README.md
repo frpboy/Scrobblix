@@ -50,11 +50,13 @@ Public releases checked on 10 November 2026:
 | Platform | Current preview | Download and limits |
 |---|---|---|
 | Android | [0.1.0-alpha.2](https://github.com/frpboy/Scrobblix/releases/tag/android-v0.1.0-alpha.2) | [Signed APK](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/Scrobblix-Android-v0.1.0-alpha.2.apk) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/SHA256SUMS.txt). Early development alpha for Android 8.0/API 26 or newer; not a Play release. |
-| Windows | [0.1.0-beta.6](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.6) | [Windows x64 ZIP](https://github.com/frpboy/Scrobblix/releases/download/v0.1.0-beta.6/Scrobblix-Windows-x64-v0.1.0-beta.6.zip), Windows Test Bundle and optional Browser Companion. Use the x64 ZIP's asset digest on the release page; `SHA256SUMS.txt` covers the other ZIPs. Unsigned preview bundles, not a signed installer or stable production release. |
+| Windows | [0.1.0-beta.9](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.9) | [Single x64 Setup.exe](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.9/Scrobblix-Windows-x64-Setup.exe) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.9/SHA256SUMS.txt). Per-user unsigned installer preview for x64-compatible Windows build 26100 or newer. No ZIP extraction or separate runtime download. |
 
 Read the linked release notes before installing. These platform-specific version numbers are separate release tracks, not a claim that one platform is more complete than the other. The [Releases page](https://github.com/frpboy/Scrobblix/releases) lists published versions and their exact assets.
 
-Windows may require the matching Microsoft Windows App Runtime. Read the [release process](docs/RELEASE_PROCESS.md) for the preview workflow and the remaining signing, installer and real-Windows qualification gates. This README update changes documentation only; it does not rebuild, replace or republish release assets.
+For Windows beta.9, exit any running Scrobblix copy from the system tray, run Setup, then open Scrobblix from Start. The installer bundles its private runtimes and uses the existing local profile without resetting history or the queue. Keep an older extracted ZIP folder until checking the installed app. Setup does not remove that folder.
+
+Read the [installer guide](docs/WINDOWS_INSTALLER.md) for installation, upgrade, data retention and exact qualification limits, and the [release process](docs/RELEASE_PROCESS.md) for the wider preview workflow. The installer is unsigned. Credential Locker preservation is source-scope assurance, not an exercised real-user credential migration test; interrupted-upgrade rollback is not qualified. This documentation update does not rebuild, replace or republish release assets.
 
 ## Android and current qualification
 
