@@ -1,7 +1,7 @@
 param(
     [Parameter(Mandatory=$true)][string]$BundleDirectory,
     [string]$OutputDirectory = 'artifacts/installer',
-    [string]$BuildVersion = '0.1.0.9',
+    [string]$BuildVersion = '0.1.0.10',
     [string]$BuildLabel = 'Windows installer preview'
 )
 $ErrorActionPreference = 'Stop'
