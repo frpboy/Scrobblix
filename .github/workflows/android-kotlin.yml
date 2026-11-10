@@ -76,7 +76,17 @@ jobs:
           emulator -list-avds | grep -Fx scrobblix-test
           emulator -avd scrobblix-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-emulator.log 2>&1 &
           emulator_pid=$!
-          trap 'kill "$emulator_pid" || true' EXIT
+          cleanup_emulator() {
+            status=$?
+            set +e
+            if [ "$status" -ne 0 ]; then
+              timeout 10 adb devices -l
+              tail -80 /tmp/scrobblix-emulator.log
+            fi
+            kill "$emulator_pid"
+            exit "$status"
+          }
+          trap cleanup_emulator EXIT
           if ! timeout 180 adb wait-for-device; then
             cat /tmp/scrobblix-emulator.log
             exit 1
@@ -92,6 +102,7 @@ jobs:
           # ADB uses the emulator transport, not this guest IP output path.
           adb root
           adb wait-for-device
+          test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
           adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
