@@ -28,6 +28,7 @@
                     <NavigationViewItem Content="Sources" Tag="sources" AutomationProperties.Name="Sources" ToolTipService.ToolTip="Sources"><NavigationViewItem.Icon><FontIcon Glyph="&#xE8D7;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="Diagnostics" Tag="diagnostics" AutomationProperties.Name="Diagnostics" ToolTipService.ToolTip="Diagnostics"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
                     <NavigationViewItem Content="Settings" Tag="settings" AutomationProperties.Name="Settings" ToolTipService.ToolTip="Settings"><NavigationViewItem.Icon><FontIcon Glyph="&#xE713;" /></NavigationViewItem.Icon></NavigationViewItem>
+                    <NavigationViewItem Content="About" Tag="about" AutomationProperties.Name="About" ToolTipService.ToolTip="About"><NavigationViewItem.Icon><FontIcon Glyph="&#xE946;" /></NavigationViewItem.Icon></NavigationViewItem>
                 </NavigationView.MenuItems>
             </NavigationView>
             <ScrollViewer x:Name="CompactNavigationButtons" Grid.Row="2" Visibility="Collapsed"
@@ -65,6 +66,9 @@
                     <Button x:Name="CompactSettingsButton" Tag="settings" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click"
                             ToolTipService.ToolTip="Settings" AutomationProperties.Name="Settings" AutomationProperties.HelpText="Open Settings">
                         <FontIcon Glyph="&#xE713;" FontSize="18" />
+                    </Button>
+                    <Button x:Name="CompactAboutButton" Tag="about" Width="44" Height="44" Padding="0" Click="CompactNavigationItem_Click" ToolTipService.ToolTip="About" AutomationProperties.Name="About" AutomationProperties.HelpText="Open About">
+                        <FontIcon Glyph="&#xE946;" FontSize="18" />
                     </Button>
                 </StackPanel>
             </ScrollViewer>
@@ -353,5 +357,57 @@
                 </Border>
             </StackPanel>
         </ScrollViewer>
+        <ScrollViewer x:Name="AboutView" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled" Visibility="Collapsed">
+            <StackPanel Padding="24" Spacing="16" MaxWidth="1000" HorizontalAlignment="Stretch">
+            <StackPanel Spacing="4">
+            <TextBlock Text="About" Style="{StaticResource TitleTextBlockStyle}" />
+            <TextBlock Text="Scrobblix for Windows" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="A listening companion for local history and Last.fm scrobbling." TextWrapping="Wrap" />
+            </StackPanel>
+            <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+            <TextBlock Text="Build information" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock x:Name="AboutVersionText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <TextBlock x:Name="AboutSourceText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+            <TextBlock Text="Unsigned development preview. Updates are downloaded manually from GitHub Releases; no automatic updater is enabled." TextWrapping="Wrap" />
+            <HyperlinkButton Content="Releases and updates" NavigateUri="https://github.com/frpboy/Scrobblix/releases" HorizontalAlignment="Left" />
+            </StackPanel>
+            </Border>
+            <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+            <TextBlock Text="Developer" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="Rahul Muraleedharan (FrpBoy)" TextWrapping="Wrap" />
+            <HyperlinkButton Content="Portfolio - frpboy.in" NavigateUri="https://www.frpboy.in/" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="GitHub - frpboy" NavigateUri="https://github.com/frpboy" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="LinkedIn" NavigateUri="https://www.linkedin.com/in/rahul-muraleedharan-it" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="Email - frpboy12@gmail.com" NavigateUri="mailto:frpboy12@gmail.com" HorizontalAlignment="Left" />
+            </StackPanel>
+            </Border>
+            <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+            <TextBlock Text="Project and support" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <HyperlinkButton Content="Source code and README" NavigateUri="https://github.com/frpboy/Scrobblix" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="Support requests - Telegram" NavigateUri="https://t.me/FRPboy_Projects" HorizontalAlignment="Left" />
+            <TextBlock Text="Do not post listening history, credentials or private diagnostic files in public support discussions." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+            </StackPanel>
+            </Border>
+            <Expander x:Name="AboutSponsorExpander" Header="Sponsor" HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch">
+            <StackPanel Spacing="8">
+            <TextBlock Text="Optional support for independent development." TextWrapping="Wrap" />
+            <HyperlinkButton Content="Buy Me a Coffee" NavigateUri="https://www.buymeacoffee.com/frpboy" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="Patreon" NavigateUri="https://www.patreon.com/c/FrpBoy" HorizontalAlignment="Left" />
+            </StackPanel>
+            </Expander>
+            <Border x:Name="AboutCreditsPanel" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <StackPanel Spacing="8">
+            <TextBlock Text="License and credits" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="Scrobblix is licensed under Apache License 2.0. Third-party components retain their own licenses and attribution." TextWrapping="Wrap" />
+            <HyperlinkButton Content="Scrobblix license" NavigateUri="https://github.com/frpboy/Scrobblix/blob/main/LICENSE" HorizontalAlignment="Left" />
+            <HyperlinkButton Content="Third-party notices and credits" NavigateUri="https://github.com/frpboy/Scrobblix/blob/main/THIRD_PARTY_NOTICES.md" HorizontalAlignment="Left" />
+            <TextBlock Text="Built with .NET, Windows App SDK / WinUI, Microsoft.Data.Sqlite and SQLitePCLRaw. The downloaded bundle also includes generated third-party notices beside the desktop folder." TextWrapping="Wrap" />
+            </StackPanel>
+            </Border>
+            </StackPanel>
+            </ScrollViewer>
     </Grid>
 </Window>
