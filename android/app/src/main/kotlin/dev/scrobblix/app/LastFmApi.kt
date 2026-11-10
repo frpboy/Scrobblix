@@ -63,6 +63,8 @@ class LastFmApi(private val apiKey:String,private val apiSecret:String,
         if(code!=null) throw BrowserStartFailure("Last.fm rejected authorization start (HTTP $status, API code $code).")
         if(status !in 200..299 || body.has("broker_error"))
             throw BrowserStartFailure("Connection service could not start authorization (HTTP $status).")
+        if(body.has("error"))
+            throw BrowserStartFailure("Last.fm authorization response indicated an error (HTTP $status).")
         val token=body.optString("token")
         check(token.matches(Regex("[A-Za-z0-9_-]{32}"))) { "Last.fm authorization response was invalid." }
         val url=if(isBroker) body.optString("authorizationUrl") else "https://www.last.fm/api/auth/?api_key=$apiKey&token=$token"
