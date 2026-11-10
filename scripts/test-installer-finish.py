@@ -61,7 +61,7 @@ for run_app, visit in [(True, False), (False, False), (False, True), (True, True
         h = tops[0]; u.SetForegroundWindow(h)
         controls = windows(h)
         for b in controls:
-            if 'accept the agreement' in text(b).lower() and u.IsWindowEnabled(b):
+            if text(b).replace('&', '').strip().lower() == 'i accept the agreement' and u.IsWindowEnabled(b):
                 u.SendMessageW(b, 0xF5, 0, 0)
         buttons = [b for b in controls if cls(b).endswith('Button') and u.IsWindowEnabled(b)]
         finish = next((b for b in buttons if text(b).replace('&', '') == 'Finish'), None)
@@ -69,7 +69,10 @@ for run_app, visit in [(True, False), (False, False), (False, True), (True, True
         advance = next((b for b in buttons if text(b).replace('&', '') in ('Next >', 'Install')), None)
         if advance: u.SendMessageW(advance, 0xF5, 0, 0)
         time.sleep(.5)
-    if not finish: raise RuntimeError('Real Finish page not reached')
+    if not finish:
+        capture(label + '-timeout.png')
+        (output / (label + '-controls.json')).write_text(json.dumps([{'title': text(t), 'class': cls(t), 'children': [{'text':text(b), 'class':cls(b), 'enabled':bool(u.IsWindowEnabled(b))} for b in windows(t)]} for t in windows()], indent=2))
+        raise RuntimeError('Real Finish page not reached')
     controls = windows(h)
     lists = [b for b in controls if cls(b) == 'TNewCheckListBox']
     if len(lists) != 1: raise RuntimeError('Finish choices control missing: ' + repr([(cls(b), text(b)) for b in controls]))
