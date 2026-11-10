@@ -66,7 +66,7 @@ for run_app, visit in [(True, False), (False, False), (False, True), (True, True
         buttons = [b for b in controls if cls(b).endswith('Button') and u.IsWindowEnabled(b)]
         finish = next((b for b in buttons if text(b).replace('&', '') == 'Finish'), None)
         if finish: break
-        advance = next((b for b in buttons if text(b).replace('&', '') in ('Next >', 'Install')), None)
+        advance = next((b for b in buttons if text(b).replace('&', '') in ('Next', 'Next >', 'Install')), None)
         if advance: u.SendMessageW(advance, 0xF5, 0, 0)
         time.sleep(.5)
     if not finish:
