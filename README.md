@@ -25,7 +25,7 @@ Public releases checked on 10 November 2026:
 | Platform | Current preview | Download and limits |
 |---|---|---|
 | Android | [0.1.0-alpha.2](https://github.com/frpboy/Scrobblix/releases/tag/android-v0.1.0-alpha.2) | [Signed APK](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/Scrobblix-Android-v0.1.0-alpha.2.apk) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/SHA256SUMS.txt). Early development alpha for Android 8.0/API 26 or newer; not a Play release. |
-| Windows | [0.1.0-beta.6](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.6) | Desktop ZIP, Windows Test Bundle, optional Browser Companion and checksums. Unsigned preview bundles, not a signed installer or stable production release. |
+| Windows | [0.1.0-beta.6](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.6) | [Windows x64 ZIP](https://github.com/frpboy/Scrobblix/releases/download/v0.1.0-beta.6/Scrobblix-Windows-x64-v0.1.0-beta.6.zip), Windows Test Bundle, optional Browser Companion and checksums. Unsigned preview bundles, not a signed installer or stable production release. |
 
 Read the linked release notes before installing. These platform-specific version numbers are separate release tracks, not a claim that one platform is more complete than the other. The [Releases page](https://github.com/frpboy/Scrobblix/releases) lists published versions and their exact assets.
 
