@@ -46,6 +46,13 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 | [`PULL_REQUEST_TEMPLATE.md`](Scrobblix-Docs/.github/PULL_REQUEST_TEMPLATE.md) | Pull request checklist template. |
 
 
+## Signing and Windows privacy
+
+| File | Purpose |
+|---|---|
+| [Code signing policy](docs/CODE_SIGNING_POLICY.md) | Proposed Foundation route, unconfirmed human roles/MFA and honest unsigned status. |
+| [Windows privacy notice](docs/WINDOWS_PRIVACY.md) | Current Windows local storage, auth broker, metadata/artwork requests, retention and control limits. |
+
 ## Supporting Markdown guides
 
 | File | Purpose |
