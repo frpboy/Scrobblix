@@ -3,7 +3,7 @@
   #error PayloadDir is required
 #endif
 #ifndef BuildVersion
-  #define BuildVersion "0.1.0.9"
+  #define BuildVersion "0.1.0.10"
 #endif
 #ifndef BuildLabel
   #define BuildLabel "Windows installer preview"
