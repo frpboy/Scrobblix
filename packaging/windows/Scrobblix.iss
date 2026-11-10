@@ -47,6 +47,8 @@ Name: "{userprograms}\Scrobblix"; Filename: "{app}\desktop\Scrobblix.Desktop.exe
 [Code]
 var
   AppGate: LongWord;
+function SHGetFolderPath(Window: LongWord; Folder: Integer; Token: LongWord; Flags: LongWord; Path: String): Integer;
+  external 'SHGetFolderPathW@shell32.dll stdcall';
 function CreateSemaphore(Security: LongWord; InitialCount, MaximumCount: Integer; Name: String): LongWord;
   external 'CreateSemaphoreW@kernel32.dll stdcall';
 function WaitForSingleObject(Handle, Milliseconds: LongWord): LongWord;
@@ -60,7 +62,9 @@ var GateName, Profile: String; Handle: LongWord;
 begin
   Result := AppGate <> 0;
   if Result then exit;
-  Profile := ExpandConstant('{userprofile}');
+  SetLength(Profile, 260);
+  if SHGetFolderPath(0, $0028, 0, 0, Profile) <> 0 then exit;
+  Profile := Copy(Profile, 1, Pos(#0, Profile) - 1);
   if Trim(Profile) = '' then exit;
   GateName := 'Local\Scrobblix.' + Lowercase(GetSHA256OfString(UTF8Encode(Profile)));
   Handle := CreateSemaphore(0, 1, 1, GateName);
