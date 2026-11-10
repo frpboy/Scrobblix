@@ -71,11 +71,22 @@ try {
         [Windows.Forms.SendKeys]::SendWait('^{ESC}')
         Start-Sleep -Milliseconds 800
         [Windows.Forms.SendKeys]::SendWait('Scrobblix')
-        Start-Sleep -Seconds 2
+        Start-Sleep -Seconds 8
         $full = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
         $canvas = [Drawing.Graphics]::FromImage($full)
         try { $canvas.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$full.Size); $full.Save((Join-Path $output 'installed-start-search.png')) }
         finally { $canvas.Dispose();$full.Dispose();[Windows.Forms.SendKeys]::SendWait('{ESC}') }
+    }
+    if ($AppDirectory -like '*Programs*Scrobblix*') {
+        # Search can be unavailable on hosted Server desktop images; also show the actual Start shortcut in its owning folder.
+        $startLink = Join-Path ([Environment]::GetFolderPath('Programs')) 'Scrobblix.lnk'
+        Start-Process explorer.exe -ArgumentList "/select,`"$startLink`""
+        Start-Sleep -Seconds 4
+        $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $full = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
+        $canvas = [Drawing.Graphics]::FromImage($full)
+        try { $canvas.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$full.Size); $full.Save((Join-Path $output 'installed-start-shortcut.png')) }
+        finally { $canvas.Dispose();$full.Dispose() }
     }
     if ($p.MainWindowTitle -match 'could not be started|Windows App Runtime') { throw 'Bootstrap dependency dialog, not ordinary application window' }
     $logs = Get-ChildItem (Join-Path $data 'logs') -File
