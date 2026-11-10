@@ -31,6 +31,10 @@ The maintainer's Last.fm library shows California Love, Fight Back and Jalebi Ba
 
 ![Last.fm library for frpboy showing California Love, Fight Back and Jalebi Baby as recent scrobbles](docs/screenshots/windows/lastfm-recent-scrobbles.jpg)
 
+## Code signing policy
+
+Windows releases are currently unsigned. We are preparing a SignPath Foundation application, not claiming acceptance or signing coverage. See the [code signing policy](docs/CODE_SIGNING_POLICY.md) and the [current Windows privacy notice](docs/WINDOWS_PRIVACY.md).
+
 ## Product promise
 
 Scrobblix must answer three questions immediately:

@@ -5,6 +5,8 @@
 > **Status:** Draft for review; not a final published legal notice  
 > **Last reviewed:** 2026-10-28
 
+For the current Windows preview, use the implementation-backed [Windows privacy notice](../../docs/WINDOWS_PRIVACY.md). The draft below is historical cross-platform planning material and is not evidence that remote metadata or broker traffic is absent.
+
 ## Summary
 
 Scrobblix processes playback metadata on your Windows device to show current playback and maintain local listening records. If you configure and connect a Last.fm account, it submits eligible playback events and separate Now Playing/Love/Unlove actions to Last.fm. Scrobblix does not intentionally record system audio or microphone input.

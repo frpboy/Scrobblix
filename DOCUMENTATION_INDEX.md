@@ -54,6 +54,13 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 
 The user-facing [Getting Started](Scrobblix-Docs/17_UserDocumentation/GETTING_STARTED.md) and [Installation](Scrobblix-Docs/17_UserDocumentation/INSTALLATION.md) guides describe the beta.9 Setup.exe transition and retained-data limits.
 
+## Signing and Windows privacy
+
+| File | Purpose |
+|---|---|
+| [Code signing policy](docs/CODE_SIGNING_POLICY.md) | Proposed Foundation route, unconfirmed human roles/MFA and honest unsigned status. |
+| [Windows privacy notice](docs/WINDOWS_PRIVACY.md) | Current Windows local storage, auth broker, metadata/artwork requests, retention and control limits. |
+
 ## Supporting Markdown guides
 
 | File | Purpose |
