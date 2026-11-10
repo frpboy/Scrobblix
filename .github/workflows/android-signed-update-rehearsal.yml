@@ -1,26 +1,52 @@
-name: Disposable certificate Android update rehearsal
+name: Exact signed Android alpha fresh install and cold start
 on:
   workflow_dispatch:
-    inputs:
-      approved_rehearsal:
-        description: 'Reviewed isolated disposable-certificate rehearsal only, no owner key or account'
-        type: boolean
-        default: false
 permissions:
   contents: read
+concurrency:
+  group: scrobblix-alpha1-exact-install-20261110
+  cancel-in-progress: false
 jobs:
-  signed-update:
-    if: inputs.approved_rehearsal
+  exact-signed-install:
+    if: >-
+      github.repository == 'frpboy/Scrobblix' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/qa/android-alpha1-install-20261110' &&
+      github.run_attempt == 1
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         api: [26, 36]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Disposable certificate rehearsal only
+          fetch-depth: 0
+      - name: Verify exact reviewed source and harness
         shell: bash
-        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python qa/alpha1-install/closure.py verify
+          test "$(gh api repos/frpboy/Scrobblix/commits/main --jq .sha)" = 67422ae7bba6b7e3a38de5bcc0a395b6151db5d5
+          git diff --exit-code acf3d1bfc7c395bedff3a854b05e1b6be870b50e HEAD -- . ':(exclude)qa/alpha1-install/**' ':(exclude).github/workflows/android-signed-update-rehearsal.yml'
+      - name: Retrieve exact signed candidate from owner draft, no rebuild or signing key
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python qa/alpha1-install/download.py
+      - name: Fresh isolated emulator install and cold start only
+        shell: bash
+        run: bash qa/alpha1-install/run.sh '${{ matrix.api }}'
+      - name: Preserve only typed receipt and synthetic app pixels
+        if: success()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: exact-alpha1-install-api${{ matrix.api }}
+          path: ${{ runner.temp }}/alpha1-evidence/
+          retention-days: 7
+          if-no-files-found: error

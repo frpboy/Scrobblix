@@ -1,0 +1,6 @@
+{
+  ".github/workflows/android-signed-update-rehearsal.yml": "357430e276cfc74d4cccb5d35c1b806ad893294b00a3f791a03d9929677346fa",
+  "qa/alpha1-install/closure.py": "b6c3cd31f73629713c722e1ed9327c173fad63b01d49e4624bc3800bb68cd8fd",
+  "qa/alpha1-install/download.py": "af47f9078b8ecb3428858df9b5d19f140ce26d575b426c9aad2b08c1bd950627",
+  "qa/alpha1-install/run.sh": "3c8ef92bf49c444fbd75f69d4e3ac6f4f71f4e4b30a58c1229770701ca683fbe"
+}
