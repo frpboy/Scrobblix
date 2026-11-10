@@ -19,7 +19,10 @@ cleanup() {
   fi
 }
 trap cleanup EXIT
-build_tools=$(find "$ANDROID_HOME/build-tools" -mindepth 1 -maxdepth 1 -type d | sort -V | tail -1)
+# Pin the verifier output contract used by the exact signer assertion below.
+# Build-tools 37 changes signer labels; never auto-select a different parser schema.
+build_tools="$ANDROID_HOME/build-tools/36.0.0"
+test -x "$build_tools/apksigner" && test -x "$build_tools/aapt"
 "$build_tools/apksigner" verify --verbose --print-certs "$apk" > "$private/signature.txt"
 "$build_tools/aapt" dump badging "$apk" > "$private/package.txt"
 python - "$private" <<'PY'
