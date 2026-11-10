@@ -1,6 +1,6 @@
 # Connect Last.fm
 
-> **Status:** Current Windows beta.9 connection guide; reviewed 2026-11-10
+> **Status:** Current Windows beta.10 connection guide; reviewed 2026-11-10
 
 ## Configure and authorize
 
