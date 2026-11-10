@@ -15,6 +15,8 @@ function Run-Setup([string]$Exe,[string]$Name,[switch]$ExpectBlocked) {
     if (-not $p.WaitForExit(120000)) { $p.Kill(); throw 'Installer timed out' }
     if ($ExpectBlocked) { if ($p.ExitCode -eq 0) { throw 'Running-app safety gate failed' } }
     elseif ($p.ExitCode -ne 0) { throw "Installer failed $Name exit=$($p.ExitCode)" }
+    if (-not $ExpectBlocked -and (Get-Process Scrobblix.Desktop -ErrorAction SilentlyContinue)) { throw 'Silent setup unexpectedly launched app' }
+    if ((Get-Content $log -Raw) -match 'Filename: https://github.com/frpboy/Scrobblix') { throw 'Silent setup unexpectedly opened browser' }
 }
 function Check-Payload {
     Get-ChildItem $PayloadDirectory -File -Recurse | ForEach-Object {
@@ -24,7 +26,9 @@ function Check-Payload {
     }
     if (-not (Test-Path $registry) -or -not (Test-Path $shortcut)) { throw 'Registration/Start menu shortcut missing' }
     $shell = New-Object -ComObject WScript.Shell
-    if ($shell.CreateShortcut($shortcut).TargetPath -ine (Join-Path $install 'desktop/Scrobblix.Desktop.exe')) { throw 'Shortcut target incorrect' }
+    $link = $shell.CreateShortcut($shortcut)
+    if ($link.TargetPath -ine (Join-Path $install 'desktop/Scrobblix.Desktop.exe')) { throw 'Shortcut target incorrect' }
+    if ($link.IconLocation.Split(',')[0] -ine (Join-Path $install 'desktop/Assets/scrobblix.ico')) { throw 'Shortcut icon binding incorrect' }
 }
 # Capture the real setup wizard without completing it, then close only that process.
 Add-Type -AssemblyName System.Drawing
@@ -57,7 +61,11 @@ try {
 Run-Setup $Installer 'fresh-install'
 Check-Payload
 ./scripts/test-ordinary-startup.ps1 -AppDirectory (Join-Path $install 'desktop') -RequirePrivateRuntime
+Copy-Item "$env:RUNNER_TEMP/scrobblix-ordinary-startup/*.png" $output
 Copy-Item "$env:RUNNER_TEMP/scrobblix-ordinary-startup/ordinary-startup.png" "$output/installed-app.png"
+# Render the actual published PE icon, not just the source ICO.
+$exeIcon = [Drawing.Icon]::ExtractAssociatedIcon((Join-Path $install 'desktop/Scrobblix.Desktop.exe'))
+try { $iconBitmap = $exeIcon.ToBitmap(); try { $iconBitmap.Save((Join-Path $output 'installed-exe-icon.png')) } finally { $iconBitmap.Dispose() } } finally { $exeIcon.Dispose() }
 Move-Item $data (Join-Path $env:RUNNER_TEMP 'scrobblix-installer-fresh-profile-preserved')
 python scripts/test-installer-profile.py
 if ($LASTEXITCODE -ne 0) { throw 'Synthetic profile fixture failed' }
@@ -97,5 +105,11 @@ Run-Setup (Join-Path $install 'unins000.exe') 'final-uninstall'
 if ((Test-Path (Join-Path $install 'desktop/Scrobblix.Desktop.exe')) -or (Test-Path $shortcut) -or (Test-Path $registry) -or -not (Test-Path $sentinel)) { throw 'Uninstall removal/retention policy failed' }
 python scripts/test-legacy-profile.py verify
 if ($LASTEXITCODE -ne 0) { throw 'Uninstall changed profile or held Unknown rows' }
+# Matrix uses only this disposable runner and its synthetic retained profile.
+python scripts/test-installer-finish.py $Installer $output
+if ($LASTEXITCODE -ne 0) { throw 'Real Finish wizard matrix failed' }
+python scripts/test-legacy-profile.py verify
+if ($LASTEXITCODE -ne 0) { throw 'Finish choices changed synthetic legacy records' }
+Run-Setup (Join-Path $install 'unins000.exe') 'post-matrix-uninstall'
 Get-FileHash $Installer | Format-List | Out-String | Set-Content "$output/tested-installer-sha256.txt"
 'PASS actual wizard, exact installed bytes, Start shortcut/registration, fresh private-runtime launch, beta8-payload baseline to current installer upgrade, running-app gate, unchanged synthetic legacy history/account/queue/loved/two Unknown rows, program-only uninstall and unrelated-file retention. Credential Locker API untouched by installer; no live provider or real-user credential test.' | Set-Content "$output/result.txt"

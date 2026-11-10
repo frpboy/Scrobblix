@@ -33,6 +33,8 @@ OutputBaseFilename=Scrobblix-Windows-x64-Setup
 Compression=lzma2
 SolidCompression=yes
 WizardStyle=modern
+SetupIconFile=..\..\src\Scrobblix.Desktop\Assets\scrobblix.ico
+DisableFinishedPage=no
 UninstallDisplayIcon={app}\desktop\Scrobblix.Desktop.exe
 CloseApplications=no
 RestartApplications=no
@@ -43,7 +45,10 @@ InfoBeforeFile=InstallerNotice.txt
 [Files]
 Source: "{#PayloadDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 [Icons]
-Name: "{userprograms}\Scrobblix"; Filename: "{app}\desktop\Scrobblix.Desktop.exe"; WorkingDir: "{app}\desktop"
+Name: "{userprograms}\Scrobblix"; Filename: "{app}\desktop\Scrobblix.Desktop.exe"; WorkingDir: "{app}\desktop"; IconFilename: "{app}\desktop\Assets\scrobblix.ico"
+[Run]
+Filename: "{app}\desktop\Scrobblix.Desktop.exe"; WorkingDir: "{app}\desktop"; Description: "Run Scrobblix"; Flags: nowait postinstall skipifsilent
+Filename: "https://github.com/frpboy/Scrobblix"; Description: "Visit GitHub"; Flags: shellexec nowait postinstall skipifsilent unchecked
 [Code]
 var
   AppGate: LongWord;
@@ -89,6 +94,11 @@ begin
     Result := 'This preview installs only to your local Programs\Scrobblix folder. No custom directory is supported.'
   else if not AcquireAppGate() then
     Result := 'Scrobblix is running or its safety gate could not be acquired. Exit Scrobblix from its system tray, then try again. No process will be force-closed.';
+end;
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  { All payload writes are complete before optional post-install launch. }
+  if CurStep = ssPostInstall then ReleaseAppGate();
 end;
 procedure DeinitializeSetup();
 begin ReleaseAppGate(); end;

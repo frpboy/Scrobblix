@@ -62,6 +62,21 @@ try {
         $graphics.CopyFromScreen($rect.Left,$rect.Top,0,0,$bitmap.Size)
         $bitmap.Save((Join-Path $output 'ordinary-startup.png'),[Drawing.Imaging.ImageFormat]::Png)
     } finally { $graphics.Dispose();$bitmap.Dispose() }
+    if ($AppDirectory -like '*Programs*Scrobblix*') {
+        $bounds = [Windows.Forms.Screen]::PrimaryScreen.Bounds
+        $full = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
+        $canvas = [Drawing.Graphics]::FromImage($full)
+        try { $canvas.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$full.Size); $full.Save((Join-Path $output 'installed-taskbar.png')) }
+        finally { $canvas.Dispose();$full.Dispose() }
+        [Windows.Forms.SendKeys]::SendWait('^{ESC}')
+        Start-Sleep -Milliseconds 800
+        [Windows.Forms.SendKeys]::SendWait('Scrobblix')
+        Start-Sleep -Seconds 2
+        $full = New-Object Drawing.Bitmap($bounds.Width,$bounds.Height)
+        $canvas = [Drawing.Graphics]::FromImage($full)
+        try { $canvas.CopyFromScreen($bounds.Left,$bounds.Top,0,0,$full.Size); $full.Save((Join-Path $output 'installed-start-search.png')) }
+        finally { $canvas.Dispose();$full.Dispose();[Windows.Forms.SendKeys]::SendWait('{ESC}') }
+    }
     if ($p.MainWindowTitle -match 'could not be started|Windows App Runtime') { throw 'Bootstrap dependency dialog, not ordinary application window' }
     $logs = Get-ChildItem (Join-Path $data 'logs') -File
     if (-not $logs) { throw 'No ordinary app startup logs' }
