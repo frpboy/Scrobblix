@@ -68,17 +68,40 @@ sleep 10
 [[ $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') = "$pid" ]]
 adb shell uiautomator dump /sdcard/window.xml >/dev/null
 adb pull /sdcard/window.xml "$private/window.xml" >/dev/null
+# Admission text/account checks remain strict before any diagnostic pixels leave.
 python - "$private/window.xml" <<'PY'
 import xml.etree.ElementTree as E,sys
 nodes=list(E.parse(sys.argv[1]).iter('node'))
 texts={n.get('text') for n in nodes if n.get('package')=='com.frpboy.scrobblix'}
 assert {'Scrobblix','Tracking is paused','Media access is off'}<=texts
 assert not any('Last.fm connected:' in (t or '') for t in texts)
-switches=[n for n in nodes if n.get('package')=='com.frpboy.scrobblix' and n.get('class')=='android.widget.Switch']
-assert len(switches)==1 and switches[0].get('checked')=='false'
 PY
-# Only fresh app pixels, not XML/logs/private directories, leave the disposable guest.
+adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+# Only the fresh synthetic offline app, never raw logs/XML or other packages.
+python - "$private/window.xml" "$evidence" <<'PY'
+import xml.etree.ElementTree as E,sys,pathlib,json
+p=pathlib.Path(sys.argv[2]);root=E.Element('synthetic-app-accessibility',package='com.frpboy.scrobblix')
+allowed={'text','class','package','checkable','checked','enabled','clickable','bounds','scrollable','selected'}
+for n in E.parse(sys.argv[1]).iter('node'):
+    if n.get('package')=='com.frpboy.scrobblix':
+        E.SubElement(root,'node',{k:v for k,v in n.attrib.items() if k in allowed})
+E.ElementTree(root).write(p/'app-only-accessibility.xml',encoding='utf-8',xml_declaration=True)
+(p/'diagnostic.json').write_text(json.dumps({'status':'VISUAL_AND_SWITCH_REVIEW_PENDING','fresh_synthetic_offline_guest':True,'not_a_pass_receipt':True})+'\n')
+PY
 adb exec-out screencap -p > "$evidence/actual-app.png"
+# Compose ui1.12.1 Role.Switch exposes android.view.View plus ToggleableState.
+# App Listen source has exactly one such toggle; FilterChips use checkbox role.
+python - "$evidence/app-only-accessibility.xml" <<'PY'
+import xml.etree.ElementTree as E,sys,re
+nodes=list(E.parse(sys.argv[1]).iter('node'))
+texts={n.get('text') for n in nodes if n.get('package')=='com.frpboy.scrobblix'}
+assert 'Track listening' in texts
+switches=[n for n in nodes if n.get('package')=='com.frpboy.scrobblix' and n.get('class')=='android.view.View' and n.get('checkable')=='true']
+assert len(switches)==1 and switches[0].get('checked')=='false'
+bounds=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',switches[0].get('bounds',''))
+assert bounds and int(bounds[3])>int(bounds[1]) and int(bounds[4])>int(bounds[2])
+PY
 adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
 adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
 adb shell am force-stop com.frpboy.scrobblix

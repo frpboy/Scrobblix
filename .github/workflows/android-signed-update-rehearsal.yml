@@ -47,11 +47,11 @@ jobs:
         if: always()
         shell: bash
         run: rm -f "$RUNNER_TEMP/alpha1-exact.apk"
-      - name: Preserve only typed receipt and synthetic app pixels
-        if: success()
+      - name: Preserve bounded synthetic app diagnostics, never imply pass
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: exact-alpha1-install-api${{ matrix.api }}
           path: ${{ runner.temp }}/alpha1-evidence/
           retention-days: 7
-          if-no-files-found: error
+          if-no-files-found: warn

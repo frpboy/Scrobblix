@@ -1,7 +1,7 @@
 {
-  ".github/workflows/android-signed-update-rehearsal.yml": "45a53126a89be0731796e69185d5ca0077bd64b8099a66d8bbabff2057dc6445",
-  "qa/alpha1-install/candidate.apk.gpg": "40501a5e63175c5c6bac86b09db6428fb22264b883839cedeb2cff44d2e8c3a0",
+  ".github/workflows/android-signed-update-rehearsal.yml": "3727fcff34cb52097542e54550bbbe8110833a5679ac607c49f634b5505afe2c",
+  "qa/alpha1-install/candidate.apk.gpg": "025e1de44b42eda14585c3d1678df3c15f0a227f8917dd7553d2f03642f30f9a",
   "qa/alpha1-install/closure.py": "f888c4d855457f759387084e31745608181daceb961849f8b3dcab0292044751",
-  "qa/alpha1-install/decrypt.py": "154ccddf34a13d6f33d761934b3bb1560aa56b971ea707cfce66975db670e740",
-  "qa/alpha1-install/run.sh": "c2c7d60696387d4bd9fd14b926d1edcb19e7f4849de08954b386d0c954e1a75f"
+  "qa/alpha1-install/decrypt.py": "f2367ac767da9fefdc7743db010dbab0eadc45373a8b7ebc3f86a6ed85d04d3b",
+  "qa/alpha1-install/run.sh": "60746b16a5f7aba794cf7e7b7ce563d83ecb886e4ac961dfee401ad47d08e828"
 }
