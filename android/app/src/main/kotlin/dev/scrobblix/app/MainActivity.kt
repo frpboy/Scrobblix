@@ -274,7 +274,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                 } catch(cancelled:kotlinx.coroutines.CancellationException) { browserAuthorization=null;throw cancelled }
                                 catch(failure:LastFmApi.BrowserStartFailure) { browserAuthorization=null;failure.diagnostic.also {browserStatus=it} }
                                 catch(_:Exception) { browserAuthorization=null;"Authorization response could not be used. No connection is confirmed; local history and queue are unchanged.".also {browserStatus=it} }
-                                busy=false
+                                finally { busy=false }
                             }
                         }) { Text("Authorize in browser") }
                         if(browserAuthorization!=null) Text("Browser approval is only the first step. After approving, return here and tap Finish browser connection. Tracking remains under your control.")

@@ -17,4 +17,17 @@ class MediaCandidateTest {
         assertEquals("incomplete",selectMediaCandidate(listOf(candidate("incomplete",null,null))))
         assertNull(selectMediaCandidate(emptyList<MediaCandidate<String>>()))
     }
+    @Test fun brokenControllerDoesNotHideValidSessionAndCancellationStillPropagates() {
+        for(failure in listOf(SecurityException("private"),ClassCastException("private"),IllegalArgumentException("private"))) {
+            val values=readMediaCandidates(listOf("broken","music")) { name ->
+                if(name=="broken") throw failure
+                candidate(name)
+            }
+            assertEquals("music",selectMediaCandidate(values))
+        }
+        try {
+            readMediaCandidates<String,String>(listOf("cancel")) { _:String -> throw java.util.concurrent.CancellationException() }
+            fail("Cancellation must propagate")
+        } catch(_:java.util.concurrent.CancellationException) { }
+    }
 }

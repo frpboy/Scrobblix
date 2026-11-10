@@ -11,6 +11,7 @@ import android.media.session.PlaybackState
 import android.os.Build
 import dev.scrobblix.core.MediaCandidate
 import dev.scrobblix.core.selectMediaCandidate
+import dev.scrobblix.core.readMediaCandidates
 
 sealed interface MediaReadResult {
     data object AccessRequired : MediaReadResult
@@ -38,7 +39,7 @@ class MediaSessionReader(private val context: Context, private val listener: Com
             val available = context.getSystemService(MediaSessionManager::class.java).getActiveSessions(listener)
             onDiscovered(available.map { it.packageName }.toSet())
             val sessions=available.filter { isAllowed(it.packageName) }
-            val candidates=sessions.map { controller ->
+            val candidates=readMediaCandidates(sessions) { controller ->
                 val reading=snapshot(controller)
                 MediaCandidate(controller to reading,reading.artist,reading.title,reading.state==PlaybackState.STATE_PLAYING)
             }
