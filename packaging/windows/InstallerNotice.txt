@@ -1,0 +1,11 @@
+Scrobblix Windows - unsigned installer preview
+
+Installs for this Windows user only. No administrator rights, automatic startup, browser extension registration or runtime downloads are requested. Windows 11 build 26100 or newer, x64-compatible, is required by this build.
+
+Exit Scrobblix from the system tray before installing, updating or uninstalling. The installer will not force-close it. Start it from the Start menu after setup finishes.
+
+Your local history and queue remain in %LOCALAPPDATA%\Scrobblix. Credentials remain in Windows Credential Locker. Setup and uninstall do not clear those locations or retry any submissions. Uninstall removes installed program files and the Start menu shortcut, not listening history or account credentials.
+
+An older ZIP folder is left intact. Keep it until this installation is checked, and do not run two versions together. Browser companion files are included but optional browser installation/registration remains manual.
+
+This preview is unsigned. Do not bypass Windows security protections. Signing and real-PC behavior remain separate qualification steps.
