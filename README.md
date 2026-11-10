@@ -25,6 +25,12 @@ The Sponsor entry expands to Buy Me a Coffee and Patreon.
 
 ![Scrobblix Windows settings for notifications, privacy and local backups](docs/screenshots/windows/settings-privacy-storage.jpg)
 
+### Last.fm recent scrobbles
+
+The maintainer's Last.fm library shows California Love, Fight Back and Jalebi Baby among today's scrobbles. This is a cropped provider-side view shared on 10 November 2026, not a claim that every local queue item was delivered. Browser tabs, bookmarks and other browser chrome have been removed.
+
+![Last.fm library for frpboy showing California Love, Fight Back and Jalebi Baby as recent scrobbles](docs/screenshots/windows/lastfm-recent-scrobbles.jpg)
+
 ## Product promise
 
 Scrobblix must answer three questions immediately:
