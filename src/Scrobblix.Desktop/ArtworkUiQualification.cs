@@ -68,6 +68,19 @@ public sealed partial class MainWindow
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, valid);await Idle();
         Assert(CurrentTrackArtwork.Source is not null, "Could not reload after null fallback");
         await Capture("recovered-valid");
+        // Synthetic UI states only. No broker, session, browser launch or provider traffic.
+        ShowDestination("settings");
+        SetLastFmCredentialsStatus("Connect through Last.fm in your browser. No developer API keys are needed. The Scrobblix service handles session keys and track details in transit; local history stays on this device.");
+        SetLastFmReadyToConnect();
+        LastFmConnectionPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        Assert(!OwnLastFmApiExpander.IsExpanded && ConnectLastFmButton.IsEnabled, "Normal consent UI must not require developer credentials");
+        await Capture("broker-consent-ready");
+        SetLastFmAuthorizationWaiting();
+        Assert(!ConnectLastFmButton.IsEnabled && CompleteLastFmButton.IsEnabled, "Approval completion controls invalid");
+        await Capture("broker-consent-waiting");
+        OwnLastFmApiExpander.IsExpanded = true;
+        LastFmConnectionPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        await Capture("broker-advanced-own-api");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
         // Closing the last WinUI window can end the process before an awaited continuation.
         // Persist completed assertions/captures first; process exit is checked by the runner.

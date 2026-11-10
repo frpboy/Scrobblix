@@ -79,6 +79,10 @@ jobs:
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: node scripts/test-ci-concurrency.mjs
 
+      - name: Validate bounded Last.fm broker contracts (synthetic only)
+        working-directory: server/lastfm-broker
+        run: npm test
+
       - name: Restore .NET solution
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet restore Scrobblix.slnx
@@ -86,6 +90,9 @@ jobs:
       - name: Build .NET solution
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
+
+      - name: Validate native broker client contracts (synthetic only)
+        run: dotnet run --project tests/Scrobblix.Broker.Tests/Scrobblix.Broker.Tests.csproj --configuration Release --no-build
 
       - name: Publish synthetic pipe-authorization test client
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
