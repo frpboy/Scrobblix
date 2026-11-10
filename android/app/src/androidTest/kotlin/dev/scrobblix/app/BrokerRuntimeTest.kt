@@ -82,6 +82,39 @@ class BrokerRuntimeTest {
         }
     }
 
+    @Test fun browserStartDiagnosticsNeverEchoProviderTextOrSecrets() {
+        val sentinel="private-provider-payload"
+        for(status in listOf(429,502,503)) {
+            val api=LastFmApi("","","https://broker.invalid/v1/lastfm") {
+                status to JSONObject().put("broker_error",sentinel).put("token",sentinel)
+            }
+            try { api.beginBrowserAuthorization();fail("must reject") }
+            catch(f:LastFmApi.BrowserStartFailure) {
+                assertEquals("Connection service could not start authorization (HTTP $status).",f.diagnostic)
+                assertFalse(f.diagnostic.contains(sentinel))
+            }
+        }
+        val rejected=LastFmApi("","","https://broker.invalid/v1/lastfm") { 403 to JSONObject().put("error",10).put("message",sentinel) }
+        try { rejected.beginBrowserAuthorization();fail("must reject") }
+        catch(f:LastFmApi.BrowserStartFailure) { assertEquals("Last.fm rejected authorization start (HTTP 403, API code 10).",f.diagnostic) }
+        // A plausible success payload never overrides a contradictory error field.
+        for(error in listOf<Any>(0,-1,1000,"private-provider-payload",JSONObject.NULL,10.5)) {
+            val token="a".repeat(32)
+            val mixed=LastFmApi("","","https://broker.invalid/v1/lastfm") {
+                200 to JSONObject().put("error",error).put("message",sentinel).put("token",token)
+                    .put("authorizationUrl","https://www.last.fm/api/auth/?api_key="+"b".repeat(32)+"&token="+token)
+            }
+            try { mixed.beginBrowserAuthorization();fail("must reject mixed response") }
+            catch(f:LastFmApi.BrowserStartFailure) {
+                assertEquals("Last.fm authorization response indicated an error (HTTP 200).",f.diagnostic)
+                assertFalse(f.diagnostic.contains(sentinel));assertFalse(f.diagnostic.contains(token))
+            }
+        }
+        val timeout=LastFmApi("","","https://broker.invalid/v1/lastfm") { throw java.net.SocketTimeoutException(sentinel) }
+        try { timeout.beginBrowserAuthorization();fail("must reject") }
+        catch(f:LastFmApi.BrowserStartFailure) { assertFalse(f.diagnostic.contains(sentinel));assertTrue(f.diagnostic.contains("timed out")) }
+    }
+
     @Test fun freshConfigurationUsesPinnedBrokerWhileSavedOwnerCredentialsKeepDirectRoute() {
         val empty="" to ""
         assertEquals("https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm",LastFmApi.DEFAULT_BROKER_ENDPOINT)
