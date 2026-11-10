@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 const read = p => readFileSync(p, 'utf8');
 const setup = read('packaging/windows/Scrobblix.iss');
 const check = read('scripts/test-windows-installer.ps1');
-for (const text of ['PrivilegesRequired=lowest', 'CloseApplications=no', 'RestartApplications=no', 'UsePreviousAppDir=no', 'DefaultDirName={localappdata}\\Programs\\Scrobblix', 'AcquireAppGate', 'CreateSemaphoreW', 'WaitForSingleObject(Handle, 0)', 'UTF8Encode(ExpandConstant(\'{userprofile}\'))', 'ReleaseAppGate', 'FrpBoy.Scrobblix.Windows']) assert.ok(setup.includes(text), `Installer safety contract missing ${text}`);
+for (const text of ['PrivilegesRequired=lowest', 'CloseApplications=no', 'RestartApplications=no', 'UsePreviousAppDir=no', 'DefaultDirName={localappdata}\\Programs\\Scrobblix', 'AcquireAppGate', 'CreateSemaphoreW', 'WaitForSingleObject(Handle, 0)', 'UTF8Encode(Profile)', 'ReleaseAppGate', 'FrpBoy.Scrobblix.Windows']) assert.ok(setup.includes(text), `Installer safety contract missing ${text}`);
 for (const prohibited of ['[UninstallDelete]', '[InstallDelete]', 'DelTree(', 'RegDelete', 'taskkill', 'TerminateProcess', 'runas', 'PasswordVault', 'SCROBBLIX_LASTFM', 'HKLM', '[Run]']) assert.ok(!setup.includes(prohibited), `Installer must not add ${prohibited}`);
 assert.ok(setup.includes('No process will be force-closed') && setup.includes('CompareText(RemoveBackslashUnlessRoot'), 'App safety gate and fixed-directory policy are required');
 for (const item of ['Check-Payload', 'blocked-upgrade', 'blocked-uninstall', 'upgraded-app.png', 'final-uninstall', 'test-legacy-profile.py verify', '72f34ca18b8fa7db1671aa1ed04e95bb571136d8f857933c1a21bac93ef418c4']) assert.ok(check.includes(item), `Qualification missing ${item}`);

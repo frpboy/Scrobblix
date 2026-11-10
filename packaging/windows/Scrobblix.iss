@@ -56,11 +56,13 @@ function ReleaseSemaphore(Handle: LongWord; ReleaseCount: Integer; PreviousCount
 function CloseHandle(Handle: LongWord): Boolean;
   external 'CloseHandle@kernel32.dll stdcall';
 function AcquireAppGate(): Boolean;
-var GateName: String; Handle: LongWord;
+var GateName, Profile: String; Handle: LongWord;
 begin
   Result := AppGate <> 0;
   if Result then exit;
-  GateName := 'Local\Scrobblix.' + Lowercase(GetSHA256OfString(UTF8Encode(ExpandConstant('{userprofile}'))));
+  Profile := ExpandConstant('{userprofile}');
+  if Trim(Profile) = '' then exit;
+  GateName := 'Local\Scrobblix.' + Lowercase(GetSHA256OfString(UTF8Encode(Profile)));
   Handle := CreateSemaphore(0, 1, 1, GateName);
   if Handle = 0 then exit;
   if WaitForSingleObject(Handle, 0) = 0 then begin
