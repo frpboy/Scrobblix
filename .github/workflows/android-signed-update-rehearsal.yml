@@ -4,15 +4,16 @@ on:
 permissions:
   contents: read
 concurrency:
-  group: scrobblix-alpha1-exact-install-20261110
+  group: scrobblix-alpha1-encrypted-install-20261110
   cancel-in-progress: false
 jobs:
   exact-signed-install:
     if: >-
       github.repository == 'frpboy/Scrobblix' &&
       github.event.repository.private == false &&
-      github.ref == 'refs/heads/qa/android-alpha1-install-20261110' &&
+      github.ref == 'refs/heads/qa/android-alpha1-encrypted-20261110' &&
       github.run_attempt == 1
+    environment: scrobblix-alpha1-transport-20261110
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -34,14 +35,18 @@ jobs:
           python qa/alpha1-install/closure.py verify
           test "$(gh api repos/frpboy/Scrobblix/commits/main --jq .sha)" = 67422ae7bba6b7e3a38de5bcc0a395b6151db5d5
           git diff --exit-code acf3d1bfc7c395bedff3a854b05e1b6be870b50e HEAD -- . ':(exclude)qa/alpha1-install/**' ':(exclude).github/workflows/android-signed-update-rehearsal.yml'
-      - name: Retrieve exact signed candidate from owner draft, no rebuild or signing key
+      - name: Decrypt exact signed candidate, no signing key or draft access
         shell: bash
         env:
-          GH_TOKEN: ${{ github.token }}
-        run: python qa/alpha1-install/download.py
+          SCROBBLIX_ALPHA1_TRANSPORT: ${{ secrets.SCROBBLIX_ALPHA1_TRANSPORT }}
+        run: python qa/alpha1-install/decrypt.py
       - name: Fresh isolated emulator install and cold start only
         shell: bash
         run: bash qa/alpha1-install/run.sh '${{ matrix.api }}'
+      - name: Remove temporary plaintext APK
+        if: always()
+        shell: bash
+        run: rm -f "$RUNNER_TEMP/alpha1-exact.apk"
       - name: Preserve only typed receipt and synthetic app pixels
         if: success()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2

@@ -36,9 +36,12 @@ elif sys.argv[1:] == ['verify']:
         # Never hash normalized arbitrary text. Require byte equality to the exact
         # reviewed Git blob or its sole supported checkout transform. A lone CR,
         # mixed line endings, whitespace/content edits and extra files fail closed.
-        assert b'\r' not in committed, 'reviewed_blob_must_be_lf_only'
         actual = path.read_bytes()
-        assert actual in (committed, committed.replace(b'\n', b'\r\n')), 'checkout_bytes_mismatch'
+        if name.endswith('.gpg'):
+            assert actual == committed, 'binary_checkout_bytes_mismatch'
+        else:
+            assert b'\r' not in committed, 'reviewed_blob_must_be_lf_only'
+            assert actual in (committed, committed.replace(b'\n', b'\r\n')), 'checkout_bytes_mismatch'
     print('exact reviewed Git blobs and LF/CRLF-only checkout bytes verified')
 else:
     raise SystemExit('use write or verify')
