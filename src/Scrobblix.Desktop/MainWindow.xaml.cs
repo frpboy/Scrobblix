@@ -610,16 +610,55 @@ public sealed partial class MainWindow : Window
 
     public void SetHistoryPage(IReadOnlyList<RecentPlay> plays)
     {
-        _historyRecords = plays;
-        RenderHistory();
+        var displayChanged = !HistoryRowsMatch(_historyRecords, plays);
+        _historyRecords = plays; // Search/export always retain the latest full 500-record snapshot.
+        if (!displayChanged) return;
+        _historyNeedsRender = true;
+        if (HistoryView.Visibility == Visibility.Visible) RenderHistory();
     }
 
-    private void HistorySearchInput_TextChanged(object sender, TextChangedEventArgs args) => RenderHistory();
+    private bool _historyNeedsRender = true;
+
+    private static bool HistoryRowsMatch(IReadOnlyList<RecentPlay> previous, IReadOnlyList<RecentPlay> current)
+    {
+        if (previous.Count != current.Count) return false;
+        for (var index = 0; index < previous.Count; index++)
+        {
+            var left = previous[index];
+            var right = current[index];
+            // Only fields displayed by AddPlayRow. Playback counters still refresh in the export model.
+            if (left.PlayId != right.PlayId || left.Artist != right.Artist || left.Title != right.Title
+                || left.Album != right.Album || left.AlbumArtist != right.AlbumArtist
+                || left.TrackNumber != right.TrackNumber || left.ReleaseYear != right.ReleaseYear
+                || left.ArtworkPath != right.ArtworkPath || (left.EligibleUtc is null) != (right.EligibleUtc is null)) return false;
+        }
+        return true;
+    }
+
+    private void HistorySearchInput_TextChanged(object sender, TextChangedEventArgs args)
+    {
+        _historyNeedsRender = true;
+        if (HistoryView?.Visibility == Visibility.Visible) RenderHistory();
+    }
+
+    private void CancelRetiredHistoryArtwork()
+    {
+        foreach (var row in HistoryList.Children.OfType<StackPanel>())
+        foreach (var frame in row.Children.OfType<Grid>())
+        foreach (var image in frame.Children.OfType<Image>())
+        {
+            if (!_artworkLoads.TryGetValue(image, out var state)) continue;
+            state.Generation++;
+            state.Pending?.Cancel();
+        }
+    }
 
     private void RenderHistory()
     {
         if (HistoryList is null || HistorySearchInput is null || HistoryResultCountText is null) return;
+        CancelRetiredHistoryArtwork();
         HistoryList.Children.Clear();
+        _historyNeedsRender = false;
         var query = HistorySearchInput.Text?.Trim();
         IEnumerable<RecentPlay> filtered = string.IsNullOrWhiteSpace(query)
             ? _historyRecords
@@ -1199,6 +1238,7 @@ public sealed partial class MainWindow : Window
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        if (destination == "history" && _historyNeedsRender) RenderHistory();
     }
 
     public void SetQueueActions(IReadOnlyList<QueueActionSummary> actions)
