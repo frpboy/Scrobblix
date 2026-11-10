@@ -146,3 +146,6 @@ assert.ok(aboutBuild.includes("AssemblyInformationalVersionAttribute") && aboutB
 assert.equal((xaml.match(/Header="Sponsor"/g) ?? []).length, 1, "About must have a single Sponsor entry.");
 for (const url of ["https://github.com/frpboy/Scrobblix", "https://github.com/frpboy/Scrobblix/releases", "https://t.me/FRPboy_Projects", "https://www.buymeacoffee.com/frpboy", "https://www.patreon.com/c/FrpBoy"]) assert.ok(xaml.includes(`NavigateUri="${url}"`), `About link missing ${url}`);
 assert.ok(xaml.includes("Apache License 2.0") && !xaml.includes("Based on Seal"), "Keep Scrobblix's own license and credits.");
+// Queue copy must not misreport delivery as disabled for an already connected account.
+assert.ok(!xaml.includes("Last.fm delivery remains off until an account is configured."), "Queue must not unconditionally claim delivery is disabled.");
+assert.ok(xaml.includes('x:Name="QueueConnectionGuidanceText"') && xaml.includes("Manage your Last.fm connection in Settings. Provider outcomes are shown per action below; local history is kept independently."), "Queue guidance must distinguish connection management, action outcomes and local history.");

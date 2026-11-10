@@ -81,8 +81,23 @@ public sealed partial class MainWindow
         OwnLastFmApiExpander.IsExpanded = true;
         LastFmConnectionPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
         await Capture("broker-advanced-own-api");
+        // A connection label must not turn the neutral Queue guidance into a delivery claim.
+        var queueGuidance = QueueConnectionGuidanceText.Text;
+        Assert(queueGuidance.Contains("Provider outcomes are shown per action below")
+            && !queueGuidance.Contains("delivery remains off"), "Queue guidance misreports delivery");
+        SetLastFmConnected("synthetic-user", "synthetic-account");
+        ShowDestination("queue");
+        Assert(QueueConnectionGuidanceText.Text == queueGuidance, "Connected queue guidance changed");
+        await Capture("queue-connected-guidance");
+        SetLastFmReadyToConnect();
+        Assert(QueueConnectionGuidanceText.Text == queueGuidance, "Disconnected queue guidance changed");
+        await Capture("queue-disconnected-guidance");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
-        ShowDestination("about");
+        // RenderTargetBitmap does not include the compositor's window backdrop.
+        // Use an explicit light fixture surface so transparent pixels do not hide black text.
+        RootLayout.RequestedTheme = ElementTheme.Light;
+        RootLayout.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        SelectDestination("about");
         Assert(AboutView.Visibility == Visibility.Visible && SettingsView.Visibility == Visibility.Collapsed,
             "About navigation left another page visible");
         Assert(AboutVersionText.Text.StartsWith("Version: ", StringComparison.Ordinal)
@@ -91,6 +106,8 @@ public sealed partial class MainWindow
         AboutSponsorExpander.IsExpanded = true;
         AboutSponsorExpander.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
         await Capture("about-sponsor-credits");
+        AboutCreditsPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        await Capture("about-license-credits");
         // Closing the last WinUI window can end the process before an awaited continuation.
         // Persist completed assertions/captures first; process exit is checked by the runner.
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI states and captures; close requested during pending load");

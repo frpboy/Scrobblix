@@ -216,7 +216,7 @@
                     <StackPanel Spacing="8">
                         <TextBlock x:Name="QueuePageStateText" Text="Loading queue status" Style="{StaticResource SubtitleTextBlockStyle}" />
                         <TextBlock x:Name="QueuePageDetailText" Text="Reading durable provider actions." TextWrapping="Wrap" />
-                        <TextBlock Text="Last.fm delivery remains off until an account is configured. Local history is kept independently." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <TextBlock x:Name="QueueConnectionGuidanceText" Text="Manage your Last.fm connection in Settings. Provider outcomes are shown per action below; local history is kept independently." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <TextBlock Text="Recent provider actions" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,16,0,0" />
                         <TextBlock x:Name="QueuePageActionFeedbackText" Text="Actions can be retried or cancelled when their state permits." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
                         <StackPanel x:Name="QueuePageActionList" Spacing="10">
@@ -398,7 +398,7 @@
             <HyperlinkButton Content="Patreon" NavigateUri="https://www.patreon.com/c/FrpBoy" HorizontalAlignment="Left" />
             </StackPanel>
             </Expander>
-            <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
+            <Border x:Name="AboutCreditsPanel" Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">
             <StackPanel Spacing="8">
             <TextBlock Text="License and credits" Style="{StaticResource SubtitleTextBlockStyle}" />
             <TextBlock Text="Scrobblix is licensed under Apache License 2.0. Third-party components retain their own licenses and attribution." TextWrapping="Wrap" />
