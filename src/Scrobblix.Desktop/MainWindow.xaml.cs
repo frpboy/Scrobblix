@@ -503,7 +503,7 @@ public sealed partial class MainWindow : Window
                 content = await ArtworkContent.ReadBoundedAsync(input, pending.Token);
             if (content is null || !await _artworkValidator.IsSafeAsync(content, pending.Token))
             {
-                DiagnosticLogRequested?.Invoke("Artwork metadata rejected; placeholder retained.");
+                DiagnosticLogRequested?.Invoke("reason_code=artwork.content_rejected; Artwork metadata rejected; placeholder retained.");
                 return;
             }
             if (_isClosed || generation != state.Generation) return;
@@ -530,7 +530,7 @@ public sealed partial class MainWindow : Window
             if (generation == state.Generation)
             {
                 image.Source = null; image.Visibility = Visibility.Collapsed; fallback.Visibility = Visibility.Visible;
-                DiagnosticLogRequested?.Invoke($"Artwork unavailable: {exception.GetType().Name}");
+                DiagnosticLogRequested?.Invoke($"reason_code=artwork.ui_unavailable; Artwork unavailable: {exception.GetType().Name}");
             }
         }
         finally
@@ -579,7 +579,7 @@ public sealed partial class MainWindow : Window
         {
             fallback.Visibility = Visibility.Visible;
         }
-        DiagnosticLogRequested?.Invoke("Artwork image decoding failed; placeholder artwork is displayed.");
+        DiagnosticLogRequested?.Invoke("reason_code=artwork.decode_failed; Artwork image decoding failed; placeholder artwork is displayed.");
     }
 
     private void ArtworkImageOpened(object sender, RoutedEventArgs args)
@@ -941,7 +941,8 @@ public sealed partial class MainWindow : Window
             var result = await SupportBundleExporter.CreateAsync(
                 file.Path,
                 _logDirectory,
-                typeof(MainWindow).Assembly.GetName().Version?.ToString() ?? "unknown",
+                typeof(MainWindow).Assembly.GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                    .OfType<System.Reflection.AssemblyInformationalVersionAttribute>().FirstOrDefault()?.InformationalVersion ?? "unknown",
                 Environment.OSVersion.Version.ToString(),
                 sourceStatus: CreateSupportSourceStatus());
             SupportBundleStatusText.Text =

@@ -443,7 +443,12 @@ try
         supportLog,
         "000001 | 2026-10-22T12:00:00.0000000+00:00 | WARN | LASTFM | request failed; api_key=CANARY_API_SECRET; artist=CANARY_TRACK; url=https://example.com/private?token=CANARY_TOKEN; path=C:\\Users\\CANARY_USER\\AppData\\Local\\Scrobblix\\scrobblix.db" + Environment.NewLine +
         "000002 | 2026-10-22T12:00:01.0000000+00:00 | ERROR | LASTFM | response failed; exception=HttpRequestException; hresult=0x80131500; reason_code=provider.temporary_unavailable; session_key=CANARY_SESSION_KEY" + Environment.NewLine +
-        "000003 | 2026-10-22T12:00:02.0000000+00:00 | WARN | LASTFM | forged diagnostic fields; exception=CANARY_API_SECRET; reason_code=CANARY_REASON_SECRET" + Environment.NewLine);
+        "000003 | 2026-10-22T12:00:02.0000000+00:00 | WARN | LASTFM | forged diagnostic fields; exception=CANARY_API_SECRET; reason_code=CANARY_REASON_SECRET" + Environment.NewLine +
+        "000004 | 2026-10-22T12:00:03.0000000+00:00 | INFO | STARTUP | reason_code=startup.window_activated; elapsed_ms=1234; artist=CANARY_TRACK" + Environment.NewLine +
+        "000005 | 2026-10-22T12:00:04.0000000+00:00 | INFO | STARTUP | reason_code=startup.window_created; elapsed_ms=99999999;" + Environment.NewLine +
+        "000006 | 2026-10-22T12:00:05.0000000+00:00 | INFO | METADATA | reason_code=artwork.enrichment_no_file; elapsed_ms=999;" + Environment.NewLine +
+        "000007 | 2026-10-22T12:00:06.0000000+00:00 | INFO | STARTUP | reason_code=startup.unknown; elapsed_ms=999;" + Environment.NewLine +
+        "000008 | 2026-10-22T12:00:07.0000000+00:00 | INFO | STARTUP | reason_code=startup.database_ready; elapsed_ms=-1;" + Environment.NewLine);
     var supportResult = await SupportBundleExporter.CreateAsync(
         supportArchivePath,
         supportLogDirectory,
@@ -454,7 +459,7 @@ try
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
-    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 3,
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 8,
         "Support bundle reports the number of inspected logs and sanitized events.");
 
     using (var archive = ZipFile.OpenRead(supportArchivePath))
@@ -469,8 +474,8 @@ try
         {
             var root = manifestJson.RootElement;
             var sourceStatus = root.GetProperty("sourceStatus");
-            Assert(root.GetProperty("formatVersion").GetInt32() == 2,
-                "Support bundle schema version changes when the source snapshot is added.");
+            Assert(root.GetProperty("formatVersion").GetInt32() == 3,
+                "Support bundle schema version includes bounded startup elapsed time.");
             Assert(sourceStatus.GetProperty("source").GetString() == "browser-companion"
                 && sourceStatus.GetProperty("playbackState").GetString() == "playing"
                 && sourceStatus.GetProperty("trackingEnabled").GetBoolean()
@@ -484,6 +489,14 @@ try
                 && summary.Contains("Playback state: playing", StringComparison.Ordinal)
                 && summary.Contains("Tracking enabled: yes", StringComparison.Ordinal),
                 "The human-readable summary includes the same privacy-reduced source status.");
+        }
+
+        using (var eventReader = new StreamReader(archive.GetEntry("operational-events.tsv")!.Open(), Encoding.UTF8))
+        {
+            var lines = (await eventReader.ReadToEndAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
+            Assert(lines[0].EndsWith("\telapsed_ms", StringComparison.Ordinal), "Startup elapsed column has an explicit schema header.");
+            Assert(lines[4].EndsWith("startup.window_activated\t1234", StringComparison.Ordinal), "Known startup milestones retain bounded monotonic elapsed time.");
+            Assert(lines.Skip(5).All(line => line.EndsWith('\t')), "Out-of-range, negative, unknown-code and non-startup elapsed fields are discarded.");
         }
 
         var archiveContents = new StringBuilder();
