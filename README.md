@@ -2,7 +2,7 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Public development previews; platform-specific qualification limits below
+> **Status:** Public development previews; platform-specific qualification limits below\
 > **Last updated:** 2026-11-10
 
 
