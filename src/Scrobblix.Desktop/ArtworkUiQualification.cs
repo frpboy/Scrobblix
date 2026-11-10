@@ -98,8 +98,10 @@ public sealed partial class MainWindow
         if (_historyRecords[0].ConfirmedPlayedMilliseconds != 2000) throw new InvalidOperationException("Export snapshot stale");
         await capture("history-500-after");
         HistorySearchInput.Text = "Synthetic track 499";
+        await Task.Delay(100); // WinUI TextChanged is dispatched after the programmatic assignment.
         if (HistoryList.Children.Count != 1) throw new InvalidOperationException("Search no longer filters 500 loaded rows");
         HistorySearchInput.Text = string.Empty;
+        await Task.Delay(100);
         if (HistoryList.Children.Count != 500) throw new InvalidOperationException("Search reset lost rows");
         var updated = rows.ToArray();
         updated[0] = updated[0] with { Title = "Updated synthetic title" };
