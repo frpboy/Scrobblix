@@ -11,7 +11,7 @@ const registry = read("src/Scrobblix.Desktop/SourceIdentityRegistry.cs");
 const proj = read("src/Scrobblix.Desktop/Scrobblix.Desktop.csproj");
 const icon = readFileSync("src/Scrobblix.Desktop/Assets/scrobblix.ico");
 
-for (const destination of ["home", "history", "statistics", "loved", "queue", "sources", "diagnostics", "settings"]) {
+for (const destination of ["home", "history", "statistics", "loved", "queue", "sources", "diagnostics", "settings", "about"]) {
   assert.ok(xaml.includes(`Tag="${destination}"`), `Navigation destination missing: ${destination}`);
 }
 assert.ok(xaml.includes('x:Name="NavigationToggleButton"') && xaml.includes('x:Name="CompactNavigationToggleButton"'), "Both rail toggle states must exist.");
@@ -22,7 +22,7 @@ for (const [name, destination, tooltip] of [
   ["CompactHomeButton", "home", "Home"], ["CompactHistoryButton", "history", "History"],
   ["CompactStatisticsButton", "statistics", "Statistics"], ["CompactLovedButton", "loved", "Loved tracks"],
   ["CompactQueueButton", "queue", "Queue"], ["CompactSourcesButton", "sources", "Sources"],
-  ["CompactDiagnosticsButton", "diagnostics", "Diagnostics"], ["CompactSettingsButton", "settings", "Settings"],
+  ["CompactDiagnosticsButton", "diagnostics", "Diagnostics"], ["CompactSettingsButton", "settings", "Settings"], ["CompactAboutButton", "about", "About"],
 ]) {
   const button = xaml.match(new RegExp('<Button\\b[^>]*x:Name="' + name + '"[^>]*>'))?.[0];
   assert.ok(button && button.includes('Tag="' + destination + '"') && button.includes('Click="CompactNavigationItem_Click"'), `Collapsed navigation button must open ${destination}.`);
@@ -59,14 +59,14 @@ assert.ok(icon.readUInt16LE(4) >= 2, "ICO should provide multiple resolution ent
 const navigationMarkup = xaml.slice(xaml.indexOf('<NavigationView x:Name="AppNavigationView"'), xaml.indexOf('</NavigationView>'));
 const railLayout = code.slice(code.indexOf("private void ApplyNavigationLayout()"), code.indexOf("private async void NavigationToggleButton_Click"));
 
-const orderedDestinations = ["home", "history", "statistics", "loved", "queue", "sources", "diagnostics", "settings"];
+const orderedDestinations = ["home", "history", "statistics", "loved", "queue", "sources", "diagnostics", "settings", "about"];
 const destinationPositions = orderedDestinations.map((destination) => navigationMarkup.indexOf(`Tag="${destination}"`));
 assert.ok(destinationPositions.every((position) => position >= 0), "Every required destination must exist in the navigation rail.");
 assert.ok(destinationPositions.every((position, index) => index === 0 || position > destinationPositions[index - 1]), "Navigation destination order must remain Home, History, Statistics, Loved, Queue, Sources, Diagnostics, Settings.");
 
 for (const [label, destination] of [
   ["Home", "home"], ["History", "history"], ["Statistics", "statistics"], ["Loved", "loved"],
-  ["Queue", "queue"], ["Sources", "sources"], ["Diagnostics", "diagnostics"], ["Settings", "settings"],
+  ["Queue", "queue"], ["Sources", "sources"], ["Diagnostics", "diagnostics"], ["Settings", "settings"], ["About", "about"],
 ]) {
   const escaped = destination;
   const item = navigationMarkup.match(new RegExp(`<NavigationViewItem\\b[^>]*Tag="${escaped}"[^>]*/?>`))?.[0];
@@ -103,15 +103,15 @@ assert.ok(!existsSync("src/Scrobblix.Desktop/Assets/providers/lastfm-mark.svg"),
 const assetLedger = read("src/Scrobblix.Desktop/Assets/providers/README.md");
 assert.ok(assetLedger.includes("No third-party brand logo files are shipped yet") && assetLedger.includes("prior written approval"), "The source-asset ledger must explain why unapproved marks use text and neutral icons.");
 
-for (const view of ["HomeView", "HistoryView", "StatisticsView", "LovedView", "QueueView", "SourcesView", "DiagnosticsView", "SettingsView"]) {
+for (const view of ["HomeView", "HistoryView", "StatisticsView", "LovedView", "QueueView", "SourcesView", "DiagnosticsView", "SettingsView", "AboutView"]) {
   assert.ok(xaml.includes(`x:Name="${view}" Grid.Column="1"`), `Core page missing from the scrollable workspace: ${view}`);
 }
 assert.ok(xaml.includes('Text="Source: not detected"') && xaml.includes('x:Name="CurrentTrackSourceIcon"'), "Unknown playback must retain a readable neutral source fallback.");
 assert.ok(xaml.includes('Content="Show artist and track title in notifications (off by default)"'), "Notification track-detail privacy must remain opt-in.");
 assert.ok(!xaml.includes('Padding="32"'), "Core pages should not waste workspace with the former 32px outer inset.");
-assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth=/g) ?? []).length, 8, "All eight page roots should share the compact 24px / 16px content rhythm.");
-assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth="[^"]+" HorizontalAlignment="Stretch">/g) ?? []).length, 8, "All eight page roots should stretch to use the available workspace instead of leaving a blank right column.");
-assert.equal((xaml.match(/<ScrollViewer x:Name="(?:HomeView|HistoryView|StatisticsView|LovedView|QueueView|SourcesView|DiagnosticsView|SettingsView)" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"/g) ?? []).length, 8, "All core page scroll views should use the viewport width and avoid horizontal scroll waste.");
+assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth=/g) ?? []).length, 9, "All nine page roots should share the compact 24px / 16px content rhythm.");
+assert.equal((xaml.match(/<StackPanel Padding="24" Spacing="16" MaxWidth="[^"]+" HorizontalAlignment="Stretch">/g) ?? []).length, 9, "All nine page roots should stretch to use the available workspace instead of leaving a blank right column.");
+assert.equal((xaml.match(/<ScrollViewer x:Name="(?:HomeView|HistoryView|StatisticsView|LovedView|QueueView|SourcesView|DiagnosticsView|SettingsView|AboutView)" Grid.Column="1" HorizontalScrollMode="Disabled" HorizontalScrollBarVisibility="Disabled"/g) ?? []).length, 9, "All core page scroll views should use the viewport width and avoid horizontal scroll waste.");
 assert.ok(xaml.includes('x:Name="StartupInfo" IsOpen="False" IsClosable="True"'), "Routine startup/playback status must not reserve Home vertical space.");
 assert.ok(code.includes("StartupInfo.IsOpen = isAttention || isTrackingAction;"), "The Home status banner should appear only for attention and explicit pause/resume actions.");
 assert.ok(xaml.includes('<StackPanel Spacing="12">') && xaml.includes('Border Padding="12" CornerRadius="6"'), "Now Playing internal rhythm should be compact without removing the focal card.");
@@ -139,3 +139,10 @@ console.log("Desktop UI contract checks passed. Source-level checks do not repla
 assert.ok(code.includes("HistoryRowsMatch(_historyRecords, plays)") && code.includes("_historyRecords = plays;"), "Skip unchanged display work but retain latest export records.");
 assert.ok(code.includes('if (HistoryView.Visibility == Visibility.Visible) RenderHistory();') && code.includes('destination == "history" && _historyNeedsRender'), "History renders lazily on visibility without losing hidden updates.");
 assert.ok(code.includes("CancelRetiredHistoryArtwork();") && code.includes("state.Generation++;") && code.includes("state.Pending?.Cancel();"), "Retired history image work is canceled and fenced.");
+
+const aboutBuild = read("src/Scrobblix.Desktop/AboutPage.cs");
+assert.ok(code.includes('AboutView.Visibility = destination == "about"') && code.includes("InitializeAboutBuildIdentity();"), "About navigation and actual assembly identity must be wired.");
+assert.ok(aboutBuild.includes("AssemblyInformationalVersionAttribute") && aboutBuild.includes("Source revision: not recorded"), "About must show recorded identity without inventing a release version.");
+assert.equal((xaml.match(/Header="Sponsor"/g) ?? []).length, 1, "About must have a single Sponsor entry.");
+for (const url of ["https://github.com/frpboy/Scrobblix", "https://github.com/frpboy/Scrobblix/releases", "https://t.me/FRPboy_Projects", "https://www.buymeacoffee.com/frpboy", "https://www.patreon.com/c/FrpBoy"]) assert.ok(xaml.includes(`NavigateUri="${url}"`), `About link missing ${url}`);
+assert.ok(xaml.includes("Apache License 2.0") && !xaml.includes("Based on Seal"), "Keep Scrobblix's own license and credits.");

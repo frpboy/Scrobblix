@@ -82,6 +82,15 @@ public sealed partial class MainWindow
         LastFmConnectionPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
         await Capture("broker-advanced-own-api");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
+        ShowDestination("about");
+        Assert(AboutView.Visibility == Visibility.Visible && SettingsView.Visibility == Visibility.Collapsed,
+            "About navigation left another page visible");
+        Assert(AboutVersionText.Text.StartsWith("Version: ", StringComparison.Ordinal)
+            && AboutSourceText.Text.StartsWith("Source revision: ", StringComparison.Ordinal), "About identity missing");
+        await Capture("about-top");
+        AboutSponsorExpander.IsExpanded = true;
+        AboutSponsorExpander.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        await Capture("about-sponsor-credits");
         // Closing the last WinUI window can end the process before an awaited continuation.
         // Persist completed assertions/captures first; process exit is checked by the runner.
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI states and captures; close requested during pending load");

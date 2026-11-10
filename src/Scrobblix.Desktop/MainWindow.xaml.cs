@@ -82,6 +82,7 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         ConfigureInitialWindowSize();
+        InitializeAboutBuildIdentity();
         ApplyBrandAsset();
         RootLayout.ActualThemeChanged += (_, _) => ApplyBrandAsset();
         try
@@ -1230,7 +1231,7 @@ public sealed partial class MainWindow : Window
 
     private void ShowDestination(string destination)
     {
-        Title = destination switch { "home" => "Scrobblix · Listening", "history" => "Scrobblix · History", "statistics" => "Scrobblix · Statistics", "loved" => "Scrobblix · Loved", "queue" => "Scrobblix · Queue", "sources" => "Scrobblix · Sources", "diagnostics" => "Scrobblix · Diagnostics", "settings" => "Scrobblix · Settings", _ => "Scrobblix" };
+        Title = destination switch { "home" => "Scrobblix · Listening", "history" => "Scrobblix · History", "statistics" => "Scrobblix · Statistics", "loved" => "Scrobblix · Loved", "queue" => "Scrobblix · Queue", "sources" => "Scrobblix · Sources", "diagnostics" => "Scrobblix · Diagnostics", "settings" => "Scrobblix · Settings", "about" => "Scrobblix · About", _ => "Scrobblix" };
         HomeView.Visibility = destination == "home" ? Visibility.Visible : Visibility.Collapsed;
         HistoryView.Visibility = destination == "history" ? Visibility.Visible : Visibility.Collapsed;
         StatisticsView.Visibility = destination == "statistics" ? Visibility.Visible : Visibility.Collapsed;
@@ -1239,6 +1240,7 @@ public sealed partial class MainWindow : Window
         SourcesView.Visibility = destination == "sources" ? Visibility.Visible : Visibility.Collapsed;
         DiagnosticsView.Visibility = destination == "diagnostics" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
+        AboutView.Visibility = destination == "about" ? Visibility.Visible : Visibility.Collapsed;
         if (destination == "history" && _historyNeedsRender) RenderHistory();
     }
 
