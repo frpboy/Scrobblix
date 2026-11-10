@@ -82,6 +82,26 @@ class BrokerRuntimeTest {
         }
     }
 
+    @Test fun browserStartDiagnosticsNeverEchoProviderTextOrSecrets() {
+        val sentinel="private-provider-payload"
+        for(status in listOf(429,502,503)) {
+            val api=LastFmApi("","","https://broker.invalid/v1/lastfm") {
+                status to JSONObject().put("broker_error",sentinel).put("token",sentinel)
+            }
+            try { api.beginBrowserAuthorization();fail("must reject") }
+            catch(f:LastFmApi.BrowserStartFailure) {
+                assertEquals("Connection service could not start authorization (HTTP $status).",f.diagnostic)
+                assertFalse(f.diagnostic.contains(sentinel))
+            }
+        }
+        val rejected=LastFmApi("","","https://broker.invalid/v1/lastfm") { 403 to JSONObject().put("error",10).put("message",sentinel) }
+        try { rejected.beginBrowserAuthorization();fail("must reject") }
+        catch(f:LastFmApi.BrowserStartFailure) { assertEquals("Last.fm rejected authorization start (HTTP 403, API code 10).",f.diagnostic) }
+        val timeout=LastFmApi("","","https://broker.invalid/v1/lastfm") { throw java.net.SocketTimeoutException(sentinel) }
+        try { timeout.beginBrowserAuthorization();fail("must reject") }
+        catch(f:LastFmApi.BrowserStartFailure) { assertFalse(f.diagnostic.contains(sentinel));assertTrue(f.diagnostic.contains("timed out")) }
+    }
+
     @Test fun freshConfigurationUsesPinnedBrokerWhileSavedOwnerCredentialsKeepDirectRoute() {
         val empty="" to ""
         assertEquals("https://scrobblix-lastfm-broker.frpboy12.workers.dev/v1/lastfm",LastFmApi.DEFAULT_BROKER_ENDPOINT)

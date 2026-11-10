@@ -267,9 +267,13 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                                 message=try {
                                     val authorization=withContext(Dispatchers.IO) { configured.beginBrowserAuthorization() }
                                     browserAuthorization=authorization;browserStartedAt=android.os.SystemClock.elapsedRealtime();browserFlowNeedsRestart=true
-                                    browserLauncher(authorization.url)
+                                    try { browserLauncher(authorization.url) }
+                                    catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+                                    catch(_:Exception) { throw LastFmApi.BrowserStartFailure("Authorization was prepared, but the browser could not be opened. No connection is confirmed.") }
                                     "Approve access on Last.fm, return here and finish connecting within 60 minutes.".also {browserStatus=it}
-                                } catch(_:Exception) { browserAuthorization=null;"Could not open Last.fm authorization. Check your browser/network and try again.".also {browserStatus=it} }
+                                } catch(cancelled:kotlinx.coroutines.CancellationException) { browserAuthorization=null;throw cancelled }
+                                catch(failure:LastFmApi.BrowserStartFailure) { browserAuthorization=null;failure.diagnostic.also {browserStatus=it} }
+                                catch(_:Exception) { browserAuthorization=null;"Authorization response could not be used. No connection is confirmed; local history and queue are unchanged.".also {browserStatus=it} }
                                 busy=false
                             }
                         }) { Text("Authorize in browser") }
