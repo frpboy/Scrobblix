@@ -1,26 +1,60 @@
-name: Disposable certificate Android update rehearsal
+# Bounded exact signed pair qualification, not a release workflow.
+name: Exact alpha1 to alpha2 owner-signed synthetic update qualification
 on:
   workflow_dispatch:
-    inputs:
-      approved_rehearsal:
-        description: 'Reviewed isolated disposable-certificate rehearsal only, no owner key or account'
-        type: boolean
-        default: false
 permissions:
   contents: read
+concurrency:
+  group: scrobblix-alpha2-exact-20261110
+  cancel-in-progress: false
 jobs:
-  signed-update:
-    if: inputs.approved_rehearsal
+  exact-pair:
+    if: >-
+      github.repository == 'frpboy/Scrobblix' &&
+      github.event.repository.private == false &&
+      github.ref == 'refs/heads/qa/android-alpha2-exact-20261110' &&
+      github.run_attempt == 1
+    environment: scrobblix-alpha2-transport-20261110
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 15
     strategy:
       fail-fast: false
+      max-parallel: 2
       matrix:
         api: [26, 36]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Disposable certificate rehearsal only
+          fetch-depth: 0
+      - name: Verify final exact reviewed closure and canonical version source
         shell: bash
-        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python qa/alpha2-update/closure.py verify
+          python qa/alpha2-update/check-canonical-source.py
+      - name: Decrypt exact baseline candidate and test APKs
+        shell: bash
+        env:
+          SCROBBLIX_ALPHA2_TRANSPORT: ${{ secrets.SCROBBLIX_ALPHA2_TRANSPORT }}
+        run: python qa/alpha2-update/decrypt.py
+      - name: Fresh fenced exact release-pair synthetic update
+        shell: bash
+        run: bash qa/alpha2-update/run.sh '${{ matrix.api }}'
+      - name: Remove temporary plaintext and stop owned guest
+        if: always()
+        shell: bash
+        run: |
+          set +e
+          timeout 10 adb emu kill >/dev/null 2>&1
+          rm -rf "$RUNNER_TEMP/alpha2-private"
+      - name: Preserve synthetic app evidence or bounded incomplete-startup diagnostics
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: exact-alpha2-update-api${{ matrix.api }}
+          path: ${{ runner.temp }}/alpha2-evidence/
+          retention-days: 7
+          if-no-files-found: error

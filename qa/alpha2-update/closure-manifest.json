@@ -1,0 +1,18 @@
+{
+  ".github/workflows/android-signed-update-rehearsal.yml": "5b0558ed9d0c0757b3e6dace39b6f447e7e1d39f34064a710f9958e85060c889",
+  "qa/alpha2-update/ExactReleasePairTest.kt": "6e23df0677bbbe66994cf407b6d9e95c36086f6e465bdd90e5b5da9eebc5db4b",
+  "qa/alpha2-update/artifacts.json": "298abd39a35c09c7c46386fc510f01b1da6f788fa0327ad4c5e86f54b80a7f0e",
+  "qa/alpha2-update/baseline.apk.gpg": "efacb8e6bbe57102061b4717b169d097f95ea12fb185682bb7c563234101f49c",
+  "qa/alpha2-update/candidate.apk.gpg": "df3b57fa0e66667129cb4196fbca5730624c6b7f67aa01cc56ff1a110d71d8a1",
+  "qa/alpha2-update/capture.py": "728b594f39a11b9b20d00889f4e5bd831be623d648efecdd800a410cd91c1753",
+  "qa/alpha2-update/check-canonical-source.py": "ab91d21c096f782934725b194dcf672540a72c34c39cad0821c4745fad921de0",
+  "qa/alpha2-update/closure.py": "4de153ee51e57a35b921344c38312e0ed560c67947b55500165c515ffaff0957",
+  "qa/alpha2-update/compare-package-state.py": "208940e86ee637a5a192d17de03783ee52ed0df035ef9ad50d58da1dc775c359",
+  "qa/alpha2-update/decrypt.py": "f4dcaba56282501e29a4571e73d9c9709de5c835c46402afb8106d28ed57f374",
+  "qa/alpha2-update/failure-diagnostics.py": "936fdcb9425d516c6a677e108fd57cd748db81e097cf192e939887ff868567d2",
+  "qa/alpha2-update/package-state.py": "5c37a88c794f73deb719a9c31140d203252833f98a628dd95396464df32c7da3",
+  "qa/alpha2-update/run.sh": "04d84cf03c80fa8aa18b8ac50eadc62d1b436a0266da3e4e3e644884b41f3967",
+  "qa/alpha2-update/test.apk.gpg": "b8f0571fdc1c86b7b32541a9673d352439354f587d34ea1eb40861a830c17c95",
+  "qa/alpha2-update/verify-artifacts.py": "b9e4ca78b8159e1ce1940c8fb8b3db862febbc244606e97204af4f5bfc454283",
+  "qa/alpha2-update/write-receipt.py": "c99a0ad7e7c40815acaaa6c01534bbda8711dd8df604a427d1f39ecaac085b21"
+}

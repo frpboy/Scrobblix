@@ -1,0 +1,30 @@
+{
+  "signer_sha256": "a9b37328df9b9c166ceb41247cf9fd394427676832ab391c10f7494a711f7cde",
+  "baseline": {
+    "bytes": 8632540,
+    "sha256": "8b9770217774ad02123826940f9d8749160808564b81de78d6d6676bfdce50bc",
+    "versionCode": 6,
+    "versionName": "0.1.0-alpha.1",
+    "cipher_bytes": 8632649,
+    "cipher_sha256": "efacb8e6bbe57102061b4717b169d097f95ea12fb185682bb7c563234101f49c"
+  },
+  "candidate": {
+    "bytes": 8618057,
+    "sha256": "c1c69853f090588a757b45ea6b571426263f7258388b19b20f79913d0304b083",
+    "versionCode": 7,
+    "versionName": "0.1.0-alpha.2",
+    "cipher_bytes": 8618186,
+    "cipher_sha256": "df3b57fa0e66667129cb4196fbca5730624c6b7f67aa01cc56ff1a110d71d8a1"
+  },
+  "test": {
+    "bytes": 910395,
+    "sha256": "22afb317261206ad4f7bad28f10bef2c327055413d7db7c129c33aad40752ba1",
+    "cipher_bytes": 910515,
+    "cipher_sha256": "b8f0571fdc1c86b7b32541a9673d352439354f587d34ea1eb40861a830c17c95"
+  },
+  "canonical_source": "5c54607c57b07d2e5e7f3dc6db46d09f36c71291",
+  "canonical_tree": "473e00685aee316306eef2cddf0ed505dfaa34c8",
+  "baseline_source": "acf3d1bfc7c395bedff3a854b05e1b6be870b50e",
+  "test_source_sha256": "6e23df0677bbbe66994cf407b6d9e95c36086f6e465bdd90e5b5da9eebc5db4b",
+  "embedded_vcs_available": false
+}
