@@ -1,6 +1,6 @@
 """Pinned AES256 OpenPGP transport, secret via stdin only, exact APK digest."""
 import hashlib,os,pathlib,subprocess,tempfile
-CIPHER_SHA='ac8d094dc8230e47d9f3aa3f656de151c99687fb15d24f31e8391b09b09e1ee3'
+CIPHER_SHA='7f2c18c6684bba18258a6cc61187e8d1c6c33af4b753a1d9393f03540c1ddacf'
 PLAIN_SHA='8b9770217774ad02123826940f9d8749160808564b81de78d6d6676bfdce50bc'
 
 def decrypt(source,target,cipher_sha,plain_sha,passphrase):

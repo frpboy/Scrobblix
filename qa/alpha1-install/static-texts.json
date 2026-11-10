@@ -1,0 +1,17 @@
+[
+  "Android notification access is broad and can expose notification information. Scrobblix uses it only to read music playback from media sessions. You can leave access off or revoke it in Android settings.",
+  "Development preview \u00b7 not a release",
+  "History",
+  "Keep your player running. Android may pause collection in the background; a gap is never counted as listening. Pausing stops new work; a request already sent may still finish.",
+  "Listen",
+  "Local history only. Connect Last.fm in Settings to scrobble future listening.",
+  "Media access is off",
+  "Queue",
+  "Review media access",
+  "Scrobblix",
+  "Settings",
+  "Track listening",
+  "Tracking is paused",
+  "With your permission, Scrobblix reads track details from supported media sessions. It does not read notification message text or control playback.",
+  "Your listening, kept local."
+]

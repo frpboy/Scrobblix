@@ -64,15 +64,8 @@ grep -F 'Status: ok' "$private/start.txt"
 pid=$(adb shell pidof com.frpboy.scrobblix | tr -d '\r'); [[ $pid =~ ^[0-9]+$ ]]
 sleep 10
 [[ $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') = "$pid" ]]
-python qa/alpha1-install/observe.py "$private" "$evidence" "$pid"
+python qa/alpha1-install/acquire.py "$evidence" "$pid" "$api"
 adb shell am force-stop com.frpboy.scrobblix
 [[ -z $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') ]]
 kill "$emulator_pid"; wait "$emulator_pid" || true
 emulator_pid=''
-python - "$evidence" "$api" <<'PY'
-import hashlib,json,pathlib,sys,os
-p=pathlib.Path(sys.argv[1]);png=p/'final-app.png';assert png.read_bytes().startswith(b'\x89PNG\r\n\x1a\n') and 100<png.stat().st_size<5000000
-diagnostic=json.loads((p/'diagnostic.json').read_text());assert diagnostic['predicate']=='ACTUAL_ROW_ASSERTIONS_PASS_VISUAL_REVIEW_PENDING'
-r={'geometry_and_row':diagnostic,'status':'ASSERTIONS_PASS_VISUAL_REVIEW_PENDING','api':int(sys.argv[2]),'source_commit':'acf3d1bfc7c395bedff3a854b05e1b6be870b50e','probe_ref':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID'],'run_attempt':1,'apk_sha256':'8b9770217774ad02123826940f9d8749160808564b81de78d6d6676bfdce50bc','signer_sha256':'a9b37328df9b9c166ceb41247cf9fd394427676832ab391c10f7494a711f7cde','package':'com.frpboy.scrobblix','version_code':6,'fresh_install':True,'cold_start_alive_seconds':10,'tracking_enabled':False,'media_access_enabled':False,'account_connected':False,'egress':'guest IPv4 and IPv6 OUTPUT reject before install and after capture','cleanup':'owned app force-stopped and emulator stopped; no data reset/uninstall','not_proven':['owner-device update or data preservation','provider authorization or delivery','real player/background listening','full beta readiness']}
-(p/'result.json').write_text(json.dumps(r,indent=2)+'\n');(p/'sha256.json').write_text(json.dumps({n.name:hashlib.sha256(n.read_bytes()).hexdigest() for n in p.iterdir() if n.is_file()},indent=2)+'\n')
-PY
