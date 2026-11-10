@@ -1,0 +1,42 @@
+name: Reviewed narrow target qualification
+on:
+  push:
+    branches: [qa/narrow-android-v30-20261108-once]
+permissions:
+  contents: read
+concurrency:
+  group: narrow-target-${{ github.ref }}
+  cancel-in-progress: false
+jobs:
+  android-phases:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/qa/narrow-android-v30-20261108-once' && github.repository == 'frpboy/Scrobblix' && github.event.repository.private == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 55
+    strategy:
+      fail-fast: false
+      max-parallel: 2
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Bind reviewed target and execute only synthetic explicit phases
+        env:
+          EXPECTED_COMMIT: ${{ github.sha }}
+          API: ${{ matrix.api }}
+        run: |
+          python3 qa/narrow-target-contract.py source
+          export EXPECTED_TREE="$(git rev-parse 'HEAD^{tree}')"
+          timeout --signal=TERM --kill-after=10s 3000s bash scripts/android-narrow-phases.sh
+      - name: Validate bounded synthetic evidence
+        id: evidence
+        if: always()
+        run: python3 qa/narrow-target-contract.py evidence
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always() && steps.evidence.outcome == 'success'
+        with:
+          name: narrow-phases-api${{ matrix.api }}
+          path: narrow-evidence/
+          retention-days: 1
+          if-no-files-found: error

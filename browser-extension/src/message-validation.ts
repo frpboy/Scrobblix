@@ -41,16 +41,45 @@ function isOptionalInteger(value: unknown, min: number, max: number): boolean {
   );
 }
 
-function isHttpsArtwork(value: unknown): boolean {
-  if (value === undefined) return true;
-  if (typeof value !== "string" || value.length > 4096) return false;
-
+// Defense-in-depth syntax filter for local/private literal targets and known local names.
+// DNS rebinding and redirect targets remain the native artwork connector's responsibility.
+export function isSafeHttpsArtworkUrl(value: string): boolean {
+  if (value.length > 4096) return false;
   try {
     const url = new URL(value);
-    return url.protocol === "https:" && !url.username && !url.password;
+    if (url.protocol !== "https:" || url.username || url.password) return false;
+    const host = url.hostname.toLowerCase().replace(/^\[|\]$/gu, "").replace(/\.$/u, "");
+    if (host === "localhost" || host.endsWith(".localhost") || host.endsWith(".local") || host === "metadata.google.internal") {
+      return false;
+    }
+    // URL canonicalizes IPv6 and IPv4-mapped literals before this syntactic filter.
+    // DNS resolution/rebinding and redirect targets still require the native connector.
+    const mapped = /^::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/u.exec(host);
+    const ipv4Host = mapped
+      ? [parseInt(mapped[1], 16) >> 8, parseInt(mapped[1], 16) & 255, parseInt(mapped[2], 16) >> 8, parseInt(mapped[2], 16) & 255].join(".")
+      : host;
+    const ipv4Parts = ipv4Host.split(".");
+    if (ipv4Parts.length === 4 && ipv4Parts.every((p) => /^\d+$/u.test(p) && Number(p) >= 0 && Number(p) <= 255)) {
+      const [b0, b1, b2] = ipv4Parts.map(Number);
+      // Security concern: reject private, loopback, link-local, carrier-grade NAT, test-net, and multicast/reserved IPv4 addresses to mitigate SSRF.
+      if (b0 === 0 || b0 === 10 || b0 === 127 || b0 >= 224 || (b0 === 100 && b1 >= 64 && b1 <= 127) || (b0 === 169 && b1 === 254) || (b0 === 172 && b1 >= 16 && b1 <= 31) || (b0 === 192 && b1 === 168) || (b0 === 192 && b1 === 0 && (b2 === 0 || b2 === 2)) || (b0 === 192 && b1 === 88 && b2 === 99) || (b0 === 198 && (b1 === 18 || b1 === 19 || (b1 === 51 && b2 === 100))) || (b0 === 203 && b1 === 0 && b2 === 113)) {
+        return false;
+      }
+    }
+    const v6Parts = host.split(":");
+    const firstV6 = parseInt(v6Parts[0] || "0", 16);
+    const secondV6 = parseInt(v6Parts[1] || "0", 16);
+    // Security concern: reject loopback, unspecified, ULA, link-local, multicast, documentation, 6to4, and Teredo IPv6 addresses to prevent internal network scanning.
+    if (host.includes(":") && (host === "::" || host === "::1" || firstV6 === 0x2002 || (firstV6 === 0x3fff && (secondV6 & 0xf000) === 0) || (firstV6 === 0x2001 && (secondV6 === 0xdb8 || secondV6 === 0)) || (firstV6 & 0xfe00) === 0xfc00 || (firstV6 & 0xffc0) === 0xfe80 || (firstV6 & 0xff00) === 0xff00)) return false;
+    return true;
   } catch {
     return false;
   }
+}
+
+function isHttpsArtwork(value: unknown): boolean {
+  if (value === undefined) return true;
+  return typeof value === "string" && isSafeHttpsArtworkUrl(value);
 }
 
 export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean {
@@ -66,6 +95,8 @@ export function isSupportedSender(sender: chrome.runtime.MessageSender): boolean
 
 export type CustomSiteRegistration = { origin: string; pattern: string; id: string };
 
+const siteIdPattern = /^site_[a-f0-9]{32}$/u;
+
 export function isAuthorizedObservationSender(
   sender: chrome.runtime.MessageSender,
   customSites: CustomSiteRegistration[],
@@ -76,15 +107,16 @@ export function isAuthorizedObservationSender(
   try {
     const url = new URL(sender.url);
     if (url.protocol !== "https:" && url.protocol !== "http:") return false;
-    // Optional host permission alone is not authorization: this origin must have
-    // an explicit user-created registration in extension storage.
+    // Check exact origin, pattern and ID before parsing a matching registration.
+    // Non-matching registrations do not need another URL object.
+    const origin = url.origin;
+    const expectedPattern = `${origin}/*`;
     return customSites.some((site) => {
+      if (site.origin !== origin || site.pattern !== expectedPattern) return false;
+      if (!siteIdPattern.test(site.id)) return false;
       try {
         const registered = new URL(site.origin);
-        return registered.origin === site.origin
-          && registered.origin === url.origin
-          && site.pattern === `${url.origin}/*`
-          && /^site_[a-f0-9]{32}$/u.test(site.id);
+        return registered.origin === origin;
       } catch {
         return false;
       }

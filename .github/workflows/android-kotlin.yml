@@ -1,0 +1,223 @@
+name: Android Kotlin validation
+on:
+  pull_request:
+    branches: [main]
+    paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
+  push:
+    branches: [main]
+    paths: ['android/**', 'tests/fixtures/**', '.github/workflows/android-kotlin.yml']
+  workflow_dispatch:
+    inputs:
+      approved_rehearsal:
+        description: 'Reviewed isolated disposable-certificate update rehearsal only'
+        type: boolean
+        default: false
+      qualify_live_token_start:
+        description: 'Manually approved fresh API26 token-start only, no consent/session/listening'
+        type: boolean
+        default: false
+permissions:
+  contents: read
+concurrency:
+  group: android-kotlin-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+jobs:
+  kotlin-platform:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Test shared behavior and compile platform and installable preview app
+        shell: bash
+        run: |
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          android/gradlew -p android :core:test :platform:assembleDebug :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: Require core test XML evidence
+        if: always()
+        shell: bash
+        run: find android/core/build/test-results/test -type f -name 'TEST-*.xml' -print -quit | grep -q .
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          if-no-files-found: error
+          name: android-unsigned-release-candidate
+          path: |
+            android/app/build/outputs/apk/release/*.apk
+            android/core/build/test-results/test
+  android-sqlite-runtime:
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Android API${{ matrix.api }} emulator and actual SQLite instrumentation
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-${{ matrix.api }};default;x86_64'
+          echo no | avdmanager create avd -n scrobblix-test -k 'system-images;android-${{ matrix.api }};default;x86_64' --path "$ANDROID_AVD_HOME/scrobblix-test.avd" --force
+          test -f "$ANDROID_AVD_HOME/scrobblix-test.ini"
+          emulator -list-avds | grep -Fx scrobblix-test
+          emulator -avd scrobblix-test -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-emulator.log 2>&1 &
+          emulator_pid=$!
+          cleanup_emulator() {
+            status=$?
+            set +e
+            if [ "$status" -ne 0 ]; then
+              timeout 10 adb devices -l
+              tail -80 /tmp/scrobblix-emulator.log
+            fi
+            kill "$emulator_pid"
+            exit "$status"
+          }
+          trap cleanup_emulator EXIT
+          if ! timeout 180 adb wait-for-device; then
+            cat /tmp/scrobblix-emulator.log
+            exit 1
+          fi
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-emulator.log; exit 1; fi
+          # All instrumentation uses synthetic identities. Once a default endpoint
+          # exists, block emulator egress so queued fixture work cannot reach it.
+          # ADB uses the emulator transport, not this guest IP output path.
+          adb root
+          adb wait-for-device
+          test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
+            # Synthetic test data only. Preserve exact test/runner failures in job logs.
+            find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \; || true
+            adb logcat -d -b crash || true
+            # Pull synthetic pixels before the EXIT trap tears down the emulator.
+            mkdir -p android-evidence
+            for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
+            exit 1
+          fi
+          # Actual process boundary with synthetic data only. Instrumentation is a
+          # separate invocation on each side of force-stop; verify PID and held ambiguity.
+          # Gradle connected tests uninstall their packages at teardown. Reinstall
+          # exact just-built debug/test APKs for the independent process phases.
+          adb install -r android/app/build/outputs/apk/debug/app-debug.apk
+          adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          adb shell pm list instrumentation | grep -F 'com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner'
+          for phase in prepare verify; do
+            if [ "$phase" = verify ]; then adb shell am force-stop com.frpboy.scrobblix; fi
+            method=prepareBeforeProcessDeath
+            if [ "$phase" = verify ]; then method=verifyAfterProcessDeath; fi
+            result=$(adb shell am instrument -w -r -e processRecoveryPhase "$phase" -e class "dev.scrobblix.app.ProcessRecoveryTest#$method" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+            printf '%s\n' "$result"
+            printf '%s\n' "$result" | grep -F 'OK (1 test)'
+            if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
+          done
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          mkdir -p android-evidence
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
+
+      - name: Require both instrumentation XML evidence sets
+        if: always()
+        shell: bash
+        run: |
+          for module in app platform; do
+            find "android/$module/build/outputs/androidTest-results" -type f -name 'TEST-*.xml' -print -quit | grep -q . || exit 1
+          done
+      - name: Preserve app pixels and test-only APK
+        if: always()
+        shell: bash
+        run: |
+          export PATH="$ANDROID_HOME/platform-tools:$PATH"
+          mkdir -p android-evidence
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: android-preview-evidence-api${{ matrix.api }}
+          path: |
+            android-evidence
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/androidTest-results
+            android/platform/build/outputs/androidTest-results
+
+  disposable-signed-update:
+    if: github.event_name == 'workflow_dispatch' && inputs.approved_rehearsal
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    strategy:
+      fail-fast: false
+      matrix:
+        api: [26, 36]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Disposable certificate update rehearsal only
+        shell: bash
+        run: scripts/android-signed-update-rehearsal.sh '${{ matrix.api }}'
+
+  live-token-start-only:
+    if: github.event_name == 'workflow_dispatch' && inputs.qualify_live_token_start
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Fresh API26 actual client token start only
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-live-token-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-26;default;x86_64'
+          echo no | avdmanager create avd -n token-start-only -k 'system-images;android-26;default;x86_64' --path "$ANDROID_AVD_HOME/token-start-only.avd" --force
+          test -f "$ANDROID_AVD_HOME/token-start-only.ini"
+          emulator -list-avds | grep -Fx token-start-only
+          emulator -avd token-start-only -wipe-data -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/token-start-emulator.log 2>&1 &
+          emulator_pid=$!
+          trap 'kill "$emulator_pid" || true' EXIT
+          if ! timeout 180 adb wait-for-device; then
+            cat /tmp/token-start-emulator.log
+            exit 1
+          fi
+          booted=false
+          for attempt in $(seq 1 90); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -80 /tmp/token-start-emulator.log; exit 1; fi
+          adb install android/app/build/outputs/apk/debug/app-debug.apk
+          adb install android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          # ONLY this class executes. No synthetic auth, playback or queue suite ever runs here.
+          result=$(adb shell am instrument -w -r -e liveTokenStart true -e class dev.scrobblix.app.LiveTokenStartQualificationTest com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          printf '%s\n' "$result"
+          printf '%s\n' "$result" | grep -F 'OK (1 test)'
+          if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi

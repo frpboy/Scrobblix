@@ -76,7 +76,7 @@ jobs:
           cat release-assets/SHA256SUMS.txt
 
       - name: Create GitHub prerelease
-        uses: softprops/action-gh-release@efb35369e0ad2afab669f228072c1b0d510eae64 # v3.0.3
+        uses: softprops/action-gh-release@8a0cd651e5b2365bd640854a3fa5dfc70e4875f3 # v3.0.4
         with:
           tag_name: ${{ github.ref_name }}
           name: ${{ github.ref_name == 'v0.1.0-beta.5' && 'Scrobblix v0.1.0-beta.5 - Local storage compatibility (unsigned preview)' || github.ref_name == 'v0.1.0-beta.4' && 'Scrobblix v0.1.0-beta.4 - Windows x64 startup fix (unsigned preview)' || format('Scrobblix {0} - Preview', github.ref_name) }}

@@ -2,11 +2,11 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Public unsigned preview; real-world qualification pending  
-> **Last updated:** 2026-11-06
+> **Status:** Public development previews; platform-specific qualification limits below\
+> **Last updated:** 2026-11-10
 
 
-Scrobblix is a privacy-first Windows listening companion and reliable Last.fm scrobbler. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
+Scrobblix is a local-first listening-history and Last.fm scrobbling project for **Windows and Android**. The Windows app uses WinUI 3 with an optional browser companion; the Android app uses Kotlin and Jetpack Compose with notification-listener/media-session collection. Both implementations maintain local history and track submission outcomes. They are development previews, not stable production releases.
 
 This repository is the product and engineering source of truth for the personal open-source project maintained by **Rahul Muraleedharan** under the GitHub account **[`frpboy`](https://github.com/frpboy)**.
 
@@ -20,11 +20,26 @@ Scrobblix must answer three questions immediately:
 
 ## Downloads and preview releases
 
-Current downloadable preview: [v0.1.0-beta.2](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.2). It contains the Windows Test Bundle, optional Browser Companion and SHA-256 checksums. This is not a final stable release.
+Public releases checked on 10 November 2026:
 
-Version tags trigger the automated [Preview Release workflow](.github/workflows/release.yml). It runs the full Windows CI checks before publishing the desktop test bundle, optional browser companion, and SHA-256 checksums on the [GitHub Releases page](https://github.com/frpboy/Scrobblix/releases).
+| Platform | Current preview | Download and limits |
+|---|---|---|
+| Android | [0.1.0-alpha.2](https://github.com/frpboy/Scrobblix/releases/tag/android-v0.1.0-alpha.2) | [Signed APK](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/Scrobblix-Android-v0.1.0-alpha.2.apk) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/SHA256SUMS.txt). Early development alpha for Android 8.0/API 26 or newer; not a Play release. |
+| Windows | [0.1.0-beta.6](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.6) | [Windows x64 ZIP](https://github.com/frpboy/Scrobblix/releases/download/v0.1.0-beta.6/Scrobblix-Windows-x64-v0.1.0-beta.6.zip), Windows Test Bundle and optional Browser Companion. Use the x64 ZIP's asset digest on the release page; `SHA256SUMS.txt` covers the other ZIPs. Unsigned preview bundles, not a signed installer or stable production release. |
 
-**Current distribution status:** preview ZIPs are unsigned development test bundles—not a signed installer or stable production release. The app may require the matching Microsoft Windows App Runtime, and real-Windows/listening qualification and installer-signing gates remain open. Read the [release process](docs/RELEASE_PROCESS.md) before downloading or distributing a preview.
+Read the linked release notes before installing. These platform-specific version numbers are separate release tracks, not a claim that one platform is more complete than the other. The [Releases page](https://github.com/frpboy/Scrobblix/releases) lists published versions and their exact assets.
+
+Windows may require the matching Microsoft Windows App Runtime. Read the [release process](docs/RELEASE_PROCESS.md) for the preview workflow and the remaining signing, installer and real-Windows qualification gates. This README update changes documentation only; it does not rebuild, replace or republish release assets.
+
+## Android and current qualification
+
+The Android implementation is under `android/`. It includes notification-listener/media-session collection, local history, an account-fenced durable queue and Last.fm submission logic. It is not a Windows Browser Companion replacement. See [Android implementation status](docs/android/IMPLEMENTATION_STATUS.md) for implementation details; historical snapshots there must be read with the current release notes.
+
+Android alpha.2 is built from merged source `5c54607c57b07d2e5e7f3dc6db46d09f36c71291`, after PRs [#161](https://github.com/frpboy/Scrobblix/pull/161) and [#162](https://github.com/frpboy/Scrobblix/pull/162). Its ordinary Android and Windows checks passed. The exact owner-signed alpha.1-to-alpha.2 APK pair also passed isolated, synthetic upgrade checks on API 26 and API 36, including preservation of synthetic history, preferences and account data. The same-commit app screenshots were inspected, including settings and privacy-disclosure screens.
+
+That evidence is limited to the tested synthetic environments. It is **not** proof of real-provider authorization or scrobble delivery, a qualified update on a user's handset, Play readiness, or production reliability. Windows native About runtime qualification and real Windows listening, installer and signing gates remain open. Do not treat browser previews as installed-extension evidence.
+
+Now Playing, a local eligible listen and a saved provider acknowledgement are different states. Unknown submissions are not automatically resent because Last.fm may already have received them. Do not reset app data, reinstall or replay uncertain submissions as a troubleshooting shortcut.
 
 ## Recommended implementation baseline
 
@@ -196,7 +211,11 @@ The monorepo model is recommended initially so each code pull request can update
 
 ## Maintainer and support
 
-Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source remains MIT-licensed; third-party components keep their own licenses.
+- Developer: [Rahul Muraleedharan](https://www.frpboy.in/)
+- [GitHub](https://github.com/frpboy) and [LinkedIn](https://www.linkedin.com/in/rahul-muraleedharan-it)
+- [Telegram support requests](https://t.me/FRPboy_Projects)
+
+Maintained by [Rahul Muraleedharan (FrpBoy)](https://github.com/frpboy). Support helps maintain this personal open-source project. Scrobblix source is Apache-2.0-licensed; third-party components keep their own licenses.
 
 [![Buy Me a Coffee](https://img.shields.io/badge/Buy_Me_a_Coffee-FrpBoy-FFDD00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/frpboy)
 [![Become a Patron](https://img.shields.io/badge/Become_a_Patron-FrpBoy-FF424D?logo=patreon&logoColor=white)](https://www.patreon.com/c/FrpBoy)
