@@ -81,6 +81,17 @@ public sealed partial class MainWindow
         OwnLastFmApiExpander.IsExpanded = true;
         LastFmConnectionPanel.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
         await Capture("broker-advanced-own-api");
+        // A connection label must not turn the neutral Queue guidance into a delivery claim.
+        var queueGuidance = QueueConnectionGuidanceText.Text;
+        Assert(queueGuidance.Contains("Provider outcomes are shown per action below")
+            && !queueGuidance.Contains("delivery remains off"), "Queue guidance misreports delivery");
+        SetLastFmConnected("synthetic-user", "synthetic-account");
+        ShowDestination("queue");
+        Assert(QueueConnectionGuidanceText.Text == queueGuidance, "Connected queue guidance changed");
+        await Capture("queue-connected-guidance");
+        SetLastFmReadyToConnect();
+        Assert(QueueConnectionGuidanceText.Text == queueGuidance, "Disconnected queue guidance changed");
+        await Capture("queue-disconnected-guidance");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
         // Closing the last WinUI window can end the process before an awaited continuation.
         // Persist completed assertions/captures first; process exit is checked by the runner.
