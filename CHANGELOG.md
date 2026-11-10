@@ -14,6 +14,8 @@ All notable changes to Scrobblix will be documented here. The project follows Se
 
 ### Fixed
 
+- Windows history refresh skips rebuilding 500 rows when displayed fields are unchanged and defers hidden history rows until navigation. Latest records remain available for search/CSV; retired row artwork work is canceled. Synthetic Windows timing/pixel qualification is required; this is not a claim that every real-device lag or missing-cover cause is fixed.
+
 - Future Windows and Browser Companion ZIPs include the application license, third-party package metadata, license texts and redistribution notices. Packaging fails if declared license evidence is missing (issue #108). Existing beta.2 assets are unchanged.
 
 - Bound the process-local metadata enrichment cache to 512 entries with thread-safe FIFO eviction, preventing unique-track lookups from accumulating indefinitely during long listening sessions. Existing metadata results, cache clearing on Last.fm configuration changes, and persisted history/artwork remain unchanged.

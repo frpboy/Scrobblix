@@ -135,3 +135,7 @@ for (const cleanup of ["_singleInstanceActivationEvent?.Dispose();", "_singleIns
 }
 
 console.log("Desktop UI contract checks passed. Source-level checks do not replace real Windows UI/accessibility verification.");
+
+assert.ok(code.includes("HistoryRowsMatch(_historyRecords, plays)") && code.includes("_historyRecords = plays;"), "Skip unchanged display work but retain latest export records.");
+assert.ok(code.includes('if (HistoryView.Visibility == Visibility.Visible) RenderHistory();') && code.includes('destination == "history" && _historyNeedsRender'), "History renders lazily on visibility without losing hidden updates.");
+assert.ok(code.includes("CancelRetiredHistoryArtwork();") && code.includes("state.Generation++;") && code.includes("state.Pending?.Cancel();"), "Retired history image work is canceled and fenced.");
