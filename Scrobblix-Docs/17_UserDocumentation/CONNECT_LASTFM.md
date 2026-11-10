@@ -1,18 +1,20 @@
 # Connect Last.fm
 
-> **Status:** Authentication UX specification; implementation scope verified 2026-10-28
+> **Status:** Current Windows beta.9 connection guide; reviewed 2026-11-10
 
 ## Configure and authorize
 
-Before connecting, the user must enter a Last.fm API key and shared secret in Settings and save them to Windows Credential Locker. Scrobblix can also initialize these values from the documented environment variables for development, but should show clearly where the active values came from. The credentials are required for signed API calls; local playback history should remain usable without them.
+The default Windows connection uses the Scrobblix-operated HTTPS broker. Normal users do not need to obtain or enter developer API keys. Local playback history remains usable without connecting Last.fm. The broker exchanges authorization tokens/session keys and forwards supported provider actions; see the [Windows privacy notice](../../docs/WINDOWS_PRIVACY.md) for the actual data routing.
 
-Source-of-truth code is in `LastFmDesktopAuthenticator.cs`, `LastFmRequestSigner.cs`, and `LastFmScrobbleProvider.cs`.
+1. Open Settings and select **Connect Last.fm**.
+2. Scrobblix requests an authorization token and opens the Last.fm authorization page in the default browser.
+3. Sign in on Last.fm and approve the application there. Scrobblix never asks for your Last.fm password.
+4. Return to Scrobblix and complete the pending authorization in Settings.
+5. Scrobblix exchanges the token for a session, reads the returned username/session key and stores the session key in Windows Credential Locker.
 
-1. After API credentials are configured, the user starts **Connect Last.fm** in Scrobblix.
-2. The app calls `auth.getToken` and opens the Last.fm authorization page in the default browser.
-3. The user signs in on Last.fm and approves the application there; Scrobblix must never ask for the user's Last.fm password.
-4. The user returns to Scrobblix and completes the authorization flow with the token.
-5. The app calls `auth.getSession`, reads the returned username/session key, and stores the session key through the credential-store abstraction backed by Windows Credential Locker.
+Advanced users may instead save their own Last.fm API key/shared secret in Settings to use the direct Last.fm route. These developer credentials are optional, not a prerequisite for the default broker connection. Development environment-variable initialization is not an end-user setup step.
+
+Source-of-truth code is in `LastFmConnectionDefaults.cs`, `LastFmDesktopAuthenticator.cs`, `LastFmRequestSigner.cs`, and `LastFmScrobbleProvider.cs`.
 
 The current authenticator implements token/session exchange and credential storage. Do not imply that an additional `user.getInfo` call or separate non-destructive connection-test endpoint is implemented unless code and tests add it. The successful session exchange establishes the initial connected identity; later provider responses can reveal an expired/revoked session.
 

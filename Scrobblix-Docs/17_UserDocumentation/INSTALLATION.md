@@ -1,13 +1,17 @@
 # Installation Guide
 
 > **Status:** User-facing target guide; current public artifacts are development previews, not signed installers.  
-> **Last reviewed:** 2026-10-28
+> **Last reviewed:** 2026-11-10
 
 ## Current availability
 
-Scrobblix currently publishes unsigned GitHub preview ZIP bundles after CI validation. These are development test bundles, not a signed MSIX/App Installer, stable consumer release, or Microsoft Store/WinGet package. They may require the Windows App Runtime matching the build. Browser Companion installation is manual and store approval is not implied.
+The current Windows preview is [beta.9](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.9), a single unsigned per-user Setup.exe for x64-compatible Windows build 26100 or newer. It bundles its private runtimes, adds a Start menu shortcut and registers with Windows Installed Apps. It does not require ZIP extraction, admin elevation or a separate runtime download. Browser Companion installation/registration remains manual and optional.
 
-Before distributing a preview, read the root [release process](../../docs/RELEASE_PROCESS.md), verify SHA-256 against SHA256SUMS.txt when supplied, and review the limitations listed for the exact tag. Do not bypass Windows security warnings for an unsigned public package.
+Before running Setup.exe, read the [Windows installer guide](../../docs/WINDOWS_INSTALLER.md), verify the downloaded file against the beta.9 release's SHA256SUMS.txt and review that exact release's limits. If the checksum does not match, do not run it.
+
+Exit any running Scrobblix copy from its system tray before installing. Run Setup.exe and open Scrobblix from Start. The existing local profile is retained; keep an older extracted folder until checking the installed app. Program-only uninstall retains local history, queue and Credential Locker data. It is not a data-deletion operation.
+
+Fresh install, synthetic baseline upgrade, running-app refusal and program-only uninstall were exercised on the canonical CI artifact. Real-user Credential Locker migration and interrupted-upgrade rollback were not exercised. The preview is not a signed MSIX/App Installer, stable consumer release, or Microsoft Store/WinGet package. Do not bypass Windows security protections.
 
 ## Future supported installation channels
 
