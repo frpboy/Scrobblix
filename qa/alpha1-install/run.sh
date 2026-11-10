@@ -54,9 +54,7 @@ adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
 adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
 adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
 adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
-# Fixed 480x960 logical viewport makes the untouched opt-in switch visible.
-adb shell wm size 960x1920
-adb shell wm density 320
+# Use native guest geometry; measure physical pixels and bind XML before gestures.
 [[ -z $(adb shell pm path com.frpboy.scrobblix | tr -d '\r') ]]
 adb install "$apk" > "$private/install.txt"
 grep -Fx Success "$private/install.txt"
@@ -66,51 +64,15 @@ grep -F 'Status: ok' "$private/start.txt"
 pid=$(adb shell pidof com.frpboy.scrobblix | tr -d '\r'); [[ $pid =~ ^[0-9]+$ ]]
 sleep 10
 [[ $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') = "$pid" ]]
-adb shell uiautomator dump /sdcard/window.xml >/dev/null
-adb pull /sdcard/window.xml "$private/window.xml" >/dev/null
-# Admission text/account checks remain strict before any diagnostic pixels leave.
-python - "$private/window.xml" <<'PY'
-import xml.etree.ElementTree as E,sys
-nodes=list(E.parse(sys.argv[1]).iter('node'))
-texts={n.get('text') for n in nodes if n.get('package')=='com.frpboy.scrobblix'}
-assert {'Scrobblix','Tracking is paused','Media access is off'}<=texts
-assert not any('Last.fm connected:' in (t or '') for t in texts)
-PY
-adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
-adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
-# Only the fresh synthetic offline app, never raw logs/XML or other packages.
-python - "$private/window.xml" "$evidence" <<'PY'
-import xml.etree.ElementTree as E,sys,pathlib,json
-p=pathlib.Path(sys.argv[2]);root=E.Element('synthetic-app-accessibility',package='com.frpboy.scrobblix')
-allowed={'text','class','package','checkable','checked','enabled','clickable','bounds','scrollable','selected'}
-for n in E.parse(sys.argv[1]).iter('node'):
-    if n.get('package')=='com.frpboy.scrobblix':
-        E.SubElement(root,'node',{k:v for k,v in n.attrib.items() if k in allowed})
-E.ElementTree(root).write(p/'app-only-accessibility.xml',encoding='utf-8',xml_declaration=True)
-(p/'diagnostic.json').write_text(json.dumps({'status':'VISUAL_AND_SWITCH_REVIEW_PENDING','fresh_synthetic_offline_guest':True,'not_a_pass_receipt':True})+'\n')
-PY
-adb exec-out screencap -p > "$evidence/actual-app.png"
-# Compose ui1.12.1 Role.Switch exposes android.view.View plus ToggleableState.
-# App Listen source has exactly one such toggle; FilterChips use checkbox role.
-python - "$evidence/app-only-accessibility.xml" <<'PY'
-import xml.etree.ElementTree as E,sys,re
-nodes=list(E.parse(sys.argv[1]).iter('node'))
-texts={n.get('text') for n in nodes if n.get('package')=='com.frpboy.scrobblix'}
-assert 'Track listening' in texts
-switches=[n for n in nodes if n.get('package')=='com.frpboy.scrobblix' and n.get('class')=='android.view.View' and n.get('checkable')=='true']
-assert len(switches)==1 and switches[0].get('checked')=='false'
-bounds=re.fullmatch(r'\[(\d+),(\d+)\]\[(\d+),(\d+)\]',switches[0].get('bounds',''))
-assert bounds and int(bounds[3])>int(bounds[1]) and int(bounds[4])>int(bounds[2])
-PY
-adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
-adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+python qa/alpha1-install/observe.py "$private" "$evidence" "$pid"
 adb shell am force-stop com.frpboy.scrobblix
 [[ -z $(adb shell pidof com.frpboy.scrobblix | tr -d '\r') ]]
 kill "$emulator_pid"; wait "$emulator_pid" || true
 emulator_pid=''
 python - "$evidence" "$api" <<'PY'
 import hashlib,json,pathlib,sys,os
-p=pathlib.Path(sys.argv[1]);png=p/'actual-app.png';assert png.read_bytes().startswith(b'\x89PNG\r\n\x1a\n') and 100<png.stat().st_size<5000000
-r={'status':'ASSERTIONS_PASS_VISUAL_REVIEW_PENDING','api':int(sys.argv[2]),'source_commit':'acf3d1bfc7c395bedff3a854b05e1b6be870b50e','probe_ref':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID'],'run_attempt':1,'apk_sha256':'8b9770217774ad02123826940f9d8749160808564b81de78d6d6676bfdce50bc','signer_sha256':'a9b37328df9b9c166ceb41247cf9fd394427676832ab391c10f7494a711f7cde','package':'com.frpboy.scrobblix','version_code':6,'fresh_install':True,'cold_start_alive_seconds':10,'tracking_enabled':False,'media_access_enabled':False,'account_connected':False,'egress':'guest IPv4 and IPv6 OUTPUT reject before install and after capture','cleanup':'owned app force-stopped and emulator stopped; no data reset/uninstall','not_proven':['owner-device update or data preservation','provider authorization or delivery','real player/background listening','full beta readiness']}
+p=pathlib.Path(sys.argv[1]);png=p/'final-app.png';assert png.read_bytes().startswith(b'\x89PNG\r\n\x1a\n') and 100<png.stat().st_size<5000000
+diagnostic=json.loads((p/'diagnostic.json').read_text());assert diagnostic['predicate']=='ACTUAL_ROW_ASSERTIONS_PASS_VISUAL_REVIEW_PENDING'
+r={'geometry_and_row':diagnostic,'status':'ASSERTIONS_PASS_VISUAL_REVIEW_PENDING','api':int(sys.argv[2]),'source_commit':'acf3d1bfc7c395bedff3a854b05e1b6be870b50e','probe_ref':os.environ['GITHUB_SHA'],'run_id':os.environ['GITHUB_RUN_ID'],'run_attempt':1,'apk_sha256':'8b9770217774ad02123826940f9d8749160808564b81de78d6d6676bfdce50bc','signer_sha256':'a9b37328df9b9c166ceb41247cf9fd394427676832ab391c10f7494a711f7cde','package':'com.frpboy.scrobblix','version_code':6,'fresh_install':True,'cold_start_alive_seconds':10,'tracking_enabled':False,'media_access_enabled':False,'account_connected':False,'egress':'guest IPv4 and IPv6 OUTPUT reject before install and after capture','cleanup':'owned app force-stopped and emulator stopped; no data reset/uninstall','not_proven':['owner-device update or data preservation','provider authorization or delivery','real player/background listening','full beta readiness']}
 (p/'result.json').write_text(json.dumps(r,indent=2)+'\n');(p/'sha256.json').write_text(json.dumps({n.name:hashlib.sha256(n.read_bytes()).hexdigest() for n in p.iterdir() if n.is_file()},indent=2)+'\n')
 PY
