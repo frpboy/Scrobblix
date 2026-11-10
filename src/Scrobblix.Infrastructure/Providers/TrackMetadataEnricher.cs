@@ -676,7 +676,7 @@ public sealed class TrackMetadataEnricher
     {
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri) || !IsSafeRemoteImageUri(imageUri))
         {
-            _log?.Invoke($"Artwork source rejected; source={source}; reason=invalid_or_unsafe_https_uri.");
+            _log?.Invoke($"reason_code=artwork.uri_rejected; Artwork source rejected; source={source}; reason=invalid_or_unsafe_https_uri.");
             return new PlayMetadataEnrichment();
         }
 
@@ -686,7 +686,7 @@ public sealed class TrackMetadataEnricher
         if (cachedPath is not null)
         {
             if (!await IsSafeCachedArtworkAsync(cachedPath, cancellationToken)) return new PlayMetadataEnrichment();
-            _log?.Invoke($"Artwork cache hit; source={source}; host={imageUri.Host}; file={Path.GetFileName(cachedPath)}.");
+            _log?.Invoke($"reason_code=artwork.cache_hit; Artwork cache hit; source={source}; host={imageUri.Host}; file={Path.GetFileName(cachedPath)}.");
             return new PlayMetadataEnrichment(ArtworkPath: cachedPath, ArtworkSource: source);
         }
 
@@ -718,13 +718,13 @@ public sealed class TrackMetadataEnricher
                 if (!response.IsSuccessStatusCode || response.Content.Headers.ContentType?.MediaType is not { } mediaType
                     || !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                 {
-                    _log?.Invoke($"Artwork fetch rejected; source={source}; host={currentUri.Host}; status={(int)response.StatusCode}; content_type={response.Content.Headers.ContentType?.MediaType ?? "(missing)"}.");
+                    _log?.Invoke($"reason_code=artwork.response_rejected; Artwork fetch rejected; source={source}; host={currentUri.Host}; status={(int)response.StatusCode}; content_type={response.Content.Headers.ContentType?.MediaType ?? "(missing)"}.");
                     return new PlayMetadataEnrichment();
                 }
 
                 if (response.Content.Headers.ContentLength is > MaxArtworkBytes)
                 {
-                    _log?.Invoke($"Artwork image exceeds the configured size limit; source={source}; host={currentUri.Host}; content_length={response.Content.Headers.ContentLength}.");
+                    _log?.Invoke($"reason_code=artwork.size_rejected; Artwork image exceeds the configured size limit; source={source}; host={currentUri.Host}; content_length={response.Content.Headers.ContentLength}.");
                     return new PlayMetadataEnrichment();
                 }
 
@@ -758,7 +758,7 @@ public sealed class TrackMetadataEnricher
 
                     if (output.Length + read > MaxArtworkBytes)
                     {
-                        _log?.Invoke($"Artwork image exceeded the configured size limit while streaming; source={source}; host={currentUri.Host}.");
+                        _log?.Invoke($"reason_code=artwork.size_rejected; Artwork image exceeded the configured size limit while streaming; source={source}; host={currentUri.Host}.");
                         return new PlayMetadataEnrichment();
                     }
 
@@ -768,28 +768,28 @@ public sealed class TrackMetadataEnricher
                 var content = output.ToArray();
                 if (_artworkValidator is null || !await _artworkValidator.IsSafeAsync(content, cancellationToken))
                 {
-                    _log?.Invoke($"Artwork metadata rejected; source={source}; reason=unsupported_corrupt_or_dimensions.");
+                    _log?.Invoke($"reason_code=artwork.content_rejected; Artwork metadata rejected; source={source}; reason=unsupported_corrupt_or_dimensions.");
                     return new PlayMetadataEnrichment();
                 }
                 var tempPath = targetPath + "." + Guid.NewGuid().ToString("N") + ".tmp";
                 await File.WriteAllBytesAsync(tempPath, content, cancellationToken);
                 File.Move(tempPath, targetPath, overwrite: false);
-                _log?.Invoke($"Artwork cached successfully; source={source}; host={currentUri.Host}; bytes={output.Length}; file={Path.GetFileName(targetPath)}.");
+                _log?.Invoke($"reason_code=artwork.cached; Artwork cached successfully; source={source}; host={currentUri.Host}; bytes={output.Length}; file={Path.GetFileName(targetPath)}.");
                 return new PlayMetadataEnrichment(ArtworkPath: targetPath, ArtworkSource: source);
             }
             catch (HttpRequestException exception)
             {
-                _log?.Invoke($"Artwork network error; source={source}; host={currentUri.Host}; exception={exception.GetType().Name}.");
+                _log?.Invoke($"reason_code=artwork.network_failed; Artwork network error; source={source}; host={currentUri.Host}; exception={exception.GetType().Name}.");
                 return new PlayMetadataEnrichment();
             }
             catch (IOException exception)
             {
-                _log?.Invoke($"Artwork cache IO error; source={source}; exception={exception.GetType().Name}.");
+                _log?.Invoke($"reason_code=artwork.cache_io_failed; Artwork cache IO error; source={source}; exception={exception.GetType().Name}.");
                 return new PlayMetadataEnrichment();
             }
             catch (TaskCanceledException) when (!cancellationToken.IsCancellationRequested)
             {
-                _log?.Invoke($"Artwork fetch timed out; source={source}; host={currentUri.Host}.");
+                _log?.Invoke($"reason_code=artwork.timeout; Artwork fetch timed out; source={source}; host={currentUri.Host}.");
                 return new PlayMetadataEnrichment();
             }
         }

@@ -40,6 +40,13 @@ public static class SupportBundleExporter
     private static readonly Regex HResultPattern = new(@"(?i)\bhresult\s*=\s*(-?[0-9]{1,11}|0x[0-9a-f]{8})\b", RegexOptions.Compiled | RegexOptions.CultureInvariant);
     private static readonly Regex ReasonCodePattern = new(@"(?i)\breason(?:_code)?\s*=\s*([a-z][a-z0-9_-]{0,31}(?:\.[a-z0-9_-]{1,32}){1,6})(?=[;\s,]|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
+    private static readonly Regex ElapsedPattern = new(@"\belapsed_ms=([0-9]{1,8})(?=[;\s,]|$)", RegexOptions.Compiled | RegexOptions.CultureInvariant);
+    private static readonly HashSet<string> StartupMilestoneCodes = new(StringComparer.Ordinal)
+    {
+        "startup.app_constructor", "startup.xaml_initialized", "startup.launch_entered",
+        "startup.environment_loaded", "startup.window_created", "startup.window_activated", "startup.database_ready",
+    };
+
     public static async Task<SupportBundleExportResult> CreateAsync(
         string destinationPath,
         string logDirectory,
@@ -188,7 +195,7 @@ public static class SupportBundleExporter
 
         var manifest = new
         {
-            formatVersion = 2,
+            formatVersion = 3,
             generatedAtUtc = DateTimeOffset.UtcNow,
             applicationVersion = safeAppVersion,
             windowsVersion = safeWindowsVersion,
@@ -227,7 +234,7 @@ public static class SupportBundleExporter
             summary.AppendLine(CultureInfo.InvariantCulture, $"{group.Key.Level}\t{group.Key.Category}\t{group.Count().ToString(CultureInfo.InvariantCulture)}");
         }
 
-        var eventLines = new StringBuilder("timestamp_utc\tlevel\tcategory\texception_type\thresult\treason_code\n");
+        var eventLines = new StringBuilder("timestamp_utc\tlevel\tcategory\texception_type\thresult\treason_code\telapsed_ms\n");
         foreach (var item in events)
         {
             eventLines.Append(item.TimestampUtc.ToString("O", CultureInfo.InvariantCulture)).Append('\t')
@@ -235,7 +242,8 @@ public static class SupportBundleExporter
                 .Append(item.Category).Append('\t')
                 .Append(item.ExceptionType ?? string.Empty).Append('\t')
                 .Append(item.HResult ?? string.Empty).Append('\t')
-                .Append(item.ReasonCode ?? string.Empty).Append('\n');
+                .Append(item.ReasonCode ?? string.Empty).Append('\t')
+                .Append(item.ElapsedMilliseconds?.ToString(CultureInfo.InvariantCulture) ?? string.Empty).Append('\n');
         }
 
         return new BundleSnapshot(
@@ -307,13 +315,18 @@ public static class SupportBundleExporter
         var exception = ExceptionTypePattern.Match(fields[4]);
         var hresult = HResultPattern.Match(fields[4]);
         var reason = ReasonCodePattern.Match(fields[4]);
+        var elapsed = ElapsedPattern.Match(fields[4]);
+        long? safeElapsed = category == "STARTUP" && reason.Success && StartupMilestoneCodes.Contains(reason.Groups[1].Value)
+            && elapsed.Success && long.TryParse(elapsed.Groups[1].Value, NumberStyles.None, CultureInfo.InvariantCulture, out var milliseconds)
+            && milliseconds <= 3_600_000 ? milliseconds : null;
         operationalEvent = new OperationalEvent(
             timestamp,
             level,
             category,
             exception.Success ? exception.Groups[1].Value : null,
             hresult.Success ? hresult.Groups[1].Value : null,
-            reason.Success ? reason.Groups[1].Value : null);
+            reason.Success ? reason.Groups[1].Value : null,
+            safeElapsed);
         return true;
     }
 
@@ -331,7 +344,8 @@ Scrobblix privacy-safe support bundle
 This bundle was created locally at the user's request. It includes version/runtime
 metadata, a normalized source snapshot (source kind, playback state, last-observation
 time and whether tracking is enabled), plus operational event timestamps, level,
-category and constrained exception/HRESULT/reason codes. Original free-form log
+category and constrained exception/HRESULT/reason codes. Known startup milestones
+include bounded elapsed milliseconds measured since App construction, not OS process launch. Original free-form log
 messages are never exported. Source values are allow-listed; arbitrary values are
 reduced to "other"/"unknown".
 
@@ -350,7 +364,8 @@ to share it. Treat exception names and event timing as diagnostics information.
         string Category,
         string? ExceptionType,
         string? HResult,
-        string? ReasonCode);
+        string? ReasonCode,
+        long? ElapsedMilliseconds);
 
     private sealed record BundleSnapshot(
         string ManifestJson,

@@ -27,6 +27,9 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
     private static int _suppressedBrowserPipeIoWarnings;
     private static int _browserPipeIoFailureStreak;
     private static readonly TimeSpan BrowserPipeIoWarningInterval = TimeSpan.FromSeconds(30);
+    // Starts before XAML initialization. It cannot measure OS/process-loader time before App creation.
+    private readonly Stopwatch _startupClock = Stopwatch.StartNew();
+    private readonly List<(string Code, long Elapsed)> _startupMilestones = new();
     private MainWindow? _window;
     private ScrobblixUserPreferences _userPreferences = new(false);
     private Semaphore? _singleInstanceSemaphore;
@@ -36,7 +39,9 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
     public App()
     {
+        _startupMilestones.Add(("startup.app_constructor", 0));
         InitializeComponent();
+        _startupMilestones.Add(("startup.xaml_initialized", _startupClock.ElapsedMilliseconds));
     }
 
     protected override async void OnLaunched(LaunchActivatedEventArgs args)
@@ -68,6 +73,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         return;
         }
 #endif
+        _startupMilestones.Add(("startup.launch_entered", _startupClock.ElapsedMilliseconds));
         if (!TryAcquireSingleInstance())
         {
             Exit();
@@ -75,9 +81,11 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         LoadLocalLastFmEnvironment();
+        _startupMilestones.Add(("startup.environment_loaded", _startupClock.ElapsedMilliseconds));
         try
         {
             _window = new MainWindow();
+            _startupMilestones.Add(("startup.window_created", _startupClock.ElapsedMilliseconds));
         }
         catch
         {
@@ -101,6 +109,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
         _window.Activate();
+        _startupMilestones.Add(("startup.window_activated", _startupClock.ElapsedMilliseconds));
 
         try
         {
@@ -110,6 +119,11 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             Directory.CreateDirectory(dataDirectory);
             var logger = new ScrobblixFileLogger(dataDirectory);
             fileLogger = logger;
+            foreach (var milestone in _startupMilestones)
+            {
+                logger.Info("STARTUP", $"reason_code={milestone.Code}; elapsed_ms={milestone.Elapsed.ToString(CultureInfo.InvariantCulture)};");
+            }
+            _startupMilestones.Clear();
             _window.SetLogDirectory(Path.Combine(dataDirectory, "logs"));
             _window.DiagnosticLogRequested += message => logger.Warning("DIAGNOSTICS", message);
             logger.Info("STARTUP", $"Starting Scrobblix; process_id={Environment.ProcessId}; log_file={Path.GetFileName(logger.LogPath)}.");
@@ -247,6 +261,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             var database = new SqliteDatabase(connectionString);
             await database.InitializeAsync(CancellationToken.None);
             logger.Info("DATABASE", "SQLite database initialized and migrations verified.");
+            logger.Info("STARTUP", $"reason_code=startup.database_ready; elapsed_ms={_startupClock.ElapsedMilliseconds.ToString(CultureInfo.InvariantCulture)};");
             StartPlaybackObservationRetention(connectionString, logger, applicationCancellation.Token);
             StartArtworkCacheRetention(connectionString, Path.Combine(dataDirectory, "artwork"), logger, applicationCancellation.Token);
             _window.BackupRequested += async destinationPath =>
@@ -517,6 +532,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 
         var hasConfiguration = ConfigureCredentials(initialApiKey, initialApiSecret);
+        logger.Info("LASTFM", hasConfiguration ? "reason_code=auth.configuration_available;" : "reason_code=auth.configuration_missing;");
         logger.Info("LASTFM", hasConfiguration ? "Last.fm API configuration is available; awaiting account state." : "Last.fm API credentials are not configured; local history remains enabled.");
         if (hasConfiguration)
         {
@@ -548,7 +564,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
 
                 _window.SetLastFmCredentialsStatus("API key and shared secret saved in Windows Credential Locker.");
                 _window.SetLastFmReadyToConnect();
-                await SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
+                await SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, logger, cancellationToken);
             }
             catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
             {
@@ -666,7 +682,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             connectionString,
             logger,
             cancellationToken);
-        _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, cancellationToken);
+        _ = SetLastFmInitialStateAsync(accountStore, credentialStore, () => authenticator is not null, logger, cancellationToken);
     }
 
     private bool TryAcquireSingleInstance()
@@ -908,10 +924,12 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         SqliteProviderAccountStore accountStore,
         WindowsCredentialStore credentialStore,
         Func<bool> hasConfiguration,
+        ScrobblixFileLogger logger,
         CancellationToken cancellationToken)
     {
         if (!hasConfiguration())
         {
+            logger.Info("LASTFM", "reason_code=auth.configuration_missing;");
             _window!.SetLastFmUnavailable();
             return;
         }
@@ -919,6 +937,7 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var account = await accountStore.GetConnectedAsync("lastfm", cancellationToken);
         if (account is null)
         {
+            logger.Info("LASTFM", "reason_code=auth.account_not_connected;");
             _window!.SetLastFmReadyToConnect();
             return;
         }
@@ -926,10 +945,12 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         var sessionKey = await credentialStore.GetAsync(account.CredentialResource, account.UserName, cancellationToken);
         if (string.IsNullOrWhiteSpace(sessionKey))
         {
+            logger.Info("LASTFM", "reason_code=auth.session_unavailable;");
             _window!.SetLastFmConnectionError();
             return;
         }
 
+        logger.Info("LASTFM", "reason_code=auth.session_available;");
         _window!.SetLastFmConnected(account.UserName, account.AccountId);
     }
 
@@ -1352,6 +1373,9 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             try
             {
                 var metadata = await metadataEnricher.EnrichAsync(observation, cancellationToken);
+                logger.Info("METADATA", string.IsNullOrWhiteSpace(metadata.ArtworkPath)
+                    ? "reason_code=artwork.enrichment_no_file;"
+                    : File.Exists(metadata.ArtworkPath) ? "reason_code=artwork.enrichment_file_present;" : "reason_code=artwork.enrichment_file_missing;");
                 cancellationToken.ThrowIfCancellationRequested();
                 await localPlayStore.UpdateMetadataAsync(playId, metadata, cancellationToken);
                 logger.Info("METADATA", $"Metadata enrichment completed; play_id={playId}; album_artist={metadata.AlbumArtist ?? "(missing)"}; track_number={metadata.TrackNumber?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; release_year={metadata.ReleaseYear?.ToString(CultureInfo.InvariantCulture) ?? "(missing)"}; recording_mbid={(metadata.RecordingMusicBrainzId is null ? "(missing)" : "available")}; release_mbid={(metadata.ReleaseMusicBrainzId is null ? "(missing)" : "available")}; artwork_source={metadata.ArtworkSource ?? "(missing)"}; artwork_path={(metadata.ArtworkPath is null ? "(missing)" : metadata.ArtworkPath)}.");
