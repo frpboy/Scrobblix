@@ -2,11 +2,11 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Public unsigned preview; real-world qualification pending  
-> **Last updated:** 2026-11-09
+> **Status:** Public development previews; platform-specific qualification limits below
+> **Last updated:** 2026-11-10
 
 
-Scrobblix is a local-first Windows listening companion with Last.fm scrobbling. It detects playback from supported desktop applications and browser tabs, maintains a local listening history, explains why a track did or did not scrobble, and safely queues submissions when Last.fm or the network is unavailable.
+Scrobblix is a local-first listening-history and Last.fm scrobbling project for **Windows and Android**. The Windows app uses WinUI 3 with an optional browser companion; the Android app uses Kotlin and Jetpack Compose with notification-listener/media-session collection. Both implementations maintain local history and track submission outcomes. They are development previews, not stable production releases.
 
 This repository is the product and engineering source of truth for the personal open-source project maintained by **Rahul Muraleedharan** under the GitHub account **[`frpboy`](https://github.com/frpboy)**.
 
@@ -20,19 +20,26 @@ Scrobblix must answer three questions immediately:
 
 ## Downloads and preview releases
 
-Latest published preview checked on 9 November 2026: [v0.1.0-beta.5](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.5). It contains the Windows Test Bundle, optional Browser Companion and SHA-256 checksums. This is not a final stable release.
+Public releases checked on 10 November 2026:
 
-Version tags trigger the automated [Preview Release workflow](.github/workflows/release.yml). It runs the full Windows CI checks before publishing the desktop test bundle, optional browser companion, and SHA-256 checksums on the [GitHub Releases page](https://github.com/frpboy/Scrobblix/releases).
+| Platform | Current preview | Download and limits |
+|---|---|---|
+| Android | [0.1.0-alpha.2](https://github.com/frpboy/Scrobblix/releases/tag/android-v0.1.0-alpha.2) | [Signed APK](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/Scrobblix-Android-v0.1.0-alpha.2.apk) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/SHA256SUMS.txt). Early development alpha for Android 8.0/API 26 or newer; not a Play release. |
+| Windows | [0.1.0-beta.6](https://github.com/frpboy/Scrobblix/releases/tag/v0.1.0-beta.6) | Desktop ZIP, Windows Test Bundle, optional Browser Companion and checksums. Unsigned preview bundles, not a signed installer or stable production release. |
 
-**Current distribution status:** preview ZIPs are unsigned development test bundles—not a signed installer or stable production release. The app may require the matching Microsoft Windows App Runtime, and real-Windows/listening qualification and installer-signing gates remain open. Read the [release process](docs/RELEASE_PROCESS.md) before downloading or distributing a preview.
+Read the linked release notes before installing. These platform-specific version numbers are separate release tracks, not a claim that one platform is more complete than the other. The [Releases page](https://github.com/frpboy/Scrobblix/releases) lists published versions and their exact assets.
+
+Windows may require the matching Microsoft Windows App Runtime. Read the [release process](docs/RELEASE_PROCESS.md) for the preview workflow and the remaining signing, installer and real-Windows qualification gates. This README update changes documentation only; it does not rebuild, replace or republish release assets.
 
 ## Android and current qualification
 
-The repository also contains an Android Kotlin + Jetpack Compose development preview under `android/`. It has notification-listener/media-session collection, local history, an account-fenced durable queue and Last.fm submission logic. It is not a Windows Browser Companion replacement, a Play release or a qualified owner-phone update. See [Android implementation status](docs/android/IMPLEMENTATION_STATUS.md) for the exact evidence and remaining gates.
+The Android implementation is under `android/`. It includes notification-listener/media-session collection, local history, an account-fenced durable queue and Last.fm submission logic. It is not a Windows Browser Companion replacement. See [Android implementation status](docs/android/IMPLEMENTATION_STATUS.md) for implementation details; historical snapshots there must be read with the current release notes.
 
-PR #154 is merged; its post-merge Windows and Android ordinary checks passed on `de43af3e44cbb856dc485943263ea69b62d0375d`. Main checked when this update was prepared on 9 November 2026 was `5736d1b6fdf858bf8aec2bc7279e14e3668ada48`, after PR #155 browser artwork-URL filtering and passing post-merge Windows CI. These checks do not qualify the separate About candidate or establish historical Unknown-submission causes. Now Playing, a local eligible listen and a saved provider acknowledgement are different states. Unknown submissions are not automatically resent because Last.fm may already have received them.
+Android alpha.2 is built from merged source `5c54607c57b07d2e5e7f3dc6db46d09f36c71291`, after PRs [#161](https://github.com/frpboy/Scrobblix/pull/161) and [#162](https://github.com/frpboy/Scrobblix/pull/162). Its ordinary Android and Windows checks passed. The exact owner-signed alpha.1-to-alpha.2 APK pair also passed isolated, synthetic upgrade checks on API 26 and API 36, including preservation of synthetic history, preferences and account data. The same-commit app screenshots were inspected, including the updated About/privacy screens.
 
-The shared About/Sponsor pages are in separate reviewed candidate branches, not main or beta.5. Android synthetic capture now includes an isolated actual MainActivity comparison, but API36 navigation glyphs remain visually unusable despite passing tests. Windows native About runtime remains open; browser captures are local previews, not installed-extension proof. There is no Android APK in the public beta.5 release.
+That evidence is limited to the tested synthetic environments. It is **not** proof of real-provider authorization or scrobble delivery, a qualified update on a user's handset, Play readiness, or production reliability. Windows native About runtime qualification and real Windows listening, installer and signing gates remain open. Do not treat browser previews as installed-extension evidence.
+
+Now Playing, a local eligible listen and a saved provider acknowledgement are different states. Unknown submissions are not automatically resent because Last.fm may already have received them. Do not reset app data, reinstall or replay uncertain submissions as a troubleshooting shortcut.
 
 ## Recommended implementation baseline
 
