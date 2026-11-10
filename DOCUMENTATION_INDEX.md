@@ -27,7 +27,7 @@ The tracked tree snapshot used for this pass contains 411 files and 258 Markdown
 | [`DOCUMENTATION_VALIDATION.md`](DOCUMENTATION_VALIDATION.md) | **Documentation Validation Report.** Generated static checks, repository counts, and validation limitations. |
 | [`GOVERNANCE.md`](GOVERNANCE.md) | **Governance.** Scrobblix is currently a maintainer-led personal open-source project. |
 | [`LICENSE`](LICENSE) | **LICENSE.** Repository configuration or non-Markdown project file. |
-| [`README.md`](README.md) | **Scrobblix.** Windows and Android listening history and Last.fm scrobbling development previews, current platform downloads, and qualification limits. |
+| [`README.md`](README.md) | **Scrobblix.** Windows and Android listening history and Last.fm scrobbling development previews, current platform downloads, qualification limits, and the maintainer-approved Windows/Last.fm screenshot gallery. |
 | [`PRODUCTION_RELEASE_PREREQUISITES.md`](PRODUCTION_RELEASE_PREREQUISITES.md) | **Production Release Prerequisites.** External credentials/identities, Native Messaging threat review, live qualification, signed distribution and private-beta release gates. |
 | [`SECURITY.md`](SECURITY.md) | **Security Policy.** Pre-release reporting guidance; current releases are unsigned development previews. |
 | [`SUPPORT.md`](SUPPORT.md) | **Support.** Before reporting a missed scrobble, capture: |
