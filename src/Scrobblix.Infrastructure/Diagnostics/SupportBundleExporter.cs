@@ -33,6 +33,7 @@ public static class SupportBundleExporter
 {
     private const int MaximumLogFiles = 5;
     private const int MaximumEventsPerFile = 750;
+    private const int MaximumStartupEventsPerFile = 16;
     private const long MaximumBytesPerLogFile = 8 * 1024 * 1024;
     private static readonly JsonSerializerOptions ManifestJsonOptions = new() { WriteIndented = true };
     private static readonly Regex SafeCategory = new("^[A-Z0-9_]{1,32}$", RegexOptions.Compiled | RegexOptions.CultureInvariant);
@@ -45,6 +46,7 @@ public static class SupportBundleExporter
     {
         "startup.app_constructor", "startup.xaml_initialized", "startup.launch_entered",
         "startup.environment_loaded", "startup.window_created", "startup.window_activated", "startup.database_ready",
+        "startup.root_loaded", "startup.first_render_tick",
     };
 
     public static async Task<SupportBundleExportResult> CreateAsync(
@@ -151,23 +153,30 @@ public static class SupportBundleExporter
                 inspected++;
                 try
                 {
-                    var tail = new Queue<string>();
+                    // Preserve bounded, already-sanitized startup evidence even when polling
+                    // pushes it out of the raw-line tail. Row index dedupes without collapsing
+                    // distinct events that happen to share a timestamp or reason.
+                    var tail = new Queue<(long Index, OperationalEvent? Event)>();
+                    var startup = new Queue<(long Index, OperationalEvent? Event)>();
+                    long index = 0;
                     foreach (var line in File.ReadLines(file.FullName))
                     {
                         cancellationToken.ThrowIfCancellationRequested();
-                        tail.Enqueue(line);
-                        while (tail.Count > MaximumEventsPerFile)
+                        var parsed = TryParseOperationalEvent(line, out var item) ? item : null;
+                        var row = (++index, parsed);
+                        tail.Enqueue(row);
+                        while (tail.Count > MaximumEventsPerFile) tail.Dequeue();
+                        if (parsed is { Category: "STARTUP", ElapsedMilliseconds: not null }
+                            && parsed.ReasonCode is { } code && StartupMilestoneCodes.Contains(code))
                         {
-                            tail.Dequeue();
+                            startup.Enqueue(row);
+                            while (startup.Count > MaximumStartupEventsPerFile) startup.Dequeue();
                         }
                     }
 
-                    foreach (var line in tail)
+                    foreach (var row in startup.Concat(tail).DistinctBy(row => row.Index).OrderBy(row => row.Index))
                     {
-                        if (TryParseOperationalEvent(line, out var operationalEvent))
-                        {
-                            events.Add(operationalEvent);
-                        }
+                        if (row.Event is { } operationalEvent) events.Add(operationalEvent);
                     }
                 }
                 catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
@@ -179,7 +188,7 @@ public static class SupportBundleExporter
 
         events = events
             .OrderBy(item => item.TimestampUtc)
-            .TakeLast(MaximumLogFiles * MaximumEventsPerFile)
+            .TakeLast(MaximumLogFiles * (MaximumEventsPerFile + MaximumStartupEventsPerFile))
             .ToList();
 
         var safeAppVersion = Regex.IsMatch(applicationVersion, @"^[A-Za-z0-9.+_-]{1,80}$", RegexOptions.CultureInvariant)
@@ -345,7 +354,12 @@ This bundle was created locally at the user's request. It includes version/runti
 metadata, a normalized source snapshot (source kind, playback state, last-observation
 time and whether tracking is enabled), plus operational event timestamps, level,
 category and constrained exception/HRESULT/reason codes. Known startup milestones
-include bounded elapsed milliseconds measured since App construction, not OS process launch. Original free-form log
+include bounded elapsed milliseconds measured since App construction, not OS process launch.
+Root-loaded and first-render-tick events describe XAML scheduling, not confirmed screen pixels
+or a measured first visible frame. Callback deltas include instrumentation/logger overhead,
+not unmodified startup latency. Up to 16 known startup events with bounded elapsed values
+per inspected log are retained separately from its last 750 lines, so polling does not
+remove all startup evidence. Original free-form log
 messages are never exported. Source values are allow-listed; arbitrary values are
 reduced to "other"/"unknown".
 

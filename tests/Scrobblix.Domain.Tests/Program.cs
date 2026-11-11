@@ -27,6 +27,51 @@ using Scrobblix.Infrastructure.Diagnostics;
 await MigrationTextChecks.RunAsync();
 if (args.Contains("--migration-text-check",StringComparer.Ordinal)) return;
 
+// Exercise actual image-response rejection with synthetic HTTP only, no remote traffic.
+var artworkDiagnosticRoot = Path.Combine(Path.GetTempPath(), $"scrobblix-artwork-diagnostic-{Guid.NewGuid():N}");
+try
+{
+    foreach (var testCase in new[]
+    {
+        (Status: 302, Type: (string?)null, Reason: "artwork.http_redirect_unresolved"),
+        (Status: 404, Type: (string?)null, Reason: "artwork.http_client_error"),
+        (Status: 503, Type: (string?)null, Reason: "artwork.http_server_error"),
+        (Status: 200, Type: (string?)null, Reason: "artwork.content_type_missing"),
+        (Status: 200, Type: "text/x-canary", Reason: "artwork.content_type_not_image"),
+    })
+    {
+        var diagnosticLines = new List<string>();
+        using var response = new HttpResponseMessage((HttpStatusCode)testCase.Status) { Content = new ByteArrayContent([1]) };
+        if (testCase.Type is { } type) response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(type);
+        using var client = new HttpClient(new ArtworkDiagnosticHandler(response));
+        var enricher = new TrackMetadataEnricher(client, null, artworkDiagnosticRoot, diagnosticLines.Add, client);
+        var fetch = typeof(TrackMetadataEnricher).GetMethod("TryCacheArtworkAsync", BindingFlags.NonPublic | BindingFlags.Instance)!;
+        var result = await (Task<PlayMetadataEnrichment>)fetch.Invoke(enricher, ["https://example.com/CANARY_TRACK", "cover-art-archive", CancellationToken.None])!;
+        Assert(result.ArtworkPath is null && diagnosticLines.Contains($"reason_code={testCase.Reason};")
+            && diagnosticLines.Contains("reason_code=artwork.source_cover_archive;"),
+            "Rejected synthetic image responses retain fixed status/content-type/source diagnostics without accepting unsafe images.");
+        var fixedLines = diagnosticLines.Where(line => line.StartsWith("reason_code=", StringComparison.Ordinal) && !line.Contains(' '));
+        Assert(!string.Join('\n', fixedLines).Contains("CANARY", StringComparison.Ordinal)
+            && !string.Join('\n', fixedLines).Contains("canary", StringComparison.Ordinal), "Fixed artwork reason lines exclude external values.");
+    }
+    foreach (var hasKey in new[] { false, true })
+    {
+        var lines = new List<string>();
+        using var client = new HttpClient();
+        var enricher = new TrackMetadataEnricher(client, hasKey ? "CANARY_SECRET" : null, artworkDiagnosticRoot, lines.Add);
+        await enricher.EnrichAsync(new PlayObservation(new SourceEventKey("s", "s", 1), DateTimeOffset.UnixEpoch,
+            DateTimeOffset.UnixEpoch, "gsmtc", "app", null, null, null, null, null, PlayState.Playing, null, null), CancellationToken.None);
+        Assert(lines.Contains(hasKey ? "reason_code=artwork.lastfm_key_available;" : "reason_code=artwork.lastfm_key_unavailable;")
+            && lines.Contains("reason_code=artwork.track_fields_missing;")
+            && !string.Join('\n', lines).Contains("CANARY", StringComparison.Ordinal),
+            "Metadata availability diagnostics report presence only, without keys or track data.");
+    }
+}
+finally
+{
+    if (Directory.Exists(artworkDiagnosticRoot)) Directory.Delete(artworkDiagnosticRoot, recursive: true);
+}
+
 var reconciliationStart = new DateTimeOffset(2026, 1, 2, 8, 31, 14, TimeSpan.FromHours(5.5));
 var reconciliationAction = new QueueActionSummary("synthetic-action", "synthetic-play", "lastfm",
     ProviderActionType.Scrobble, ProviderActionState.SubmissionOutcomeUnknown, 1,
@@ -470,7 +515,9 @@ try
         "000005 | 2026-10-22T12:00:04.0000000+00:00 | INFO | STARTUP | reason_code=startup.window_created; elapsed_ms=99999999;" + Environment.NewLine +
         "000006 | 2026-10-22T12:00:05.0000000+00:00 | INFO | METADATA | reason_code=artwork.enrichment_no_file; elapsed_ms=999;" + Environment.NewLine +
         "000007 | 2026-10-22T12:00:06.0000000+00:00 | INFO | STARTUP | reason_code=startup.unknown; elapsed_ms=999;" + Environment.NewLine +
-        "000008 | 2026-10-22T12:00:07.0000000+00:00 | INFO | STARTUP | reason_code=startup.database_ready; elapsed_ms=-1;" + Environment.NewLine);
+        "000008 | 2026-10-22T12:00:07.0000000+00:00 | INFO | STARTUP | reason_code=startup.database_ready; elapsed_ms=-1;" + Environment.NewLine +
+        "000009 | 2026-10-22T12:00:08.0000000+00:00 | INFO | STARTUP | reason_code=startup.root_loaded; elapsed_ms=1300; artist=CANARY_TRACK" + Environment.NewLine +
+        "000010 | 2026-10-22T12:00:09.0000000+00:00 | INFO | STARTUP | reason_code=startup.first_render_tick; elapsed_ms=1350;" + Environment.NewLine);
     var supportResult = await SupportBundleExporter.CreateAsync(
         supportArchivePath,
         supportLogDirectory,
@@ -481,7 +528,7 @@ try
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
-    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 8,
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 10,
         "Support bundle reports the number of inspected logs and sanitized events.");
 
     using (var archive = ZipFile.OpenRead(supportArchivePath))
@@ -518,7 +565,10 @@ try
             var lines = (await eventReader.ReadToEndAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert(lines[0].EndsWith("\telapsed_ms", StringComparison.Ordinal), "Startup elapsed column has an explicit schema header.");
             Assert(lines[4].EndsWith("startup.window_activated\t1234", StringComparison.Ordinal), "Known startup milestones retain bounded monotonic elapsed time.");
-            Assert(lines.Skip(5).All(line => line.EndsWith('\t')), "Out-of-range, negative, unknown-code and non-startup elapsed fields are discarded.");
+            Assert(lines.Skip(5).Take(4).All(line => line.EndsWith('\t')), "Out-of-range, negative, unknown-code and non-startup elapsed fields are discarded.");
+            Assert(lines[9].EndsWith("startup.root_loaded\t1300", StringComparison.Ordinal)
+                && lines[10].EndsWith("startup.first_render_tick\t1350", StringComparison.Ordinal),
+                "Visual scheduling milestones retain only bounded elapsed fields, not raw source data.");
         }
 
         var archiveContents = new StringBuilder();
@@ -541,6 +591,55 @@ try
         Assert(exportedText.Contains("HttpRequestException", StringComparison.Ordinal)
             && exportedText.Contains("provider.temporary_unavailable", StringComparison.Ordinal),
             "Support bundle retains a constrained exception type and machine-readable reason code.");
+    }
+
+    var saturatedLogs = Path.Combine(supportBundleRoot, "saturated-logs");
+    Directory.CreateDirectory(saturatedLogs);
+    var saturatedLog = Path.Combine(saturatedLogs, "scrobblix-saturated.log");
+    var saturatedLines = new List<string>();
+    for (var index = 0; index < 20; index++)
+        saturatedLines.Add($"{index:D6} | 2026-10-22T12:00:00+00:00 | INFO | STARTUP | reason_code=startup.root_loaded; elapsed_ms={index}; artist=CANARY_TRACK; token=CANARY_TOKEN");
+    saturatedLines.Add("000021 | 2026-10-22T12:00:00+00:00 | INFO | STARTUP | reason_code=startup.first_render_tick; elapsed_ms=99999999;");
+    for (var index = 0; index < 800; index++)
+        saturatedLines.Add($"{index:D6} | 2026-10-22T12:01:00+00:00 | INFO | OBSERVATION | artist=CANARY_TRACK; token=CANARY_TOKEN");
+    saturatedLines.Add("000999 | 2026-10-22T12:02:00+00:00 | INFO | STARTUP | reason_code=startup.first_render_tick; elapsed_ms=2000; artist=CANARY_TRACK;");
+    await File.WriteAllLinesAsync(saturatedLog, saturatedLines);
+    var saturatedPath = Path.Combine(supportBundleRoot, "support-saturated.zip");
+    var saturatedResult = await SupportBundleExporter.CreateAsync(saturatedPath, saturatedLogs, "test", "test", cancellationToken: CancellationToken.None);
+    using (var saturatedArchive = ZipFile.OpenRead(saturatedPath))
+    using (var reader = new StreamReader(saturatedArchive.GetEntry("operational-events.tsv")!.Open()))
+    {
+        var saturatedText = await reader.ReadToEndAsync();
+        var rows = saturatedText.Split('\n', StringSplitOptions.RemoveEmptyEntries).Skip(1).ToArray();
+        Assert(saturatedResult.OperationalEventsIncluded == 765 && rows.Length == 765,
+            "Saturated export keeps last 750 raw lines plus at most 16 startup rows, deduplicating overlap.");
+        Assert(rows.Count(row => row.Contains("startup.root_loaded", StringComparison.Ordinal)) == 15
+            && rows.Count(row => row.Contains("startup.first_render_tick", StringComparison.Ordinal)) == 1
+            && rows.Any(row => row.EndsWith("startup.root_loaded\t5", StringComparison.Ordinal))
+            && !rows.Any(row => row.EndsWith("startup.root_loaded\t4", StringComparison.Ordinal)),
+            "Bounded startup retention survives polling saturation, keeps distinct same-time events and drops oldest overflow.");
+        Assert(!saturatedText.Contains("CANARY", StringComparison.Ordinal) && !saturatedText.Contains("99999999", StringComparison.Ordinal),
+            "Separately retained startup evidence remains sanitized and elapsed-bounded.");
+    }
+
+    var artworkLogDirectory = Path.Combine(supportBundleRoot, "artwork-diagnostic-logs");
+    Directory.CreateDirectory(artworkLogDirectory);
+    var artworkCodes = new[] { "artwork.lastfm_key_unavailable", "artwork.lastfm_key_available", "artwork.track_fields_missing",
+        "artwork.release_lookup_unavailable", "artwork.release_lookup_available", "artwork.metadata_cache_hit",
+        "artwork.lastfm_metadata_unavailable", "artwork.lastfm_image_unavailable", "artwork.lastfm_image_available",
+        "artwork.source_browser", "artwork.source_cover_archive", "artwork.source_lastfm", "artwork.source_other",
+        "artwork.http_client_error", "artwork.http_server_error", "artwork.http_redirect_unresolved",
+        "artwork.content_type_missing", "artwork.content_type_not_image" };
+    await File.WriteAllLinesAsync(Path.Combine(artworkLogDirectory, "scrobblix-artwork.log"), artworkCodes.Select(code =>
+        $"000001 | 2026-10-22T12:00:00+00:00 | INFO | METADATA_PROVIDER | reason_code={code}; artist=CANARY_TRACK; key=CANARY_SECRET; host=CANARY_HOST; content_type=CANARY_TYPE"));
+    var artworkArchivePath = Path.Combine(supportBundleRoot, "support-artwork.zip");
+    await SupportBundleExporter.CreateAsync(artworkArchivePath, artworkLogDirectory, "test", "test", cancellationToken: CancellationToken.None);
+    using (var archive = ZipFile.OpenRead(artworkArchivePath))
+    using (var reader = new StreamReader(archive.GetEntry("operational-events.tsv")!.Open()))
+    {
+        var text = await reader.ReadToEndAsync();
+        Assert(artworkCodes.All(code => text.Contains(code, StringComparison.Ordinal)) && !text.Contains("CANARY", StringComparison.Ordinal),
+            "Support export keeps fixed artwork reason vocabulary while dropping private/external raw fields.");
     }
 
     var untrustedSnapshotPath = Path.Combine(supportBundleRoot, "support-untrusted-source.zip");
@@ -2335,4 +2434,9 @@ sealed class StatusHttpHandler(System.Net.HttpStatusCode status, string body, bo
         if (includeRetryAfter) response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromSeconds(27));
         return Task.FromResult(response);
     }
+}
+
+internal sealed class ArtworkDiagnosticHandler(HttpResponseMessage response) : HttpMessageHandler
+{
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(response);
 }

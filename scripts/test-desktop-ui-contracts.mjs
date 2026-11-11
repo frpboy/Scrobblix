@@ -155,3 +155,12 @@ assert.ok(code.includes("QueueActionPresenter.StateLabel(action)") && code.inclu
 assert.ok(code.includes("QueueActionPresenter.UnknownOutcomeHelp") && code.includes("QueueActionPresenter.ConfirmAcceptedHelp"), "Queue and confirmation must use tested conservative reconciliation copy.");
 assert.ok(!code.includes("before the connection failed") && !code.includes("Original due time:"), "Unknown response must not invent a connection failure or label mutable due time original.");
 assert.ok(queuePresenter.includes("Accepted locally: user confirmed") && queuePresenter.includes("Accepted by provider"), "User confirmation must not be displayed as provider acknowledgement.");
+
+// Startup scheduling timestamps are honest diagnostics, not a first-pixel claim.
+assert.ok(code.includes("CompositionTarget.Rendering -= rendering;") && code.includes('record("startup.root_loaded")') && code.includes('record("startup.first_render_tick")'), "Initial visual scheduling must be observed once and detached.");
+assert.ok(read("src/Scrobblix.Desktop/App.xaml.cs").includes("_window.ObserveInitialVisualStartup"), "Normal startup must connect visual diagnostics before activation.");
+
+const startupApp = read("src/Scrobblix.Desktop/App.xaml.cs");
+assert.ok(startupApp.indexOf("_window.ObserveInitialVisualStartup") < startupApp.indexOf("_window.Activate();"), "Visual observer must be installed before normal activation.");
+const startupProbe = read("scripts/test-ordinary-startup.ps1");
+assert.ok(startupProbe.includes("$priorLogPaths") && startupProbe.includes("$($p.Id)") && startupProbe.includes("$matchesForCode.Count -ne 1") && startupProbe.includes("$milestones.root_loaded -gt $milestones.first_render_tick"), "Startup gate must bind a new per-process session and enforce unique ordered markers.");

@@ -108,6 +108,12 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
             notificationService = null;
             fileLogger?.Info("SHUTDOWN", "Scrobblix main window closed; background operations cancelled.");
         };
+        _window.ObserveInitialVisualStartup(code =>
+        {
+            var elapsed = _startupClock.ElapsedMilliseconds;
+            if (fileLogger is null) _startupMilestones.Add((code, elapsed));
+            else fileLogger.Info("STARTUP", $"reason_code={code}; elapsed_ms={elapsed.ToString(CultureInfo.InvariantCulture)};");
+        });
         _window.Activate();
         _startupMilestones.Add(("startup.window_activated", _startupClock.ElapsedMilliseconds));
 
