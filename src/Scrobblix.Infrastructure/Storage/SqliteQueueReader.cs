@@ -209,7 +209,7 @@ public sealed class SqliteQueueReader(string connectionString)
         await using var command = connection.CreateCommand();
         command.CommandText = """
             SELECT a.action_id, a.play_id, a.provider, a.action_type, a.state, a.attempt_count,
-                   a.due_utc, a.last_reason_code, p.artist, p.title
+                   a.due_utc, a.last_reason_code, p.artist, p.title, p.started_utc
             FROM provider_actions a
             LEFT JOIN plays p ON p.play_id = a.play_id
             ORDER BY a.updated_utc DESC, a.created_utc DESC, a.action_id DESC
@@ -230,7 +230,8 @@ public sealed class SqliteQueueReader(string connectionString)
                 DateTimeOffset.Parse(reader.GetString(6), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind),
                 reader.IsDBNull(7) ? null : reader.GetString(7),
                 reader.IsDBNull(8) ? null : reader.GetString(8),
-                reader.IsDBNull(9) ? null : reader.GetString(9)));
+                reader.IsDBNull(9) ? null : reader.GetString(9),
+                reader.IsDBNull(10) ? null : DateTimeOffset.Parse(reader.GetString(10), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.RoundtripKind)));
         }
 
         return result;

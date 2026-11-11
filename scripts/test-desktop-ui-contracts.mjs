@@ -149,3 +149,9 @@ assert.ok(xaml.includes("Apache License 2.0") && !xaml.includes("Based on Seal")
 // Queue copy must not misreport delivery as disabled for an already connected account.
 assert.ok(!xaml.includes("Last.fm delivery remains off until an account is configured."), "Queue must not unconditionally claim delivery is disabled.");
 assert.ok(xaml.includes('x:Name="QueueConnectionGuidanceText"') && xaml.includes("Manage your Last.fm connection in Settings. Provider outcomes are shown per action below; local history is kept independently."), "Queue guidance must distinguish connection management, action outcomes and local history.");
+
+const queuePresenter = read("src/Scrobblix.Application/ReadModels/QueueActionPresenter.cs");
+assert.ok(code.includes("QueueActionPresenter.StateLabel(action)") && code.includes("QueueActionPresenter.PlayStartLabel(action)") && code.includes("QueueActionPresenter.QueueDueLabel(action)"), "Queue cards must distinguish evidence and play start from queue due time.");
+assert.ok(code.includes("QueueActionPresenter.UnknownOutcomeHelp") && code.includes("QueueActionPresenter.ConfirmAcceptedHelp"), "Queue and confirmation must use tested conservative reconciliation copy.");
+assert.ok(!code.includes("before the connection failed") && !code.includes("Original due time:"), "Unknown response must not invent a connection failure or label mutable due time original.");
+assert.ok(queuePresenter.includes("Accepted locally: user confirmed") && queuePresenter.includes("Accepted by provider"), "User confirmation must not be displayed as provider acknowledgement.");

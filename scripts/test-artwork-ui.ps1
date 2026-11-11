@@ -18,6 +18,6 @@ $text = Get-Content $result -Raw
 Write-Output $text
 Get-ChildItem $output -Filter *.txt | ForEach-Object { Write-Output $_.Name; Get-Content $_.FullName }
 if ($text -notmatch '^PASS') { throw 'Artwork UI qualification failed' }
-foreach ($name in @('valid-artwork.png','invalid-fallback.png','recovered-valid.png','broker-consent-ready.png','broker-consent-waiting.png','broker-advanced-own-api.png')) {
+foreach ($name in @('valid-artwork.png','invalid-fallback.png','recovered-valid.png','broker-consent-ready.png','broker-consent-waiting.png','broker-advanced-own-api.png','queue-reconciliation-evidence.png','queue-reconciliation-missing-start.png')) {
     if (-not (Test-Path (Join-Path $output $name))) { throw "Missing actual render $name" }
 }

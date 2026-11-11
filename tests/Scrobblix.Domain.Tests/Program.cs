@@ -27,6 +27,28 @@ using Scrobblix.Infrastructure.Diagnostics;
 await MigrationTextChecks.RunAsync();
 if (args.Contains("--migration-text-check",StringComparer.Ordinal)) return;
 
+var reconciliationStart = new DateTimeOffset(2026, 1, 2, 8, 31, 14, TimeSpan.FromHours(5.5));
+var reconciliationAction = new QueueActionSummary("synthetic-action", "synthetic-play", "lastfm",
+    ProviderActionType.Scrobble, ProviderActionState.SubmissionOutcomeUnknown, 1,
+    reconciliationStart.AddMinutes(2), ReasonCodes.Provider.SubmissionOutcomeUnknown,
+    "Synthetic artist", "Repeated track", reconciliationStart);
+Assert(QueueActionPresenter.StateLabel(reconciliationAction) == "Outcome unknown: review required",
+    "Unknown submission remains unresolved in display.");
+Assert(QueueActionPresenter.StateLabel(reconciliationAction with { State = ProviderActionState.Accepted, LastReasonCode = ReasonCodes.Provider.UserConfirmedAccepted }) == "Accepted locally: user confirmed",
+    "User confirmation is visibly distinct from a provider acknowledgement.");
+Assert(QueueActionPresenter.StateLabel(reconciliationAction with { State = ProviderActionState.Accepted, LastReasonCode = ReasonCodes.Provider.Accepted }) == "Accepted by provider",
+    "Provider acknowledgement has its own explicit evidence label.");
+Assert(QueueActionPresenter.StateLabel(reconciliationAction with { State = ProviderActionState.Accepted, LastReasonCode = null }) == "Accepted: evidence not specified",
+    "Legacy accepted state without a reason does not invent provider proof.");
+Assert(QueueActionPresenter.PlayStartLabel(reconciliationAction).Contains(reconciliationStart.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture))
+    && QueueActionPresenter.QueueDueLabel(reconciliationAction).Contains(reconciliationAction.DueUtc.ToLocalTime().ToString("yyyy-MM-dd HH:mm:ss zzz", System.Globalization.CultureInfo.InvariantCulture))
+    && QueueActionPresenter.QueueDueLabel(reconciliationAction).Contains("not play start"),
+    "Reconciliation displays the original play start separately from the mutable queue due time, including seconds and UTC offset.");
+Assert(QueueActionPresenter.PlayStartLabel(reconciliationAction with { StartedUtc = null }).Contains("unavailable")
+    && !QueueActionPresenter.UnknownOutcomeHelp.Contains("connection failed")
+    && QueueActionPresenter.ConfirmAcceptedHelp.Contains("An earlier play of the same track is not proof"),
+    "Missing start is explicit, ambiguous responses do not claim a connection failure, and repeated tracks need an exact play match.");
+
 Assert(BrowserPlaybackStateMapper.Parse("playing") == PlayState.Playing, "Browser media playing events map to Playing.");
 Assert(BrowserPlaybackStateMapper.Parse("paused") == PlayState.Paused, "Browser media pause events map to Paused.");
 Assert(BrowserPlaybackStateMapper.Parse("ended") == PlayState.Ended, "Browser media ended events stay distinct from pause events.");
@@ -1009,6 +1031,15 @@ var queueActions = await queueReader.GetRecentActionsAsync(50, CancellationToken
 Assert(queueActions.Count >= 2
     && queueActions.Any(action => action.ActionType == ProviderActionType.Scrobble && action.Artist == "Artist"),
     "Queue details expose real persisted actions and related local track metadata.");
+Assert(queueActions.Where(action => action.PlayId is not null).All(action => action.StartedUtc is not null),
+    "Queue details read the persisted play start independently from action due time.");
+
+
+if (args.Contains("--queue-reconciliation-check", StringComparer.Ordinal))
+{
+    Console.WriteLine("PASS queue reconciliation presenter, persisted play-start read model and preceding domain checks; remaining suite not run in this mode.");
+    return;
+}
 
 var queueSummary = await new SqliteQueueReader(connectionString).GetSummaryAsync(CancellationToken.None);
 Assert(queueSummary.AcceptedCount == 1 && queueSummary.InFlightCount == 1, "Queue health is calculated from durable provider action state.");
