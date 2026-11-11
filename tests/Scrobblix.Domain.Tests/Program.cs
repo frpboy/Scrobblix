@@ -1031,8 +1031,13 @@ var queueActions = await queueReader.GetRecentActionsAsync(50, CancellationToken
 Assert(queueActions.Count >= 2
     && queueActions.Any(action => action.ActionType == ProviderActionType.Scrobble && action.Artist == "Artist"),
     "Queue details expose real persisted actions and related local track metadata.");
-Assert(queueActions.Where(action => action.PlayId is not null).All(action => action.StartedUtc is not null),
-    "Queue details read the persisted play start independently from action due time.");
+Assert(queueActions.Where(action => action.PlayId is not null).All(action => action.StartedUtc == historyRecord.FirstObservedUtc),
+    "Queue details read the exact persisted play start independently from action due time.");
+var retriedQueueAction = queueActions.Single(action => action.ActionId == retryLease.ActionId);
+Assert(retriedQueueAction.StartedUtc == retryRecord.FirstObservedUtc
+    && retriedQueueAction.DueUtc == observation.ObservedAtUtc.AddMinutes(3)
+    && retriedQueueAction.StartedUtc != retriedQueueAction.DueUtc,
+    "A rescheduled action retains its original play start while its queue due time changes.");
 
 
 if (args.Contains("--queue-reconciliation-check", StringComparer.Ordinal))
