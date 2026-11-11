@@ -70,14 +70,20 @@ public sealed class TrackMetadataEnricher
     public async Task<PlayMetadataEnrichment> EnrichAsync(PlayObservation observation, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(observation);
+        // Available means configured/nonblank, not validated or authorized.
+        _log?.Invoke(_lastFmApiKey is null
+            ? "reason_code=artwork.lastfm_key_unavailable;"
+            : "reason_code=artwork.lastfm_key_available;");
         if (string.IsNullOrWhiteSpace(observation.Artist) || string.IsNullOrWhiteSpace(observation.Title))
         {
+            _log?.Invoke("reason_code=artwork.track_fields_missing;");
             return FromObservation(observation);
         }
 
         var key = MakeCacheKey(observation);
         if (_cache.TryGetValue(key, out var cached))
         {
+            _log?.Invoke("reason_code=artwork.metadata_cache_hit;");
             _log?.Invoke($"Metadata cache hit; artist={observation.Artist}; title={observation.Title}; artwork_source={cached.ArtworkSource ?? "(none)"}.");
             return Merge(FromObservation(observation), cached);
         }
@@ -98,6 +104,11 @@ public sealed class TrackMetadataEnricher
             release = await TryFindRecordingReleaseAsync(observation, cancellationToken);
         }
 
+        // Local lookup-result availability, not a confident provider match or acknowledgement:
+        // a known release ID can produce a result even when a detail request fails.
+        _log?.Invoke(release is null
+            ? "reason_code=artwork.release_lookup_unavailable;"
+            : "reason_code=artwork.release_lookup_available;");
         if (release is not null)
         {
             _log?.Invoke($"MusicBrainz release matched; artist={observation.Artist}; title={observation.Title}; release_mbid={release.ReleaseId}.");
@@ -126,6 +137,13 @@ public sealed class TrackMetadataEnricher
         {
             _log?.Invoke($"Trying Last.fm track metadata fallback; artist={observation.Artist}; title={observation.Title}.");
             var lastFm = await TryLastFmAsync(observation, cancellationToken);
+            // Image URL presence is not a successful fetch. These fixed events carry
+            // no job/track correlation and cannot identify concurrent request causes.
+            _log?.Invoke(lastFm is null
+                ? "reason_code=artwork.lastfm_metadata_unavailable;"
+                : string.IsNullOrWhiteSpace(lastFm.ArtworkUrl)
+                    ? "reason_code=artwork.lastfm_image_unavailable;"
+                    : "reason_code=artwork.lastfm_image_available;");
             if (lastFm is not null)
             {
                 result = Merge(result, lastFm.Metadata);
@@ -672,8 +690,30 @@ public sealed class TrackMetadataEnricher
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) { return false; }
     }
 
+    // Fixed diagnostic vocabulary only. Never include server-provided content types,
+    // host names, URLs or track data in these extra privacy-safe reason fields.
+    private static string ArtworkResponseRejectionCode(HttpResponseMessage response) =>
+        (int)response.StatusCode switch
+        {
+            < 200 => "artwork.http_informational",
+            >= 300 and < 400 => "artwork.http_redirect_unresolved",
+            >= 400 and < 500 => "artwork.http_client_error",
+            >= 500 and < 600 => "artwork.http_server_error",
+            >= 600 => "artwork.http_other_error",
+            _ => response.Content.Headers.ContentType?.MediaType is null
+                ? "artwork.content_type_missing"
+                : "artwork.content_type_not_image",
+        };
+
     private async Task<PlayMetadataEnrichment> TryCacheArtworkAsync(string? imageUrl, string source, CancellationToken cancellationToken)
     {
+        _log?.Invoke(source switch
+        {
+            "browser-session" => "reason_code=artwork.source_browser;",
+            "cover-art-archive" => "reason_code=artwork.source_cover_archive;",
+            "last.fm" => "reason_code=artwork.source_lastfm;",
+            _ => "reason_code=artwork.source_other;",
+        });
         if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var imageUri) || !IsSafeRemoteImageUri(imageUri))
         {
             _log?.Invoke($"reason_code=artwork.uri_rejected; Artwork source rejected; source={source}; reason=invalid_or_unsafe_https_uri.");
@@ -718,6 +758,7 @@ public sealed class TrackMetadataEnricher
                 if (!response.IsSuccessStatusCode || response.Content.Headers.ContentType?.MediaType is not { } mediaType
                     || !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase))
                 {
+                    _log?.Invoke($"reason_code={ArtworkResponseRejectionCode(response)};");
                     _log?.Invoke($"reason_code=artwork.response_rejected; Artwork fetch rejected; source={source}; host={currentUri.Host}; status={(int)response.StatusCode}; content_type={response.Content.Headers.ContentType?.MediaType ?? "(missing)"}.");
                     return new PlayMetadataEnrichment();
                 }
