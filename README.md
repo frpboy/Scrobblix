@@ -3,7 +3,7 @@
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
 > **Status:** Public development previews; platform-specific qualification limits below\
-> **Last updated:** 2026-11-10
+> **Last updated:** 2026-11-11
 
 
 Scrobblix is a local-first listening-history and Last.fm scrobbling project for **Windows and Android**. The Windows app uses WinUI 3 with an optional browser companion; the Android app uses Kotlin and Jetpack Compose with notification-listener/media-session collection. Both implementations maintain local history and track submission outcomes. They are development previews, not stable production releases.
@@ -45,16 +45,16 @@ Scrobblix must answer three questions immediately:
 
 ## Downloads and preview releases
 
-Public releases checked on 10 November 2026:
+Public releases checked on 11 November 2026:
 
 | Platform | Current preview | Download and limits |
 |---|---|---|
 | Android | [0.1.0-alpha.2](https://github.com/frpboy/Scrobblix/releases/tag/android-v0.1.0-alpha.2) | [Signed APK](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/Scrobblix-Android-v0.1.0-alpha.2.apk) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/android-v0.1.0-alpha.2/SHA256SUMS.txt). Early development alpha for Android 8.0/API 26 or newer; not a Play release. |
-| Windows | [0.1.0-beta.10](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.10) | [Single x64 Setup.exe](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.10/Scrobblix-Windows-x64-Setup.exe) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.10/SHA256SUMS.txt). Per-user unsigned installer preview for x64-compatible Windows build 26100 or newer. No ZIP extraction or separate runtime download. |
+| Windows | [0.1.0-beta.11](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.11) | [Single x64 Setup.exe](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.11/Scrobblix-Windows-x64-Setup.exe) and [SHA-256 checksum](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.11/SHA256SUMS.txt). Per-user unsigned development preview for x64-compatible Windows build 26100 or newer; manual update only. |
 
 Read the linked release notes before installing. These platform-specific version numbers are separate release tracks, not a claim that one platform is more complete than the other. The [Releases page](https://github.com/frpboy/Scrobblix/releases) lists published versions and their exact assets.
 
-For Windows beta.10, exit any running Scrobblix copy from the system tray, verify its checksum, run Setup and use Finish with Run Scrobblix selected, or open Scrobblix from Start later. The installer bundles its private runtimes and uses the existing local profile without resetting history or the queue. Keep an older extracted ZIP folder until checking the installed app. Setup does not remove that folder. Beta.10 uses the Scrobblix shell logo and a final Finish page: Run Scrobblix is checked and Visit GitHub is unchecked by default. Only selected actions run; silent setup launches neither.
+For Windows beta.11, close Scrobblix before updating, verify the downloaded Setup.exe against the matching SHA-256 checksum, and follow the [installer guide](docs/WINDOWS_INSTALLER.md) for the current setup and data-retention steps. Keep the existing local profile; do not delete application data as a queue troubleshooting shortcut. The installer remains unsigned and the release is a manual development preview, not a stable or store-distributed build.
 
 Read the [installer guide](docs/WINDOWS_INSTALLER.md) for installation, upgrade, data retention and exact qualification limits, and the [release process](docs/RELEASE_PROCESS.md) for the wider preview workflow. The installer is unsigned. Credential Locker preservation is source-scope assurance, not an exercised real-user credential migration test; interrupted-upgrade rollback is not qualified. This documentation update does not rebuild, replace or republish release assets.
 
