@@ -92,6 +92,25 @@ public sealed partial class MainWindow
         SetLastFmReadyToConnect();
         Assert(QueueConnectionGuidanceText.Text == queueGuidance, "Disconnected queue guidance changed");
         await Capture("queue-disconnected-guidance");
+        // Synthetic reconciliation evidence only: never query Last.fm or change durable queue state.
+        RootLayout.RequestedTheme = ElementTheme.Light;
+        RootLayout.Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.White);
+        var queueStart = new DateTimeOffset(2026, 1, 2, 8, 31, 14, TimeSpan.Zero);
+        var queueExample = new Scrobblix.Application.ReadModels.QueueActionSummary(
+            "synthetic-unknown", "synthetic-play", "lastfm", Scrobblix.Domain.Queue.ProviderActionType.Scrobble,
+            Scrobblix.Domain.Queue.ProviderActionState.SubmissionOutcomeUnknown, 1, queueStart.AddMinutes(2),
+            Scrobblix.Domain.Diagnostics.ReasonCodes.Provider.SubmissionOutcomeUnknown,
+            "Synthetic artist", "Repeated synthetic track", queueStart);
+        SetQueueActions(new[] { queueExample,
+            queueExample with { ActionId = "synthetic-user", State = Scrobblix.Domain.Queue.ProviderActionState.Accepted,
+                LastReasonCode = Scrobblix.Domain.Diagnostics.ReasonCodes.Provider.UserConfirmedAccepted },
+            queueExample with { ActionId = "synthetic-provider", State = Scrobblix.Domain.Queue.ProviderActionState.Accepted,
+                LastReasonCode = Scrobblix.Domain.Diagnostics.ReasonCodes.Provider.Accepted } });
+        QueuePageActionList.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        await Capture("queue-reconciliation-evidence");
+        SetQueueActions(new[] { queueExample with { StartedUtc = null, PlayId = null } });
+        QueuePageActionList.StartBringIntoView(new BringIntoViewOptions { VerticalAlignmentRatio = 0 });
+        await Capture("queue-reconciliation-missing-start");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, invalid);
         // RenderTargetBitmap does not include the compositor's window backdrop.
         // Use an explicit light fixture surface so transparent pixels do not hide black text.

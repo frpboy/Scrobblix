@@ -1272,13 +1272,19 @@ public sealed partial class MainWindow : Window
             content.Children.Add(new TextBlock { Text = track, FontSize = 15, TextWrapping = TextWrapping.Wrap });
             content.Children.Add(new TextBlock
             {
-                Text = $"{action.Provider} · {action.ActionType} · {FormatQueueState(action.State)} · attempts {action.AttemptCount:N0}",
+                Text = $"{action.Provider} · {action.ActionType} · {QueueActionPresenter.StateLabel(action)} · attempts {action.AttemptCount:N0}",
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
             });
             content.Children.Add(new TextBlock
             {
-                Text = $"Original due time: {action.DueUtc.ToLocalTime():g}",
+                Text = QueueActionPresenter.PlayStartLabel(action),
+                FontSize = 12,
+                TextWrapping = TextWrapping.Wrap,
+            });
+            content.Children.Add(new TextBlock
+            {
+                Text = QueueActionPresenter.QueueDueLabel(action),
                 FontSize = 12,
                 TextWrapping = TextWrapping.Wrap,
             });
@@ -1308,7 +1314,7 @@ public sealed partial class MainWindow : Window
             {
                 content.Children.Add(new TextBlock
                 {
-                    Text = "Last.fm may have accepted this scrobble before the connection failed. Check your Last.fm profile before choosing a recovery action to avoid duplicates.",
+                    Text = QueueActionPresenter.UnknownOutcomeHelp,
                     TextWrapping = TextWrapping.Wrap,
                     FontSize = 12,
                 });
@@ -1338,18 +1344,6 @@ public sealed partial class MainWindow : Window
 
         UpdateScrobbleStatus();
     }
-
-    private static string FormatQueueState(ProviderActionState state) => state switch
-    {
-        ProviderActionState.RetryScheduled => "Retry scheduled",
-        ProviderActionState.RetryExhausted => "Automatic retries exhausted",
-        ProviderActionState.SubmissionOutcomeUnknown => "Outcome unknown: review required",
-        ProviderActionState.AuthBlocked => "Authentication blocked",
-        ProviderActionState.PermanentFailure => "Failed",
-        ProviderActionState.ProviderIgnored => "Ignored by provider",
-        ProviderActionState.InFlight => "In progress",
-        _ => state.ToString(),
-    };
 
     private async void QueueRetryNowButton_Click(object sender, RoutedEventArgs args)
     {
@@ -1402,7 +1396,7 @@ public sealed partial class MainWindow : Window
         {
             XamlRoot = Content.XamlRoot,
             Title = "Confirm this scrobble was accepted?",
-            Content = "Use this only after checking your Last.fm profile and confirming the exact track is present. Scrobblix will stop attempting delivery for this action.",
+            Content = QueueActionPresenter.ConfirmAcceptedHelp,
             PrimaryButtonText = "Confirm accepted",
             CloseButtonText = "Go back",
             DefaultButton = ContentDialogButton.Close,
