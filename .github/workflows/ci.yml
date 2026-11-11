@@ -92,6 +92,7 @@ jobs:
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
       - name: Validate native broker client contracts (synthetic only)
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         run: dotnet run --project tests/Scrobblix.Broker.Tests/Scrobblix.Broker.Tests.csproj --configuration Release --no-build
 
       - name: Publish synthetic pipe-authorization test client
