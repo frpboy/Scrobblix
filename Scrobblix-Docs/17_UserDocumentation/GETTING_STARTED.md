@@ -2,17 +2,17 @@
 
 > **Audience:** Scrobblix preview users and testers  
 > **Status:** User setup guide; this is not a promise of a signed production installer  
-> **Last reviewed:** 2026-11-10
+> **Last reviewed:** 2026-11-11
 
 ## Before you begin
 
-The current Windows beta.10 download is a single unsigned Setup.exe with bundled private runtimes, not a signed MSIX/App Installer or stable production release. Use the [published release](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.10), verify Setup.exe against that release's SHA256SUMS.txt, and read the [Windows installer guide](../../docs/WINDOWS_INSTALLER.md). Do not bypass Windows security protections.
+The current Windows preview is beta.11: a single unsigned x64 Setup.exe with bundled private runtimes, not a signed MSIX/App Installer or stable production release. Use the [beta.11 release](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.11), verify Setup.exe against its [SHA256SUMS.txt](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.11/SHA256SUMS.txt), and read the [Windows installer guide](../../docs/WINDOWS_INSTALLER.md). Close Scrobblix before updating, keep the existing local profile, and do not delete its data folder. Do not bypass Windows security protections.
 
 Scrobblix targets Windows 11. The current release target is Windows 11 25H2 or later, but real-device qualification remains pending. Local history and tracking can operate without a Last.fm connection. Remote scrobbling requires browser authorization; the default connection does not require users to supply developer API keys.
 
 ## First run
 
-1. Exit any older Scrobblix copy from its system tray, verify the checksum, run beta.10 Setup.exe and choose Run Scrobblix on Finish, or open it from Start later. Keep the old extracted ZIP folder until checking the installed app; setup leaves it intact and reuses the existing local profile.
+1. Exit any older Scrobblix copy from its system tray. Verify the beta.11 Setup.exe checksum, run the installer and follow its prompts. The installer refuses to replace a running app; it does not force-close it. Keep an older extracted ZIP folder until you have checked the installed app. Setup leaves that folder intact and reuses the existing local profile.
 2. Open Scrobblix and confirm its startup status indicates that local storage initialized.
 3. Open Settings. The default Last.fm connection uses the public authorization broker. Existing user-owned developer credentials remain an optional advanced direct route; they are not required for normal connection.
 4. Choose **Connect Last.fm**, approve Scrobblix in the browser, then return to the app and finish authorization. Never enter your Last.fm password into Scrobblix.
