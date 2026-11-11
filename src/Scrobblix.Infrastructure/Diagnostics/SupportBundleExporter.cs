@@ -45,6 +45,7 @@ public static class SupportBundleExporter
     {
         "startup.app_constructor", "startup.xaml_initialized", "startup.launch_entered",
         "startup.environment_loaded", "startup.window_created", "startup.window_activated", "startup.database_ready",
+        "startup.root_loaded", "startup.first_render_tick",
     };
 
     public static async Task<SupportBundleExportResult> CreateAsync(
@@ -345,7 +346,10 @@ This bundle was created locally at the user's request. It includes version/runti
 metadata, a normalized source snapshot (source kind, playback state, last-observation
 time and whether tracking is enabled), plus operational event timestamps, level,
 category and constrained exception/HRESULT/reason codes. Known startup milestones
-include bounded elapsed milliseconds measured since App construction, not OS process launch. Original free-form log
+include bounded elapsed milliseconds measured since App construction, not OS process launch.
+Root-loaded and first-render-tick events describe XAML scheduling, not confirmed screen pixels
+or a measured first visible frame. Callback deltas include instrumentation/logger overhead,
+not unmodified startup latency. Original free-form log
 messages are never exported. Source values are allow-listed; arbitrary values are
 reduced to "other"/"unknown".
 

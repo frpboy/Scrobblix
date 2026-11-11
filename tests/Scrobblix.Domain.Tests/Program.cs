@@ -470,7 +470,9 @@ try
         "000005 | 2026-10-22T12:00:04.0000000+00:00 | INFO | STARTUP | reason_code=startup.window_created; elapsed_ms=99999999;" + Environment.NewLine +
         "000006 | 2026-10-22T12:00:05.0000000+00:00 | INFO | METADATA | reason_code=artwork.enrichment_no_file; elapsed_ms=999;" + Environment.NewLine +
         "000007 | 2026-10-22T12:00:06.0000000+00:00 | INFO | STARTUP | reason_code=startup.unknown; elapsed_ms=999;" + Environment.NewLine +
-        "000008 | 2026-10-22T12:00:07.0000000+00:00 | INFO | STARTUP | reason_code=startup.database_ready; elapsed_ms=-1;" + Environment.NewLine);
+        "000008 | 2026-10-22T12:00:07.0000000+00:00 | INFO | STARTUP | reason_code=startup.database_ready; elapsed_ms=-1;" + Environment.NewLine +
+        "000009 | 2026-10-22T12:00:08.0000000+00:00 | INFO | STARTUP | reason_code=startup.root_loaded; elapsed_ms=1300; artist=CANARY_TRACK" + Environment.NewLine +
+        "000010 | 2026-10-22T12:00:09.0000000+00:00 | INFO | STARTUP | reason_code=startup.first_render_tick; elapsed_ms=1350;" + Environment.NewLine);
     var supportResult = await SupportBundleExporter.CreateAsync(
         supportArchivePath,
         supportLogDirectory,
@@ -481,7 +483,7 @@ try
 
     Assert(File.Exists(supportArchivePath), "Privacy-safe support bundle is created at the selected output path.");
     Assert(supportResult.Sha256.Length == 64, "Support bundle returns a SHA-256 digest.");
-    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 8,
+    Assert(supportResult.SourceLogFilesInspected == 1 && supportResult.OperationalEventsIncluded == 10,
         "Support bundle reports the number of inspected logs and sanitized events.");
 
     using (var archive = ZipFile.OpenRead(supportArchivePath))
@@ -518,7 +520,10 @@ try
             var lines = (await eventReader.ReadToEndAsync()).Split('\n', StringSplitOptions.RemoveEmptyEntries);
             Assert(lines[0].EndsWith("\telapsed_ms", StringComparison.Ordinal), "Startup elapsed column has an explicit schema header.");
             Assert(lines[4].EndsWith("startup.window_activated\t1234", StringComparison.Ordinal), "Known startup milestones retain bounded monotonic elapsed time.");
-            Assert(lines.Skip(5).All(line => line.EndsWith('\t')), "Out-of-range, negative, unknown-code and non-startup elapsed fields are discarded.");
+            Assert(lines.Skip(5).Take(4).All(line => line.EndsWith('\t')), "Out-of-range, negative, unknown-code and non-startup elapsed fields are discarded.");
+            Assert(lines[9].EndsWith("startup.root_loaded\t1300", StringComparison.Ordinal)
+                && lines[10].EndsWith("startup.first_render_tick\t1350", StringComparison.Ordinal),
+                "Visual scheduling milestones retain only bounded elapsed fields, not raw source data.");
         }
 
         var archiveContents = new StringBuilder();

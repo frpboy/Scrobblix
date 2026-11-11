@@ -33,6 +33,7 @@ public static class OrdinaryCapture {
  [DllImport("user32.dll")] public static extern bool MoveWindow(IntPtr h,int x,int y,int w,int height,bool repaint);
 }
 '@
+$priorLogPaths = @(Get-ChildItem (Join-Path $data 'logs') -File -ErrorAction SilentlyContinue | ForEach-Object { $_.FullName })
 $p = Start-Process -FilePath $app -WorkingDirectory $appDirectory -PassThru
 try {
     Start-Sleep -Seconds 20
@@ -89,14 +90,29 @@ try {
         finally { $canvas.Dispose();$full.Dispose() }
     }
     if ($p.MainWindowTitle -match 'could not be started|Windows App Runtime') { throw 'Bootstrap dependency dialog, not ordinary application window' }
-    $logs = Get-ChildItem (Join-Path $data 'logs') -File
-    if (-not $logs) { throw 'No ordinary app startup logs' }
-    $text = ($logs | ForEach-Object { Get-Content $_.FullName -Raw }) -join "`n"
+    # A retained log from a prior launch must not satisfy this launch's gate.
+    $logs = @(Get-ChildItem (Join-Path $data 'logs') -File | Where-Object {
+        $_.Name -match "^scrobblix-[0-9]{8}-[0-9]{6}-$($p.Id)\.log$" -and $_.FullName -notin $priorLogPaths
+    })
+    if ($logs.Count -ne 1) { throw 'Expected exactly one new log for launched process' }
+    $text = Get-Content $logs[0].FullName -Raw
+    if ($text -notmatch "Starting Scrobblix; process_id=$($p.Id);") { throw 'Startup log process identity mismatch' }
+    $milestones = @{}
+    foreach ($code in @('app_constructor','window_created','root_loaded','first_render_tick')) {
+        $matchesForCode = [regex]::Matches($text, "reason_code=startup\.$code; elapsed_ms=([0-9]{1,8});")
+        if ($matchesForCode.Count -ne 1) { throw "Startup marker must occur exactly once: $code" }
+        $elapsed = [long]::Parse($matchesForCode[0].Groups[1].Value)
+        if ($elapsed -gt 3600000) { throw "Startup marker exceeds export bound: $code" }
+        $milestones[$code] = $elapsed
+    }
+    if ($milestones.app_constructor -ne 0 -or $milestones.window_created -gt $milestones.root_loaded -or $milestones.root_loaded -gt $milestones.first_render_tick) { throw 'Startup scheduling milestone order invalid' }
+    # These are instrumented callbacks including logger overhead, not unmodified first-pixel latency.
     # Fresh hosted profile, no credentials or listening data. Preserve only known operational categories.
     $safe = $text -split "`n" | Where-Object { $_ -match '\| (STARTUP|DATABASE|MIGRATION|TRAY|SHUTDOWN|STARTUP_FAILED|STARTUP_ERROR) \|' }
     $safe | Set-Content (Join-Path $output 'startup-operations.txt')
     $safe | ForEach-Object { Write-Output $_ }
     if ($text -notmatch '\| STARTUP \|' -or $text -notmatch '\| DATABASE \|.*initialized') { throw 'Startup/database initialization evidence missing' }
+    if ($text -notmatch 'reason_code=startup.root_loaded;' -or $text -notmatch 'reason_code=startup.first_render_tick;') { throw 'Loaded/render scheduling milestones missing; responsive20s is not first-frame evidence' }
     if ($text -match 'STARTUP_FAILED|STARTUP_ERROR|Startup failed|Application startup failed') { throw 'Startup error in ordinary logs' }
     'PASS ordinary publish responsive20s and actual window capture; forced test-process cleanup, not graceful-close/soak proof' | Set-Content (Join-Path $output 'result.txt')
 } finally {

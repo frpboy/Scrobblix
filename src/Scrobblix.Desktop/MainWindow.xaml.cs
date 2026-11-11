@@ -130,6 +130,32 @@ public sealed partial class MainWindow : Window
         CurrentTrackArtworkFallback.ImageOpened += ArtworkFallbackImageOpened;
     }
 
+    // A render callback is scheduling evidence, not proof that pixels reached the display.
+    // Subscribe only after Loaded and detach after one tick or close.
+    // Callback deltas include diagnostic logger overhead, not unmodified startup latency.
+    internal void ObserveInitialVisualStartup(Action<string> record)
+    {
+        RoutedEventHandler? loaded = null;
+        EventHandler<object>? rendering = null;
+        rendering = (_, _) =>
+        {
+            CompositionTarget.Rendering -= rendering;
+            record("startup.first_render_tick");
+        };
+        loaded = (_, _) =>
+        {
+            RootLayout.Loaded -= loaded;
+            record("startup.root_loaded");
+            CompositionTarget.Rendering += rendering;
+        };
+        RootLayout.Loaded += loaded;
+        Closed += (_, _) =>
+        {
+            RootLayout.Loaded -= loaded;
+            CompositionTarget.Rendering -= rendering;
+        };
+    }
+
     private void ConfigureInitialWindowSize()
     {
         var handle = WinRT.Interop.WindowNative.GetWindowHandle(this);
