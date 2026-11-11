@@ -1,17 +1,17 @@
 # Installation Guide
 
 > **Status:** User-facing target guide; current public artifacts are development previews, not signed installers.  
-> **Last reviewed:** 2026-11-10
+> **Last reviewed:** 2026-11-11
 
 ## Current availability
 
-The current Windows preview is [beta.10](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.10), a single unsigned per-user Setup.exe for x64-compatible Windows build 26100 or newer. It bundles its private runtimes, adds a Start menu shortcut and registers with Windows Installed Apps. It does not require ZIP extraction, admin elevation or a separate runtime download. Browser Companion installation/registration remains manual and optional.
+The current Windows preview is [beta.11](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.11), a single unsigned per-user x64 Setup.exe for compatible Windows build 26100 or newer. It bundles its private runtimes, adds a Start menu shortcut and registers with Windows Installed Apps. It does not require ZIP extraction, admin elevation or a separate runtime download. Browser Companion installation/registration remains manual and optional.
 
-Before running Setup.exe, read the [Windows installer guide](../../docs/WINDOWS_INSTALLER.md), verify the downloaded file against the beta.10 release's SHA256SUMS.txt and review that exact release's limits. If the checksum does not match, do not run it.
+Before running Setup.exe, read the [Windows installer guide](../../docs/WINDOWS_INSTALLER.md), verify the downloaded file against the [beta.11 SHA256SUMS.txt](https://github.com/frpboy/Scrobblix/releases/download/windows-v0.1.0-beta.11/SHA256SUMS.txt), and review the [beta.11 release notes](https://github.com/frpboy/Scrobblix/releases/tag/windows-v0.1.0-beta.11). If the checksum does not match, do not run it.
 
-Exit any running Scrobblix copy from its system tray before installing. Run Setup.exe and choose the final options: Run Scrobblix is checked and Visit GitHub is unchecked by default. Finish performs only selected actions; silent setup launches neither. You can also open Scrobblix from Start later. The existing local profile is retained; keep an older extracted folder until checking the installed app. Program-only uninstall retains local history, queue and Credential Locker data. It is not a data-deletion operation.
+Close Scrobblix before updating; the installer refuses to replace a running app and does not force-close it. The existing local profile is retained. Older extracted ZIP folders are not removed or imported; keep an older folder until checking the installed app. Program-only uninstall retains local history, queue and Credential Locker data. It is not a data-deletion operation.
 
-Fresh install, synthetic baseline upgrade, running-app refusal and program-only uninstall were exercised on the canonical CI artifact. Real-user Credential Locker migration and interrupted-upgrade rollback were not exercised. The preview is not a signed MSIX/App Installer, stable consumer release, or Microsoft Store/WinGet package. Do not bypass Windows security protections.
+Fresh install, synthetic baseline upgrade, running-app refusal and program-only uninstall were exercised on the canonical CI artifact. Beta.11 changes queue evidence presentation only: it does not clear, retry or reconcile queue rows, and local user confirmation is not a new provider acknowledgement. The release still requires careful checking of ambiguous outcomes. Real-user Credential Locker migration and interrupted-upgrade rollback were not exercised. The preview is not a signed MSIX/App Installer, stable consumer release, or Microsoft Store/WinGet package. The release tag is beta.11, while its package metadata still reports installer build 0.1.0.10 and app version 1.0.0. Identify the release by **About → Source revision** (`20d3430fc2599fa80e3550618db0c7412d4d9e79`), not by those legacy package defaults. Do not bypass Windows security protections.
 
 ## Future supported installation channels
 
