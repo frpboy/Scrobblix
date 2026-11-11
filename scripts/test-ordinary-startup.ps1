@@ -97,13 +97,49 @@ try {
     if ($logs.Count -ne 1) { throw 'Expected exactly one new log for launched process' }
     $text = Get-Content $logs[0].FullName -Raw
     if ($text -notmatch "Starting Scrobblix; process_id=$($p.Id);") { throw 'Startup log process identity mismatch' }
+    $readStartupMarkerElapsed = {
+        param([string]$LogText, [string]$Code)
+        $matchesForCode = [regex]::Matches($LogText, "(?m)^.*\| STARTUP \| reason_code=startup\.$Code;[^\r\n]*\r?$")
+        if ($matchesForCode.Count -ne 1) { throw "Startup marker must occur exactly once: $Code" }
+        $elapsedMatch = [regex]::Match($matchesForCode[0].Value, "reason_code=startup\.$Code; elapsed_ms=([0-9]{1,8});")
+        if (-not $elapsedMatch.Success) { throw "Startup marker elapsed format invalid: $Code" }
+        $elapsed = [long]::Parse($elapsedMatch.Groups[1].Value)
+        if ($elapsed -gt 3600000) { throw "Startup marker exceeds export bound: $Code" }
+        return $elapsed
+    }
+    # Exercise the exact gate parser, including malformed duplicate markers that
+    # must not disappear merely because their elapsed value fails the format.
+    $validMarker = '000001 | 2026-01-01T00:00:00Z | INFO | STARTUP | reason_code=startup.root_loaded; elapsed_ms=12;'
+    foreach ($newline in @("`n", "`r`n")) {
+        if ((& $readStartupMarkerElapsed "$validMarker$newline" 'root_loaded') -ne 12) { throw 'Startup marker positive fixture failed' }
+        $otherMarker = $validMarker.Replace('startup.root_loaded;', 'startup.window_created;')
+        if ((& $readStartupMarkerElapsed "$otherMarker$newline$validMarker$newline$otherMarker$newline" 'root_loaded') -ne 12) { throw 'Surrounding unrelated markers changed target parsing' }
+        $missingElapsed = $validMarker.Replace(' elapsed_ms=12;', '')
+        foreach ($fixture in @("$missingElapsed$newline", "$validMarker$newline$missingElapsed$newline")) {
+            $rejected = $false
+            try { & $readStartupMarkerElapsed $fixture 'root_loaded' | Out-Null }
+            catch { $rejected = $true }
+            if (-not $rejected) { throw 'Absent elapsed field or duplicate with absent field was accepted' }
+        }
+        foreach ($badElapsed in @('-1','999999999','3600001','missing')) {
+            $badMarker = $validMarker.Replace('elapsed_ms=12;', "elapsed_ms=$badElapsed;")
+            foreach ($fixture in @("$badMarker$newline", "$validMarker$newline$badMarker$newline")) {
+                $rejected = $false
+                try { & $readStartupMarkerElapsed $fixture 'root_loaded' | Out-Null }
+                catch { $rejected = $true }
+                if (-not $rejected) { throw 'Malformed or duplicate startup marker fixture was accepted' }
+            }
+        }
+        foreach ($fixture in @("", "$validMarker$newline$validMarker$newline")) {
+            $rejected = $false
+            try { & $readStartupMarkerElapsed $fixture 'root_loaded' | Out-Null }
+            catch { $rejected = $true }
+            if (-not $rejected) { throw 'Missing or repeated valid startup marker fixture was accepted' }
+        }
+    }
     $milestones = @{}
     foreach ($code in @('app_constructor','window_created','root_loaded','first_render_tick')) {
-        $matchesForCode = [regex]::Matches($text, "reason_code=startup\.$code; elapsed_ms=([0-9]{1,8});")
-        if ($matchesForCode.Count -ne 1) { throw "Startup marker must occur exactly once: $code" }
-        $elapsed = [long]::Parse($matchesForCode[0].Groups[1].Value)
-        if ($elapsed -gt 3600000) { throw "Startup marker exceeds export bound: $code" }
-        $milestones[$code] = $elapsed
+        $milestones[$code] = & $readStartupMarkerElapsed $text $code
     }
     if ($milestones.app_constructor -ne 0 -or $milestones.window_created -gt $milestones.root_loaded -or $milestones.root_loaded -gt $milestones.first_render_tick) { throw 'Startup scheduling milestone order invalid' }
     # These are instrumented callbacks including logger overhead, not unmodified first-pixel latency.
