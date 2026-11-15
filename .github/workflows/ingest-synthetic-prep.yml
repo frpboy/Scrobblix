@@ -74,8 +74,22 @@ jobs:
           done
           if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
           # No remote egress from the emulator: the dump is loopback-only.
-          adb root
+          # adb root races adbd startup on fresh boots ('unable to connect for
+          # root: closed'); retry until adbd comes back as root.
+          adb_root_ok=false
+          for attempt in $(seq 1 10); do
+            if adb root 2>&1 | grep -qE 'restarting adbd as root|already running as root'; then adb_root_ok=true; break; fi
+            sleep 3
+            adb wait-for-device || true
+          done
+          if [ "$adb_root_ok" != true ]; then echo 'adb root failed after retries'; tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
           adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 60); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then echo 'boot lost after adb root'; exit 1; fi
           adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb install -r android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
