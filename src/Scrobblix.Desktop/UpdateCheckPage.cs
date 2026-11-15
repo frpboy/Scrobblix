@@ -144,9 +144,10 @@ public sealed partial class MainWindow : IDisposable
                 MaxHeight = 480,
                 Padding = new Thickness(24),
                 CornerRadius = new CornerRadius(8),
-                // CardBackgroundFillColor* brushes are translucent: underlying page text bleeds
-                // through the modal. LayerFillColorDefaultBrush is the opaque layer surface.
-                Background = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["LayerFillColorDefaultBrush"],
+                // CardBackgroundFillColor* and LayerFillColor* brushes are translucent over
+                // mica: underlying page text bleeds through the modal.
+                // SolidBackgroundFillColorBaseBrush is the opaque solid surface.
+                Background = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["SolidBackgroundFillColorBaseBrush"],
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
                 Child = panel,
