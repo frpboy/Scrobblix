@@ -79,6 +79,15 @@ jobs:
           cleanup_emulator() {
             status=$?
             set +e
+            # Remove the debug-only harness setting while the device is still live.
+            # Bounded; cleanup failure fails the job only when the run itself succeeded.
+            timeout 15 adb shell settings delete global scrobblix_test_harness
+            cleanup_rc=$?
+            leftover="$(timeout 15 adb shell settings get global scrobblix_test_harness | tr -d '\r')"
+            if [ "$cleanup_rc" -ne 0 ] || [ "$leftover" != "null" ]; then
+              echo "harness setting cleanup failed (rc=$cleanup_rc leftover=$leftover)" >&2
+              if [ "$status" -eq 0 ]; then status=1; fi
+            fi
             if [ "$status" -ne 0 ]; then
               timeout 10 adb devices -l
               tail -80 /tmp/scrobblix-emulator.log
@@ -103,17 +112,44 @@ jobs:
           adb root
           adb wait-for-device
           test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
+          # Instrumented suites rely on the onboarding harness skip. Apps cannot read
+          # persist.sys.test_harness on several API levels, so CI sets a global setting
+          # apps are allowed to read; the read-back is asserted. No framework restart.
+          adb shell settings put global scrobblix_test_harness 1
+          harness="$(timeout 15 adb shell settings get global scrobblix_test_harness | tr -d '\r')"
+          printf 'scrobblix_test_harness=%s\n' "$harness"
+          test "$harness" = "1"
           adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
           adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          # Egress smoke: the outbound ping must fail with a rejection signature. The
+          # assignment is guarded so the expected failure cannot trip the step's -e.
+          # Ping is only an ICMP smoke test; the block itself is proven by the intended
+          # rules being present on both families, with counters dumped for the log.
+          # No requests to actual providers.
+          if ping_out="$(adb shell ping -c 1 -W 3 1.1.1.1 2>&1)"; then
+            printf '%s\n' "$ping_out"
+            echo "egress block ineffective: outbound ping succeeded" >&2
+            exit 1
+          fi
+          printf '%s\n' "$ping_out"
+          printf '%s\n' "$ping_out" | grep -qiE "100% packet loss|Operation not permitted|Network is unreachable|Destination.*unreachable|sendto|sendmsg" || { echo "egress probe inconclusive: ping did not run or failed for an unexpected reason" >&2; exit 1; }
+          test "$(adb shell iptables -L OUTPUT -n | grep -c REJECT)" -ge 1
+          test "$(adb shell ip6tables -L OUTPUT -n | grep -c REJECT)" -ge 1
+          adb shell iptables -L OUTPUT -v -n
+          adb shell ip6tables -L OUTPUT -v -n
           if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
             # Synthetic test data only. Preserve exact test/runner failures in job logs.
             find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \; || true
             adb logcat -d -b crash || true
+            # Instrumentation println diagnostics (capture host checks) land in the main buffer.
+            adb logcat -d -b main | grep -E "SYNTHETIC_CAPTURE_HOST|System.out" | tail -200 || true
             # Pull synthetic pixels before the EXIT trap tears down the emulator.
             mkdir -p android-evidence
-            for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
+            adb pull /sdcard/Download/scrobblix-private-config-prefail.txt android-evidence/ || true
+            adb pull /sdcard/Download/scrobblix-private-config-prefail.png android-evidence/ || true
+            for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
             exit 1
           fi
           # Actual process boundary with synthetic data only. Instrumentation is a
@@ -132,9 +168,37 @@ jobs:
             printf '%s\n' "$result" | grep -F 'OK (1 test)'
             if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
           done
+          # Signed-fixture signer-branch qualification. Synthetic keys only: the debug key
+          # already used for these CI builds, plus a throwaway keystore created here. No real
+          # or release credentials. Fixtures are read as archives, never installed.
+          android/gradlew -p android :updatefixture:assembleDebug :updatefixture:assembleRelease --no-daemon
+          keytool -genkeypair -keystore /tmp/wrong-signer.jks -storepass synthetic -keypass synthetic -alias wrong -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Synthetic Wrong Signer"
+          build_tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
+          "$build_tools/apksigner" sign --ks /tmp/wrong-signer.jks --ks-pass pass:synthetic --out /tmp/fixture-wrong.apk android/updatefixture/build/outputs/apk/release/updatefixture-release-unsigned.apk
+          # Provision into the app-owned internal cache: push to the shell-visible temp
+          # first, then copy as the app uid via run-as (debug build), so the file is
+          # genuinely readable by the app process. No scoped-storage path guessing.
+          adb push android/updatefixture/build/outputs/apk/debug/updatefixture-debug.apk /data/local/tmp/fixture-same.apk
+          adb push /tmp/fixture-wrong.apk /data/local/tmp/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix cp /data/local/tmp/fixture-same.apk cache/fixture-same.apk
+          adb shell run-as com.frpboy.scrobblix cp /data/local/tmp/fixture-wrong.apk cache/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix ls -l cache/fixture-same.apk cache/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix rm -f files/signed-fixture-qualification.txt
+          fixtures=/data/data/com.frpboy.scrobblix/cache
+          result=$(adb shell am instrument -w -r -e requireSignedFixtures true -e fixtureSameSigner "$fixtures/fixture-same.apk" -e fixtureWrongSigner "$fixtures/fixture-wrong.apk" -e class "dev.scrobblix.app.UpdateVerificationTest#signedFixturesQualifySignerBranch" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          printf '%s\n' "$result"
+          printf '%s\n' "$result" | grep -F 'OK (1 test)'
+          if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
+          # Per-test success marker: the test writes this file only after every fixture
+          # qualification and signer-branch assertion passed. An assumption-skipped,
+          # unprovisioned or malformed-fixture run leaves no marker, so it cannot
+          # read as green on 'OK (1 test)' alone.
+          marker=$(adb shell run-as com.frpboy.scrobblix cat files/signed-fixture-qualification.txt)
+          printf '%s\n' "$marker"
+          printf '%s\n' "$marker" | grep -F 'SIGNED_FIXTURE_QUALIFICATION_PASS'
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
 
       - name: Require both instrumentation XML evidence sets
         if: always()
@@ -149,7 +213,7 @@ jobs:
         run: |
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
-          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
+          for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:

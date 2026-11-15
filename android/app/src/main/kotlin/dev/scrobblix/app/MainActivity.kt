@@ -31,19 +31,32 @@ class MainActivity:ComponentActivity() {
             if(store==null) Column(Modifier.safeDrawingPadding().padding(24.dp)) {
                 Text("Local storage is unavailable")
                 Text("Scrobblix could not safely read or migrate this device's data. Collection, account setup and delivery are disabled. Your data has not been reset. Restart the app after local storage is available.")
-            } else AppScreen(store)
+            } else {
+                var onboarding by remember { mutableStateOf(dev.scrobblix.core.OnboardingGate.shouldShow(
+                    store.preferences.getBoolean(OnboardingState.DONE_KEY,false),
+                    OnboardingState.existingInstall(store),
+                    OnboardingState.harnessSkipped(store.context),
+                    store.preferences.getBoolean(OnboardingState.FORCE_KEY,false))) }
+                var initialTab by remember { mutableStateOf("Listen") }
+                if(onboarding) OnboardingFlow(store) { destination -> initialTab=destination;onboarding=false }
+                else AppScreen(store,initialTab=initialTab,updateProbe=defaultUpdateProbe(store))
+            }
         } } }
     }
 }
+internal fun defaultUpdateProbe(store:AppStore):UpdateProbe?=
+    if(BuildConfig.DISTRIBUTION_CHANNEL=="github") AppUpdater(store.context) else null
 @Composable
 fun AppScreen(store:AppStore,api:LastFmApi?=null,
     browserLauncher:(String)->Unit={ url -> store.context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse(url)).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
     heldReviewLoader:suspend ()->dev.scrobblix.core.ConnectionAuthority.HeldReview?={withContext(Dispatchers.IO){store.reviewHeld()}},
     heldResumer:suspend (dev.scrobblix.core.ConnectionAuthority.HeldReview)->AppStore.LocalOutcome={review ->withContext(Dispatchers.IO){store.resumeHeld(review)}},
     historyReader:suspend ()->AppStore.RecentDiagnostics={withContext(Dispatchers.IO){store.recentDiagnostics()}},
-    queueReader:suspend (Boolean)->List<Map<String,String?>> = {_ ->withContext(Dispatchers.IO){store.states()}}) {
+    queueReader:suspend (Boolean)->List<Map<String,String?>> = {_ ->withContext(Dispatchers.IO){store.states()}},
+    initialTab:String="Listen",
+    updateProbe:UpdateProbe?=null) {
     val context=store.context
-    var tab by remember { mutableStateOf("Listen") }
+    var tab by remember { mutableStateOf(initialTab) }
     var tracking by remember { mutableStateOf(store.tracking()) }
     var storageUnavailable by remember { mutableStateOf(true) }
     var connectionHealth by remember { mutableStateOf<String?>("Checking local connection state.") }
@@ -75,7 +88,25 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var message by remember { mutableStateOf("") }
     var heldReview by remember { mutableStateOf<dev.scrobblix.core.ConnectionAuthority.HeldReview?>(null) }
     var reviewEpoch by remember { mutableStateOf(0L) }
+    var updateBusy by remember { mutableStateOf(false) }
+    var updateStatus by remember { mutableStateOf("") }
+    var updateError by remember { mutableStateOf("") }
+    var availableUpdate by remember { mutableStateOf<dev.scrobblix.core.AvailableUpdate?>(null) }
+    var downloadProgress by remember { mutableStateOf<Pair<Long,Long?>?>(null) }
+    var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
+    var updateAutoCheck by remember { mutableStateOf(store.preferences.getBoolean("update_auto_check",false)) }
     LaunchedEffect(currentAuthority) {heldReview=null;reviewEpoch++}
+    // One silent launch check on direct-channel builds; never in instrumentation, never auto-downloads.
+    LaunchedEffect(Unit) {
+        val launchProbe=updateProbe
+        if(launchProbe!=null && !OnboardingState.harnessSkipped(store.context) && updateAutoCheck) {
+            try {
+                val outcome=launchProbe.check()
+                if(outcome is AppUpdater.CheckOutcome.Available)availableUpdate=outcome.update
+            } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+            catch(_:Exception) { }
+        }
+    }
     val scope=rememberCoroutineScope()
     LaunchedEffect(Unit) { while(true) {
         access=store.hasMediaAccess()
@@ -329,6 +360,30 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 }
                 Text("Powered by AudioScrobbler. Last.fm is an independent service.")
                 TextButton(onClick={context.startActivity(Intent(Intent.ACTION_VIEW,android.net.Uri.parse("https://www.last.fm/")).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))}) { Text("Open Last.fm") }
+                val settingsProbe=updateProbe
+                if(settingsProbe!=null) {
+                    Text("App updates",style=MaterialTheme.typography.titleLarge)
+                    Text("Installed: ${BuildConfig.VERSION_NAME}. This direct build checks the Scrobblix release page inside the app. Nothing is downloaded or installed without your confirmation, and Android still checks the signature before installing.")
+                    Row(horizontalArrangement=Arrangement.spacedBy(12.dp)) {
+                        Switch(checked=updateAutoCheck,onCheckedChange={enabled ->
+                            updateAutoCheck=enabled;store.preferences.edit().putBoolean("update_auto_check",enabled).commit()
+                        })
+                        Text("Check for updates on launch",Modifier.padding(top=12.dp))
+                    }
+                    Button(enabled=!updateBusy,onClick={
+                        updateBusy=true;updateStatus="";updateError="";availableUpdate=null;downloadedApk=null;downloadProgress=null
+                        scope.launch { try {
+                            when(val outcome=settingsProbe.check()) {
+                                is AppUpdater.CheckOutcome.Available -> availableUpdate=outcome.update
+                                AppUpdater.CheckOutcome.Current -> updateStatus="This is the newest version on the direct channel."
+                                is AppUpdater.CheckOutcome.Unavailable -> updateStatus=outcome.diagnostic
+                            }
+                        } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch(_:Exception) { updateStatus="Update check failed. Your installed version is unchanged." }
+                        finally { updateBusy=false } }
+                    }) { Text(if(updateBusy) "Checking…" else "Check for updates") }
+                    if(updateStatus.isNotBlank())Text(updateStatus)
+                }
                 Text("Player controls",style=MaterialTheme.typography.titleLarge)
                 Text("Supported media sessions appear here after media access is enabled. Disable any player you do not want tracked. No installed-app inventory is requested.")
                 if(sources.isEmpty()) Text("No media players discovered yet.")
@@ -344,6 +399,55 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         }
         if(message.isNotBlank() && !(tab=="Settings" && browserStatus==message)) Text(message)
         Spacer(Modifier.height(24.dp))
+    }
+    val updateProbeForDialog=updateProbe
+    if(updateProbeForDialog!=null)availableUpdate?.let { update ->
+        val probe=updateProbeForDialog
+        AlertDialog(
+            onDismissRequest={ if(downloadProgress==null && !updateBusy) { availableUpdate=null;downloadedApk=null;updateError="" } },
+            title={ Text("Update available: ${update.version}") },
+            text={ Column(Modifier.verticalScroll(rememberScrollState()),verticalArrangement=Arrangement.spacedBy(12.dp)) {
+                if(update.notes.isNotBlank())Text(update.notes)
+                if(update.apk.sizeBytes>0)Text("Download size: ${update.apk.sizeBytes/1000000} MB. Integrity is verified against the published checksum before install.")
+                downloadProgress?.let { (done,total) ->
+                    if(total!=null && total>0) {
+                        LinearProgressIndicator(progress={ (done.toDouble()/total).toFloat() })
+                        Text("Downloading: ${done*100/total}%")
+                    } else {
+                        LinearProgressIndicator()
+                        Text("Downloading: ${done/1000000} MB")
+                    }
+                }
+                if(updateError.isNotBlank())Text(updateError)
+            } },
+            confirmButton={
+                val apk=downloadedApk
+                if(apk!=null) {
+                    Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
+                        if(!probe.canInstall())TextButton(onClick={ if(!probe.openInstallPermission())updateError="The Android settings screen for install permission could not be opened. Open Android Settings, Apps, Scrobblix, Install unknown apps manually." }) { Text("Open install permission") }
+                        Button(onClick={
+                            when {
+                                !probe.canInstall() -> updateError="Android needs your permission to install apps from Scrobblix. Open install permission, allow it once, return and tap Install."
+                                !probe.verifyDownload(apk,update) -> updateError="The downloaded package identity does not match this installation. It was not offered to the installer."
+                                else -> if(!probe.launchInstall(apk))
+                                    updateError="The Android installer could not be opened. Nothing was installed."
+                            }
+                        }) { Text("Install") }
+                    }
+                } else {
+                    Button(enabled=!updateBusy,onClick={
+                        updateBusy=true;updateError="";downloadProgress=null
+                        scope.launch { try {
+                            downloadedApk=probe.download(update) { done,total -> downloadProgress=done to total }
+                            downloadProgress=null
+                        } catch(cancelled:kotlinx.coroutines.CancellationException) { throw cancelled }
+                        catch(failure:AppUpdater.UpdateFailure) { updateError=failure.message ?: "The update download failed. Nothing was installed.";downloadProgress=null }
+                        catch(_:Exception) { updateError="The update download failed. Nothing was installed.";downloadProgress=null }
+                        finally { updateBusy=false } }
+                    }) { Text(if(updateBusy) "Downloading…" else "Download") }
+                }
+            },
+            dismissButton={ TextButton(enabled=!updateBusy,onClick={ availableUpdate=null;downloadedApk=null;downloadProgress=null;updateError="" }) { Text("Later") } })
     }
 }
 

@@ -111,6 +111,28 @@ class AppRuntimeTest {
 
     @Test fun privateApiSetupUiStaysLocalAndPausesTracking() {
         val store=(ui.activity.application as ScrobblixApp).store
+        // Self-documenting failure: if the Settings tab never appears, save the actual screen
+        // and the onboarding-gate inputs instead of a bare node-not-found.
+        val tabAppeared=runCatching {
+            ui.waitUntil(10000){ ui.onAllNodesWithText("Settings",useUnmergedTree=true).fetchSemanticsNodes().isNotEmpty() }
+        }.isSuccess
+        if(!tabAppeared) {
+            val prefs=store.preferences
+            val diag="harness=${android.app.ActivityManager.isRunningInTestHarness()} " +
+                "done=${prefs.getBoolean(OnboardingState.DONE_KEY,false)} " +
+                "force=${prefs.getBoolean(OnboardingState.FORCE_KEY,false)} " +
+                "prefKeys=${prefs.all.keys.sorted().joinToString(",")} " +
+                "account=${store.account()!=null} " +
+                "harnessSkip=${OnboardingState.harnessSkipped(store.context)} " +
+                "gate=${dev.scrobblix.core.OnboardingGate.shouldShow(prefs.getBoolean(OnboardingState.DONE_KEY,false),OnboardingState.existingInstall(store),OnboardingState.harnessSkipped(store.context),prefs.getBoolean(OnboardingState.FORCE_KEY,false))}"
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("screencap -p /sdcard/Download/scrobblix-private-config-prefail.png").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
+            val b64=android.util.Base64.encodeToString(diag.toByteArray(),android.util.Base64.NO_WRAP)
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("echo $b64 | base64 -d > /sdcard/Download/scrobblix-private-config-prefail.txt").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
+        }
         try {
             ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
             ui.onNodeWithText("Advanced: use your own Last.fm API app").performScrollTo().performClick()
