@@ -11,6 +11,7 @@ import dev.scrobblix.core.AvailableUpdate
 import dev.scrobblix.core.ReleaseAsset
 import dev.scrobblix.core.ReleaseInfo
 import dev.scrobblix.core.ReleaseVersion
+import dev.scrobblix.core.UpdateTransportPolicy
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.json.JSONArray
@@ -81,7 +82,9 @@ class AppUpdater(private val context:Context,
      * strictly increasing versionCode, signer continuity (modern signing info on 28+, legacy
      * signatures below), minimum SDK where declared, and native ABI coverage. Exact signer equality
      * is deliberate: a signing-key rotation is NOT supported and must fail here, not at the installer. */
-    override fun verifyDownload(apk:File,update:AvailableUpdate):Boolean {
+    override fun verifyDownload(apk:File,update:AvailableUpdate):Boolean =
+        try { verifyDownloadIdentity(apk,update) } catch(_:Exception) { false }
+    private fun verifyDownloadIdentity(apk:File,update:AvailableUpdate):Boolean {
         val archive=context.packageManager.getPackageArchiveInfo(apk.absolutePath,0) ?: return false
         if(archive.packageName!=packageName)return false
         if(archive.versionName!=update.version.toString())return false
@@ -126,16 +129,21 @@ class AppUpdater(private val context:Context,
         return packaged.any { it in Build.SUPPORTED_ABIS }
     }
     override fun canInstall():Boolean =
-        Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls()
+        try { Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls() }
+        catch(_:Exception) { false }
     override fun launchInstall(apk:File) {
-        val uri=FileProvider.getUriForFile(context,"$packageName.fileprovider",apk)
-        context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
-            .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            val uri=FileProvider.getUriForFile(context,"$packageName.fileprovider",apk)
+            context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch(_:Exception) { /* no installer launch on any platform error */ }
     }
     override fun openInstallPermission() {
-        if(Build.VERSION.SDK_INT>=26)context.startActivity(
-            Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName"))
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        try {
+            if(Build.VERSION.SDK_INT>=26)context.startActivity(
+                Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName"))
+                    .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch(_:Exception) { /* settings screen unavailable; user can reach it manually */ }
     }
 
     data class FetchResult(val status:Int,val body:ByteArray)
@@ -145,13 +153,8 @@ class AppUpdater(private val context:Context,
             name.isNotBlank() && name.length<=200 && name==File(name).name &&
                 !name.contains("..") && !name.contains('/') && !name.contains('\\') && name.none { it.isISOControl() }
         const val DEFAULT_RELEASES_API="https://api.github.com/repos/frpboy/Scrobblix/releases?per_page=20"
-        private val ALLOWED_HOSTS=setOf("api.github.com","github.com","codeload.github.com")
-        private fun allowedHost(host:String):Boolean =
-            host in ALLOWED_HOSTS || host.endsWith(".githubusercontent.com")
         private fun httpsConnection(url:String):HttpsURLConnection {
-            val uri=URI(url)
-            require(uri.scheme=="https" && uri.host!=null && uri.rawUserInfo==null && uri.port==-1) { "Update service address was not a plain secure URL." }
-            require(allowedHost(uri.host)) { "Update service destination was not a recognized release host." }
+            require(UpdateTransportPolicy.allowedUrl(url)) { "Update service address was not a recognized secure release destination." }
             return URL(url).openConnection() as HttpsURLConnection
         }
         private fun prepare(connection:HttpsURLConnection) {
@@ -164,7 +167,7 @@ class AppUpdater(private val context:Context,
         private fun redirectTarget(current:String,connection:HttpsURLConnection):String {
             val location=connection.getHeaderField("Location") ?: throw UpdateFailure("Update service redirect was incomplete.")
             val resolved=URI(current).resolve(location)
-            require(resolved.scheme=="https" && resolved.rawUserInfo==null && resolved.host!=null && allowedHost(resolved.host)) {
+            require(UpdateTransportPolicy.allowedUrl(resolved.toASCIIString())) {
                 "Update service redirect was not a recognized secure release destination." }
             return resolved.toASCIIString()
         }

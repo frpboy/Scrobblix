@@ -20,14 +20,30 @@ data class ReleaseVersion(val major:Int,val minor:Int,val patch:Int,val channel:
             val match=Regex("^([0-9]+)\\.([0-9]+)\\.([0-9]+)(?:-([a-z]+)\\.([0-9]+))?$").matchEntire(text.trim()) ?: return null
             val channel=match.groupValues[4].ifEmpty { null }
             if(channel!=null && channelRank(channel)<0)return null
-            return ReleaseVersion(match.groupValues[1].toInt(),match.groupValues[2].toInt(),match.groupValues[3].toInt(),
-                channel,if(channel==null)null else match.groupValues[5].toIntOrNull())
+            // Untrusted tag text: overflow or malformed numbers make the release unusable, never a crash.
+            val major=match.groupValues[1].toIntOrNull() ?: return null
+            val minor=match.groupValues[2].toIntOrNull() ?: return null
+            val patch=match.groupValues[3].toIntOrNull() ?: return null
+            val channelNumber=if(channel==null)null else (match.groupValues[5].toIntOrNull() ?: return null)
+            return ReleaseVersion(major,minor,patch,channel,channelNumber)
         }
     }
 }
 data class ReleaseAsset(val name:String,val downloadUrl:String,val sizeBytes:Long)
 data class ReleaseInfo(val tag:String,val title:String,val prerelease:Boolean,val draft:Boolean,val notes:String,val assets:List<ReleaseAsset>)
 data class AvailableUpdate(val tag:String,val version:ReleaseVersion,val notes:String,val apk:ReleaseAsset,val checksums:ReleaseAsset)
+/** Transport policy for the direct update channel: only the official release hosts,
+ * plain HTTPS, no credentials-in-URL, no non-default ports. Fail closed. */
+object UpdateTransportPolicy {
+    private val ALLOWED_HOSTS=setOf("api.github.com","github.com","codeload.github.com")
+    fun allowedHost(host:String):Boolean =
+        host in ALLOWED_HOSTS || host.endsWith(".githubusercontent.com")
+    fun allowedUrl(url:String):Boolean {
+        val uri=try { java.net.URI(url) } catch(_:Exception) { return false }
+        val host=uri.host ?: return false
+        return uri.scheme=="https" && uri.rawUserInfo==null && uri.port==-1 && allowedHost(host)
+    }
+}
 object AppUpdateSelection {
     const val TAG_PREFIX="android-v"
     const val CHECKSUMS_NAME="SHA256SUMS.txt"

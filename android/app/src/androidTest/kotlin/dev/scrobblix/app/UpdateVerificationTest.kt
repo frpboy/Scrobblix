@@ -3,6 +3,7 @@ package dev.scrobblix.app
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import dev.scrobblix.core.AppUpdateSelection
+import dev.scrobblix.core.AvailableUpdate
 import dev.scrobblix.core.ReleaseAsset
 import dev.scrobblix.core.ReleaseVersion
 import org.junit.Assert.assertEquals
@@ -13,9 +14,12 @@ import org.junit.runner.RunWith
 import java.io.File
 
 /**
- * Verification-path tests that run the REAL transport, hash and identity checks
- * (AppUpdater.download's fetch/verify/delete logic and AppUpdater.verifyDownload)
- * against local fake servers/files. Only the network itself is faked.
+ * Runs the real checksum fetch, SHA-256 verification and delete-on-failure logic in
+ * AppUpdater.download plus the real verifyDownload identity checks, against local fake
+ * fetch/downloader lambdas and real files. Only the network itself is faked: these tests
+ * do not exercise HTTP, redirect handling or the body limits, and no install is attempted.
+ * URL and redirect policy is covered separately by deterministic core unit tests
+ * (UpdateTransportPolicy in AppUpdateTest).
  */
 @RunWith(AndroidJUnit4::class)
 class UpdateVerificationTest {
@@ -24,15 +28,16 @@ class UpdateVerificationTest {
 
     private fun update(sha:String?=null):AvailableUpdate {
         val installed=context.packageManager.getPackageInfo(context.packageName,0)
+        val version=ReleaseVersion.parse(installed.versionName ?: "") ?: ReleaseVersion(0,1,0,null,null)
         return AvailableUpdate(
-            version=ReleaseVersion.parse(installed.versionName ?: "0.1.0"),
-            apk=ReleaseAsset("Scrobblix-Android-universal.apk","https://github.com/frpboy/Scrobblix/releases/download/x/app.apk",100),
-            checksums=sha?.let { ChecksumsAsset("https://github.com/frpboy/Scrobblix/releases/download/x/SHA256SUMS.txt",it) },
+            tag="android-vtest",
+            version=version,
             notes="test",
-            url="https://github.com/frpboy/Scrobblix/releases/tag/x")
+            apk=ReleaseAsset("Scrobblix-Android-universal.apk","https://github.com/frpboy/Scrobblix/releases/download/x/app.apk",100),
+            checksums=ReleaseAsset("SHA256SUMS.txt","https://github.com/frpboy/Scrobblix/releases/download/x/SHA256SUMS.txt",sha?.length?.toLong() ?: 0))
     }
 
-    private fun updater(fetcher:(String,Int)->AppUpdater.FetchResult,downloader:(String,File,(Long,Long?)->Unit)->Unit) =
+    private fun updater(fetcher:(String,Int)->AppUpdater.FetchResult,downloader:(String,File,Long,(Long,Long?)->Unit)->Unit) =
         AppUpdater(context,fetcher,downloader)
 
     @Test
@@ -41,7 +46,7 @@ class UpdateVerificationTest {
         val sha=java.security.MessageDigest.getInstance("SHA-256").digest(content).joinToString(""){"%02x".format(it)}
         val u=updater(
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"$sha  Scrobblix-Android-universal.apk\n".toByteArray()) },
-            downloader={ _,out,_ -> out.writeBytes(content) })
+            downloader={ _,out,_,_ -> out.writeBytes(content) })
         val file=u.download(update(sha)){}
         assertTrue(file.readBytes().contentEquals(content))
         file.delete()
@@ -53,9 +58,9 @@ class UpdateVerificationTest {
         val wrong="00".repeat(32)
         val u=updater(
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"$wrong  Scrobblix-Android-universal.apk\n".toByteArray()) },
-            downloader={ _,out,_ -> out.writeBytes(content) })
+            downloader={ _,out,_,_ -> out.writeBytes(content) })
         var threw=false
-        try { u.download(update(wrong)){} } catch(e:UpdateFailure) { threw=true }
+        try { u.download(update(wrong)){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
         val dir=File(context.cacheDir,"updates")
         assertTrue(dir.listFiles()?.none { it.name=="Scrobblix-Android-universal.apk" } ?: true)
@@ -65,18 +70,18 @@ class UpdateVerificationTest {
     fun downloadRejectsMissingChecksumEntry()=kotlinx.coroutines.runBlocking {
         val u=updater(
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"abcd  Some-Other-App.apk\n".toByteArray()) },
-            downloader={ _,out,_ -> out.writeBytes("x".toByteArray()) })
+            downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
         var threw=false
-        try { u.download(update("abcd")){} } catch(e:UpdateFailure) { threw=true }
+        try { u.download(update("abcd")){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
     }
 
     @Test
     fun downloadRejectsUnsafeAssetName()=kotlinx.coroutines.runBlocking {
         val bad=update().copy(apk=ReleaseAsset("../evil.apk","https://github.com/frpboy/Scrobblix/releases/download/x/app.apk",100))
-        val u=updater(fetcher={ _,_ -> AppUpdater.FetchResult(200,ByteArray(0)) },downloader={ _,out,_ -> out.writeBytes("x".toByteArray()) })
+        val u=updater(fetcher={ _,_ -> AppUpdater.FetchResult(200,ByteArray(0)) },downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
         var threw=false
-        try { u.download(bad){} } catch(e:UpdateFailure) { threw=true }
+        try { u.download(bad){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
     }
 
@@ -93,9 +98,7 @@ class UpdateVerificationTest {
         // The installed app itself: same package and signer, but versionCode is not strictly higher.
         val u=AppUpdater(context)
         val self=File(context.packageCodePath)
-        val installed=context.packageManager.getPackageInfo(context.packageName,0)
-        val sameVersion=update().copy(version=ReleaseVersion.parse(installed.versionName ?: "0.1.0"))
-        assertFalse(u.verifyDownload(self,sameVersion))
+        assertFalse(u.verifyDownload(self,update()))
     }
 
     @Test

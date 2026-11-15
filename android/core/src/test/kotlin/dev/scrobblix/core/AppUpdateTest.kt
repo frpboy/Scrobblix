@@ -50,9 +50,29 @@ class AppUpdateTest {
         assertTrue(AppUpdateSelection.containsAbiToken("app-x86_64.apk","x86_64"))
         assertFalse(AppUpdateSelection.containsAbiToken("app-x86_64.apk","x86"))
         assertTrue(AppUpdateSelection.containsAbiToken("app-x86.apk","x86"))
-        assertTrue(AppUpdateSelection.containsAbiToken("Scrobblix-Android-arm64-v8a.apk","arm64-v8a"))
-        assertFalse(AppUpdateSelection.containsAbiToken("Scrobblix-Android-arm64-v8a.apk","armeabi-v7a"))
+        assertTrue(AppUpdateSelection.containsAbiToken("app-arm64-v8a.apk","arm64-v8a"))
+        assertFalse(AppUpdateSelection.containsAbiToken("app-arm64-v8a.apk","armeabi-v7a"))
         assertFalse(AppUpdateSelection.containsAbiToken("app-universal.apk","x86"))
+    }
+    @Test fun malformedVersionTextNeverThrows() {
+        assertNull(ReleaseVersion.parse("99999999999999999999.0.0"))
+        assertNull(ReleaseVersion.parse("0.99999999999999999999.0"))
+        assertNull(ReleaseVersion.parse("1.2.3-alpha.99999999999999999999"))
+        assertNull(ReleaseVersion.parse(""))
+        assertNull(ReleaseVersion.parse("not-a-version"))
+        assertEquals(ReleaseVersion(0,1,0,"alpha",2),ReleaseVersion.parse("0.1.0-alpha.2"))
+    }
+    @Test fun transportPolicyOnlyAllowsOfficialReleaseHosts() {
+        assertTrue(UpdateTransportPolicy.allowedUrl("https://api.github.com/repos/frpboy/Scrobblix/releases"))
+        assertTrue(UpdateTransportPolicy.allowedUrl("https://github.com/frpboy/Scrobblix/releases/download/x/app.apk"))
+        assertTrue(UpdateTransportPolicy.allowedUrl("https://release-assets.githubusercontent.com/github-production-release-asset/x"))
+        assertTrue(UpdateTransportPolicy.allowedUrl("https://objects.githubusercontent.com/x"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("http://github.com/frpboy/Scrobblix/app.apk"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("https://evil.example.com/app.apk"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("https://user:pw@github.com/app.apk"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("https://github.com:444/app.apk"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("https://githubusercontent.com/x"))
+        assertFalse(UpdateTransportPolicy.allowedUrl("not a url"))
     }
     @Test fun abiMatchPreferredWithUniversalFallback() {
         val arm=ReleaseAsset("app-arm64-v8a.apk","https://example.invalid/arm.apk",100)
