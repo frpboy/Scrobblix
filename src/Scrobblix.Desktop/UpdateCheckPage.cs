@@ -12,11 +12,19 @@ namespace Scrobblix.Desktop;
 public sealed partial class MainWindow : IDisposable
 {
     private bool _updateCheckInFlight;
+    private bool _updateCheckDisposed;
     private readonly UpdateCheckService _updateCheck = new();
+    private readonly CancellationTokenSource _updateCheckCancellation = new();
 
+    /// <summary>Wired once from the constructor's Closed handler: cancel any in-flight check or
+    /// download first so no request continues against a disposed client, then dispose the chain.</summary>
     public void Dispose()
     {
+        if (_updateCheckDisposed) return;
+        _updateCheckDisposed = true;
+        _updateCheckCancellation.Cancel();
         _updateCheck.Dispose();
+        _updateCheckCancellation.Dispose();
         GC.SuppressFinalize(this);
     }
 
@@ -34,7 +42,7 @@ public sealed partial class MainWindow : IDisposable
         UpdateCheckStatusText.Text = "Checking the official release channel…";
         try
         {
-            var latest = await _updateCheck.FindLatestAsync(CancellationToken.None);
+            var latest = await _updateCheck.FindLatestAsync(_updateCheckCancellation.Token);
             if (latest is null)
             {
                 UpdateCheckStatusText.Text = "No published Windows release was found. Your build is unchanged.";
@@ -48,7 +56,7 @@ public sealed partial class MainWindow : IDisposable
                     "This build does not record its source revision, so Scrobblix cannot confirm whether you already have this preview. Review the notes and download only if you want it.");
                 return;
             }
-            var state = await _updateCheck.CompareAsync(revision, latest.Tag, CancellationToken.None);
+            var state = await _updateCheck.CompareAsync(revision, latest.Tag, _updateCheckCancellation.Token);
             switch (state)
             {
                 case WindowsUpdateState.UpToDate:
@@ -180,7 +188,7 @@ public sealed partial class MainWindow : IDisposable
         try
         {
             UpdateCheckStatusText.Text = "Downloading the installer…";
-            var download = await _updateCheck.DownloadInstallerAsync(release, progress, CancellationToken.None);
+            var download = await _updateCheck.DownloadInstallerAsync(release, progress, _updateCheckCancellation.Token);
             UpdateCheckStatusText.Text = $"Downloaded and verified {download.Installer.Name}.";
             var confirm = new ContentDialog
             {

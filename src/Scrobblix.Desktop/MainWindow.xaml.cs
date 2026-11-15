@@ -94,6 +94,7 @@ public sealed partial class MainWindow : Window
         {
             Debug.WriteLine($"Scrobblix high-contrast listener unavailable: {exception.GetType().Name}");
         }
+        Closed += (_, _) => Dispose();
         Closed += (_, _) =>
         {
             _isClosed = true;
