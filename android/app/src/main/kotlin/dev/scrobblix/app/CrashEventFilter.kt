@@ -18,6 +18,13 @@ import io.sentry.SentryOptions
 object CrashEventFilter:SentryOptions.BeforeSendCallback {
     private val allowedContexts=setOf("os","device","app","runtime")
     override fun execute(event:SentryEvent,hint:Hint):SentryEvent {
+        // Attachments, screenshots, view hierarchies, thread dumps and tombstones
+        // bypass event field mutation: they travel on the Hint. Drop every carrier.
+        hint.clearAttachments()
+        hint.setScreenshot(null)
+        hint.setViewHierarchy(null)
+        hint.setThreadDump(null)
+        hint.setTombstone(null)
         event.request=null
         event.user=null
         event.breadcrumbs=null

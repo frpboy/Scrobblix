@@ -38,7 +38,7 @@ public static class CrashReporting
             options.IsGlobalModeEnabled = true;
             options.StackTraceMode = StackTraceMode.Original;
             options.Environment = "windows";
-            options.SetBeforeSend((sentryEvent, _) => ApplyPrivacyBoundary(sentryEvent));
+            options.SetBeforeSend((sentryEvent, hint) => ApplyPrivacyBoundary(sentryEvent, hint));
         });
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Capture(args.ExceptionObject as Exception ?? new InvalidOperationException("Unknown process exception"));
@@ -53,8 +53,11 @@ public static class CrashReporting
     private static readonly HashSet<string> AllowedContexts = new(StringComparer.Ordinal) { "os", "device", "app", "runtime" };
 
     /// <summary>The privacy boundary every outbound event passes through.</summary>
-    public static SentryEvent ApplyPrivacyBoundary(SentryEvent sentryEvent)
+    public static SentryEvent ApplyPrivacyBoundary(SentryEvent sentryEvent, SentryHint? hint = null)
     {
+        // Attachments bypass event field mutation: they travel on the hint (scope
+        // attachments are merged into it before this callback runs). Drop them all.
+        hint?.Attachments.Clear();
         // Sentry 7.0.0: Request/User setters are non-nullable, but the backing fields
         // are nullable and serialization skips them when null.
         sentryEvent.Request = null!;

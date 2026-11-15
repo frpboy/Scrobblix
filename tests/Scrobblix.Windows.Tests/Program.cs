@@ -73,20 +73,6 @@ await CredentialCanaryChecks.RunAsync();
 await MediaSessionChecks.RunAsync();
 Console.WriteLine("Windows native integration checks complete (artwork metadata, pipe authorization, credential canaries). No WinUI pixel, decoder memory-bound, or cryptographic caller-authentication claim.");
 
-sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
-{
-    public byte[] Content { get; set; } = initial;
-    public int Calls { get; private set; }
-    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
-    {
-        Calls++;
-        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Content) };
-        response.Content.Headers.ContentType = new("image/png");
-        return Task.FromResult(response);
-    }
-}
-
-sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
 
 // Crash reporting privacy boundary: hostile payloads must not survive ApplyPrivacyBoundary.
 {
@@ -113,7 +99,12 @@ sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOf
     hostile.SetTag("account", "rahul-lastfm");
     hostile.SetExtra("now_playing", "ArtistX - TrackY");
     hostile.Contexts["response"] = new { body = "ArtistX scrobble payload" };
-    var filtered = CrashReporting.ApplyPrivacyBoundary(hostile);
+    // Attachments bypass event field mutation: they travel on the hint.
+    var hostileHint = Sentry.SentryHint.WithAttachments(
+        new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
+    var filtered = CrashReporting.ApplyPrivacyBoundary(hostile, hostileHint);
+    Assert(hostileHint.Attachments.Count == 0, "Crash boundary drops hint attachments");
     // Request/User getters lazily re-create empty objects, so the serialized JSON
     // assertions below (not property reads) are the proof those carriers are gone.
     Assert(!filtered.Breadcrumbs.Any(), "Crash boundary drops breadcrumbs");
@@ -133,4 +124,63 @@ sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOf
     var serialized = System.Text.Encoding.UTF8.GetString(stream.ToArray());
     foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing" })
         Assert(!serialized.Contains(hostileString), "Serialized SDK event carries no " + hostileString);
+}
+
+// Transport-level proof: scope-injected payloads and scope attachments never reach
+// the wire. The captured envelope must be event-only and free of hostile bytes.
+{
+    const string hostileMessage = "played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678";
+    var captured = new List<Sentry.Protocol.Envelopes.Envelope>();
+    var options = new Sentry.SentryOptions
+    {
+        Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
+        Transport = new CapturingTransport(captured),
+        AutoSessionTracking = false
+    };
+    options.SetBeforeSend((e, h) => CrashReporting.ApplyPrivacyBoundary(e, h));
+    using (Sentry.SentrySdk.Init(options))
+    using (Sentry.SentrySdk.ConfigureScope(scope =>
+    {
+        scope.User = new Sentry.SentryUser { Username = "rahul" };
+        scope.SetTag("account", "rahul-lastfm");
+        scope.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
+        scope.AddAttachment(new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
+    }))
+    {
+        Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage));
+        Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+    }
+    var eventEnvelope = captured.FirstOrDefault(env => env.Items.Any(i => i.TryGetType() == "event"));
+    Assert(eventEnvelope is not null, "Pipeline produced an event envelope");
+    Assert(eventEnvelope!.Items.All(i => i.TryGetType() == "event"), "Captured envelope carries no attachment items");
+    using var envStream = new MemoryStream();
+    eventEnvelope.SerializeAsync(envStream, null).GetAwaiter().GetResult();
+    var envBytes = Encoding.UTF8.GetString(envStream.ToArray());
+    foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing", "history.json" })
+        Assert(!envBytes.Contains(hostileString), "Captured envelope carries no " + hostileString);
+}
+
+sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
+{
+    public byte[] Content { get; set; } = initial;
+    public int Calls { get; private set; }
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        Calls++;
+        var response = new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(Content) };
+        response.Content.Headers.ContentType = new("image/png");
+        return Task.FromResult(response);
+    }
+}
+
+sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
+
+sealed class CapturingTransport(List<Sentry.Protocol.Envelopes.Envelope> captured) : Sentry.Extensibility.ITransport
+{
+    public Task SendEnvelopeAsync(Sentry.Protocol.Envelopes.Envelope envelope, CancellationToken cancellationToken = default)
+    {
+        lock (captured) captured.Add(envelope);
+        return Task.CompletedTask;
+    }
 }
