@@ -13,7 +13,7 @@ namespace Scrobblix.Application.Updates;
 /// The message handler and the launcher are injectable so tests use synthetic HTTP and a fake
 /// launcher; no real network or installer execution happens in tests.
 /// </summary>
-public sealed class WindowsUpdateDownload
+public sealed class WindowsUpdateDownload : IDisposable
 {
     public sealed class UpdateDownloadException : Exception
     {
@@ -44,6 +44,12 @@ public sealed class WindowsUpdateDownload
                 return false;
             }
         });
+    }
+
+    public void Dispose()
+    {
+        _client.Dispose();
+        GC.SuppressFinalize(this);
     }
 
     public static bool AllowedHost(string host) =>
@@ -209,7 +215,7 @@ public sealed class WindowsUpdateDownload
         try
         {
             using var handle = new FileStream(stagedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
-            if (Convert.ToHexString(SHA256.HashData(handle)).ToLowerInvariant() != expectedSha256) return false;
+            if (!string.Equals(Convert.ToHexString(SHA256.HashData(handle)), expectedSha256, StringComparison.OrdinalIgnoreCase)) return false;
             return _launcher(stagedPath);
         }
         catch

@@ -9,10 +9,16 @@ namespace Scrobblix.Desktop;
 /// Manual update check UI: check, changelog, guided verified download, user-confirmed installer launch.
 /// No automatic checks, no silent install, no signing change.
 /// </summary>
-public sealed partial class MainWindow
+public sealed partial class MainWindow : IDisposable
 {
     private bool _updateCheckInFlight;
     private readonly UpdateCheckService _updateCheck = new();
+
+    public void Dispose()
+    {
+        _updateCheck.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     private static string? BuildSourceRevision()
     {

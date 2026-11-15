@@ -56,7 +56,7 @@ internal static class WindowsUpdateDownloadChecks
             var handler = new FakeHandler(request => Bytes(request.RequestUri!.ToString().Contains("SHA256SUMS")
                 ? System.Text.Encoding.UTF8.GetBytes(Sha256Of(installerBytes) + "  " + WindowsUpdateCatalog.InstallerName + "\n")
                 : installerBytes));
-            var download = new WindowsUpdateDownload(handler);
+            using var download = new WindowsUpdateDownload(handler);
             var staging = Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N"));
             var downloads = Path.Combine(Path.GetTempPath(), "scrobblix-dl-" + Guid.NewGuid().ToString("N"));
             var result = await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, downloads, null, CancellationToken.None);
@@ -71,7 +71,7 @@ internal static class WindowsUpdateDownloadChecks
             var handler = new FakeHandler(request => Bytes(request.RequestUri!.ToString().Contains("SHA256SUMS")
                 ? System.Text.Encoding.UTF8.GetBytes(Sha256Of(installerBytes) + "  " + WindowsUpdateCatalog.InstallerName + "\n")
                 : installerBytes));
-            var download = new WindowsUpdateDownload(handler);
+            using var download = new WindowsUpdateDownload(handler);
             var staging = Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N"));
             var downloads = Path.Combine(Path.GetTempPath(), "scrobblix-dl-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(downloads);
@@ -96,7 +96,7 @@ internal static class WindowsUpdateDownloadChecks
             var handler = new FakeHandler(request => Bytes(request.RequestUri!.ToString().Contains("SHA256SUMS")
                 ? System.Text.Encoding.UTF8.GetBytes(new string('0', 64) + "  " + WindowsUpdateCatalog.InstallerName + "\n")
                 : installerBytes));
-            var download = new WindowsUpdateDownload(handler);
+            using var download = new WindowsUpdateDownload(handler);
             var staging = Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N"));
             var threw = false;
             try { await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, null, null, CancellationToken.None); }
@@ -112,7 +112,7 @@ internal static class WindowsUpdateDownloadChecks
                 request.RequestUri!.ToString() == installerUrl ? Redirect(cdn)
                 : request.RequestUri!.ToString() == cdn ? Bytes(installerBytes)
                 : Bytes(System.Text.Encoding.UTF8.GetBytes(Sha256Of(installerBytes) + "  " + WindowsUpdateCatalog.InstallerName + "\n")));
-            var download = new WindowsUpdateDownload(handler);
+            using var download = new WindowsUpdateDownload(handler);
             var staging = Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N"));
             var result = await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, null, null, CancellationToken.None);
             Assert(File.Exists(result.StagedPath), "allowed redirect followed");
@@ -120,7 +120,7 @@ internal static class WindowsUpdateDownloadChecks
             var evilHandler = new FakeHandler(request =>
                 request.RequestUri!.ToString() == installerUrl ? Redirect("https://evil.example.com/setup.exe")
                 : Bytes(System.Text.Encoding.UTF8.GetBytes(Sha256Of(installerBytes) + "  " + WindowsUpdateCatalog.InstallerName + "\n")));
-            var evilDownload = new WindowsUpdateDownload(evilHandler);
+            using var evilDownload = new WindowsUpdateDownload(evilHandler);
             var blocked = false;
             try { await evilDownload.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, null, null, CancellationToken.None); }
             catch (WindowsUpdateDownload.UpdateDownloadException) { blocked = true; }
@@ -134,7 +134,7 @@ internal static class WindowsUpdateDownloadChecks
                 ? System.Text.Encoding.UTF8.GetBytes(Sha256Of(installerBytes) + "  " + WindowsUpdateCatalog.InstallerName + "\n")
                 : installerBytes));
             var launched = new List<string>();
-            var download = new WindowsUpdateDownload(handler, path => { launched.Add(path); return true; });
+            using var download = new WindowsUpdateDownload(handler, path => { launched.Add(path); return true; });
             var staging = Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N"));
             var result = await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, null, null, CancellationToken.None);
             Assert(download.OpenInstallerVerified(result.StagedPath, result.Sha256), "verified staged file launches");

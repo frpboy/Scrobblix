@@ -10,7 +10,7 @@ namespace Scrobblix.Desktop;
 /// Manual checks only: nothing runs on a timer, nothing installs silently, no signing change.
 /// Download staging, hashing and custody live in Scrobblix.Application.Updates.WindowsUpdateDownload.
 /// </summary>
-public sealed class UpdateCheckService
+public sealed class UpdateCheckService : IDisposable
 {
     public sealed class UpdateCheckException : Exception
     {
@@ -24,6 +24,12 @@ public sealed class UpdateCheckService
     private const int MaxApiBytes = 1024 * 1024;
 
     private readonly WindowsUpdateDownload _download = new();
+
+    public void Dispose()
+    {
+        _download.Dispose();
+        GC.SuppressFinalize(this);
+    }
 
     /// <summary>Newest non-draft windows-v* release with the exact installer asset, or null.</summary>
     public async Task<WindowsRelease?> FindLatestAsync(CancellationToken cancellation)
