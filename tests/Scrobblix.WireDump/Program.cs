@@ -21,14 +21,22 @@ if (args.Length > 0 && args[0] == "--guard-probe") return GuardProbe();
 // control (expect 'open') and inside GuardProbe (expect 'blocked'). Literal
 // IPv4, no DNS, no TLS, no application data.
 if (args.Length == 2 && args[0] == "--probe-external") return ProbeExternal(args[1] == "open");
-// --send-remote: DISPOSABLE gated candidate step (dispatch send_remote only):
-// exactly ONE real synthetic crash event to the DSN baked into the
+// --read-dsn-sha [expected_sha]: no-init readback of the DSN const baked into
+// the Scrobblix.Windows assembly THIS exe references - pure metadata read, no
+// SentrySdk.Init, no network. With expected_sha, exits 8 unless it matches.
+if (args.Length > 0 && args[0] == "--read-dsn-sha") return ReadDsnSha(args.Length > 1 ? args[1] : null);
+// --send-remote <expected_sha> <expected_host> <expected_project>: DISPOSABLE
+// gated candidate step (dispatch send_remote + pinned expectations only):
+// exactly ONE real synthetic crash event to the DSN baked into the referenced
 // Scrobblix.Windows assembly at build time, through the production option
 // shape (ApplyPrivacyBoundary on the hook path, FilteringEnvelopeTransport
-// gate, production handler shape). No retry: a non-delivered exchange is a
-// finding. Tees the FINAL wire event id and timestamp for the project owner's
-// exact receipt lookup.
-if (args.Length > 0 && args[0] == "--send-remote") return SendRemote();
+// gate, production handler shape). The baked DSN's sha256/host/project are
+// asserted against the clearance-pinned expectations BEFORE any init or
+// capture, and the transport attempt budget is capped at 1 for this isolated
+// test. No retry: a non-delivered exchange is a finding. Tees the FINAL wire
+// event id and timestamp for the project owner's exact receipt lookup (the
+// HTTP exchange itself is not a stored receipt).
+if (args.Length == 4 && args[0] == "--send-remote") return SendRemote(args[1], args[2], args[3]);
 
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
@@ -137,23 +145,60 @@ static int ProbeExternal(bool expectOpen)
     return connected ? 3 : 0;
 }
 
-static int SendRemote()
+static string? BakedDsn()
 {
-    // The DSN comes from the generated source baked into the built assembly
-    // (ScrobblixSentryDsn.g.cs from SCROBBLIX_SENTRY_DSN at build time): the
-    // send proves the baked-artifact binding, not a workflow-supplied value.
-    var dsnField = typeof(CrashReporting).Assembly.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
+    var field = typeof(CrashReporting).Assembly.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
         ?.GetField("Value", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
-    var dsn = dsnField?.GetValue(null) as string;
+    return field?.GetValue(null) as string;
+}
+
+static string DsnSha(string dsn) =>
+    Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(dsn))).ToLowerInvariant();
+
+static int ReadDsnSha(string? expectedSha)
+{
+    var dsn = BakedDsn();
+    if (string.IsNullOrEmpty(dsn))
+    {
+        Console.WriteLine("baked dsn readback (no init): EMPTY (local-only build)");
+        return expectedSha is null ? 0 : 8;
+    }
+    var uri = new Uri(dsn);
+    var sha = DsnSha(dsn);
+    Console.WriteLine("baked dsn readback (no init): sha256=" + sha + " host=" + uri.Host + " project=" + dsn.TrimEnd('/').Split('/').Last());
+    if (expectedSha is not null && sha != expectedSha)
+    {
+        Console.WriteLine("MISMATCH: baked DSN sha does not equal the expected value - refusing");
+        return 8;
+    }
+    return 0;
+}
+
+static int SendRemote(string expectedSha, string expectedHost, string expectedProject)
+{
+    var dsn = BakedDsn();
     if (string.IsNullOrEmpty(dsn))
     {
         Console.WriteLine("baked DSN empty: refusing remote send (this build is local-only)");
         return 5;
     }
     var uri = new Uri(dsn);
-    Console.WriteLine("endpoint binding: host=" + uri.Host + " project=" + dsn.TrimEnd('/').Split('/').Last());
-    Console.WriteLine("baked dsn-sha256: " + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(dsn))).ToLowerInvariant());
+    var project = dsn.TrimEnd('/').Split('/').Last();
+    var sha = DsnSha(dsn);
+    Console.WriteLine("endpoint binding: host=" + uri.Host + " project=" + project);
+    Console.WriteLine("baked dsn-sha256: " + sha);
+    // BEFORE any init or capture: the baked endpoint must equal the
+    // clearance-pinned expectation exactly, or nothing happens.
+    if (sha != expectedSha || uri.Host != expectedHost || project != expectedProject)
+    {
+        Console.WriteLine("MISMATCH: baked endpoint does not equal the clearance-pinned expectation - refusing before init/send");
+        return 7;
+    }
+    // Isolated bounded test: cap the transport at exactly ONE attempt for the
+    // process before any initialization or possible capture. All other guards
+    // unchanged.
     FilteringEnvelopeTransport.ResetBudgetForTesting();
+    FilteringEnvelopeTransport.MaxAttemptsPerProcess = 1;
     FilteringEnvelopeTransport.MinAttemptInterval = TimeSpan.Zero;
     var release = "scrobblix-windows@" + (
         typeof(CrashReporting).Assembly
@@ -183,9 +228,11 @@ static int SendRemote()
         Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
     }
     var result = FilteringEnvelopeTransport.GetAttemptResult(originalId.ToString());
-    Console.WriteLine($"FINAL wire event: {result?.EventId} at {result?.WireTimestamp} delivered={result?.ExchangeCompleted}");
+    // Honest label: a completed HTTP exchange is NOT a stored receipt. Receipt
+    // is only the project owner's exact UUID lookup in the remote project.
+    Console.WriteLine($"FINAL wire event: {result?.EventId} at {result?.WireTimestamp} http_exchange_completed={result?.ExchangeCompleted} (receipt = exact UUID lookup by project owner)");
     // No retry: a non-delivered exchange is a finding, reported as-is.
-    return result is { ExchangeCompleted: true } ? 0 : 6;
+    return result is { ExchangeCompleted: true, EventId: not null, WireTimestamp: not null } ? 0 : 6;
 }
 
 static byte[] CaptureOneRequest(TcpListener listener)

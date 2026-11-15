@@ -8,20 +8,32 @@ name: DISPOSABLE ingest synthetic prep
 # STAGE A (default; send_remote=false, also every push-triggered run):
 # builds the DSN-baked candidate artifacts and proves them WITHOUT any remote
 # event: emulator egress blocked (iptables), the Windows dump process
-# firewalled to loopback, both wire dumps loopback-only. The DSN-baked
-# desktop executable is built, hashed and uploaded but never run; on Android
-# the app cannot egress before the iptables guard is installed. Output:
-# artifact zips + sha256 manifests for custody/hash/config readback review.
+# firewalled to loopback, both wire dumps loopback-only. The DSN is supplied
+# to EVERY build that compiles Scrobblix.Windows (Desktop and WireDump), and
+# stage A reads the baked const back from the EXACT WireDump output assembly
+# without initializing anything (--read-dsn-sha), plus the Android generated
+# BuildConfig source. The DSN-baked desktop executable is built, hashed and
+# uploaded but never run; on Android the app cannot egress before the
+# iptables guard is installed. Zero-byte non-runtime sentinels (e.g.
+# Assets/.gitkeep, which artifact upload omits) are excluded from the
+# manifests explicitly and listed in the log. Output: artifact zips + sha256
+# manifests for custody/hash/config readback review.
 #
-# STAGE B (send_remote=true + qualified_run_id, manual dispatch only, after
-# reviewer artifact clearance and project-owner readiness): downloads the
-# EXACT artifact bytes from the named qualified stage-A run (hash-verified
-# against its manifests, no rebuild) and sends exactly ONE real synthetic
-# crash event per platform (two total) to the baked DSN's ingest endpoint
-# through the same production boundary. No retry - a non-delivered exchange
-# is a finding. The FINAL wire event id and timestamp are teed to the job log
-# (and, on Android, a pulled file) for the project owner's exact receipt
-# lookup. Stage B must run within the stage-A artifact retention (1 day).
+# STAGE B (send_remote=true + qualified_run_id + clearance-pinned
+# expectations, manual dispatch only, after reviewer artifact clearance and
+# project-owner readiness): no rebuild. Validates the qualified run's
+# provenance (exact numeric run id, head sha, workflow, workflow_dispatch,
+# success), downloads the pinned artifact IDs, verifies the archive SHA256
+# digests pinned at clearance, then verifies every manifest hash against its
+# OWN exact root-relative tree (no basename fallback, no traversal, no
+# unexpected loadable files) and executes only the exact verified paths.
+# Asserts the baked DSN sha256/host/project against the pinned expectations
+# BEFORE any init/send, with the transport attempt budget capped at 1.
+# Exactly ONE real synthetic crash event per platform (two total) through the
+# unchanged production boundary; no retry - a miss is a finding. Tees the
+# FINAL wire UUID+timestamp (labelled HTTP exchange, not stored receipt) for
+# the project owner's exact lookup. Must run within the stage-A artifact
+# retention (1 day).
 on:
   workflow_dispatch:
     inputs:
@@ -36,7 +48,47 @@ on:
         required: false
         default: false
       qualified_run_id:
-        description: 'Stage B: run id of the qualified stage-A build whose exact artifacts are sent'
+        description: 'Stage B: numeric run id of the qualified no-send stage-A build'
+        type: string
+        required: false
+        default: ''
+      expected_source_head:
+        description: 'Stage B: full commit sha the qualified run must have built'
+        type: string
+        required: false
+        default: ''
+      expected_android_artifact_id:
+        description: 'Stage B: pinned numeric artifact id of the qualified android archive'
+        type: string
+        required: false
+        default: ''
+      expected_windows_artifact_id:
+        description: 'Stage B: pinned numeric artifact id of the qualified windows archive'
+        type: string
+        required: false
+        default: ''
+      expected_android_zip_sha256:
+        description: 'Stage B: pinned sha256 of the qualified android artifact zip'
+        type: string
+        required: false
+        default: ''
+      expected_windows_zip_sha256:
+        description: 'Stage B: pinned sha256 of the qualified windows artifact zip'
+        type: string
+        required: false
+        default: ''
+      expected_dsn_sha256:
+        description: 'Stage B: pinned sha256 of the baked DSN (asserted before init/send)'
+        type: string
+        required: false
+        default: ''
+      expected_endpoint_host:
+        description: 'Stage B: pinned ingest endpoint host (asserted before init/send)'
+        type: string
+        required: false
+        default: ''
+      expected_project_id:
+        description: 'Stage B: pinned ingest project id (asserted before init/send)'
         type: string
         required: false
         default: ''
@@ -66,6 +118,20 @@ jobs:
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+          # No-init config readback: the baked value as generated into the
+          # app's BuildConfig source, compared against the dispatch value.
+          bc=$(find android/app/build/generated -name BuildConfig.java -path '*dev/scrobblix/app*' | head -1)
+          test -n "$bc" || { echo 'generated BuildConfig missing'; exit 1; }
+          line=$(grep 'SCROBBLIX_SENTRY_DSN' "$bc")
+          echo "android baked config readback (no init): $line"
+          val=$(printf '%s' "$line" | sed -E 's/.*= "(.*)".*/\1/')
+          if [ -n "$SCROBBLIX_SENTRY_DSN" ]; then
+            [ "$val" = "$SCROBBLIX_SENTRY_DSN" ] || { echo 'MISMATCH: baked BuildConfig DSN differs from dispatch value'; exit 1; }
+            echo "android baked config verified (no init): sha256=$(printf '%s' "$val" | sha256sum | cut -d' ' -f1) host=$(printf '%s' "$val" | sed -E 's|https://[^@]*@([^/]*)/.*|\1|') project=$(printf '%s' "$val" | sed -E 's|.*/([0-9]+)$|\1|')"
+          else
+            [ -z "$val" ] || { echo 'unexpected DSN baked into BuildConfig'; exit 1; }
+            echo 'android baked config empty as expected'
+          fi
       - name: STAGE A - hash artifacts and export merged manifest
         if: ${{ !inputs.send_remote }}
         shell: bash
@@ -77,39 +143,63 @@ jobs:
           manifest=$(find android/app/build/intermediates/merged_manifest -name 'AndroidManifest.xml' | head -1)
           cp "$manifest" merged-AndroidManifest.xml
           grep -n 'usesCleartextTraffic\|networkSecurityConfig' merged-AndroidManifest.xml || true
-      - name: STAGE B - download the qualified stage-A artifacts (exact bytes, no rebuild)
+      - name: STAGE B - validate qualified run provenance and pinned archive digest
         if: ${{ inputs.send_remote }}
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           QUALIFIED_RUN_ID: ${{ inputs.qualified_run_id }}
+          EXPECTED_SOURCE_HEAD: ${{ inputs.expected_source_head }}
+          EXPECTED_ANDROID_ARTIFACT_ID: ${{ inputs.expected_android_artifact_id }}
+          EXPECTED_ANDROID_ZIP_SHA256: ${{ inputs.expected_android_zip_sha256 }}
         run: |
           set -euo pipefail
-          test -n "$QUALIFIED_RUN_ID" || { echo 'send_remote requires qualified_run_id'; exit 1; }
+          re='^[0-9]+$'
+          [[ "$QUALIFIED_RUN_ID" =~ $re ]] || { echo 'qualified_run_id must be numeric'; exit 1; }
+          [[ "$EXPECTED_ANDROID_ARTIFACT_ID" =~ $re ]] || { echo 'expected_android_artifact_id must be numeric'; exit 1; }
+          test -n "$EXPECTED_SOURCE_HEAD" || { echo 'expected_source_head required'; exit 1; }
+          test -n "$EXPECTED_ANDROID_ZIP_SHA256" || { echo 'expected_android_zip_sha256 required'; exit 1; }
           api="https://api.github.com/repos/${{ github.repository }}"
-          art=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs/$QUALIFIED_RUN_ID/artifacts?per_page=100")
-          id=$(printf '%s' "$art" | jq -r '[.artifacts[] | select(.name=="ingest-prep-android-debug-DISPOSABLE" and (.expired|not)) | .id] | max // empty')
-          test -n "$id" || { echo 'qualified android artifact not found or expired'; exit 1; }
-          curl -sfL -H "Authorization: Bearer $GH_TOKEN" "$api/actions/artifacts/$id/zip" -o qualified-android.zip
+          run=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs/$QUALIFIED_RUN_ID")
+          printf '%s' "$run" | jq -e --arg head "$EXPECTED_SOURCE_HEAD" \
+            '.conclusion=="success" and .event=="workflow_dispatch" and .name=="DISPOSABLE ingest synthetic prep" and .head_sha==$head' >/dev/null \
+            || { echo 'PROVENANCE FAIL: run is not the pinned successful no-send stage-A dispatch at the reviewed head'; exit 1; }
+          art=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/artifacts/$EXPECTED_ANDROID_ARTIFACT_ID")
+          printf '%s' "$art" | jq -e --argjson runid "$QUALIFIED_RUN_ID" \
+            '.expired==false and .name=="ingest-prep-android-debug-DISPOSABLE" and .workflow_run.id==$runid' >/dev/null \
+            || { echo 'PROVENANCE FAIL: pinned android artifact id does not belong to the qualified run'; exit 1; }
+          echo 'provenance verified: run, head, workflow, dispatch, success, pinned artifact id'
+          curl -sfL -H "Authorization: Bearer $GH_TOKEN" "$api/actions/artifacts/$EXPECTED_ANDROID_ARTIFACT_ID/zip" -o qualified-android.zip
+          zhash=$(sha256sum qualified-android.zip | cut -d' ' -f1)
+          [ "$zhash" = "$EXPECTED_ANDROID_ZIP_SHA256" ] || { echo "ARCHIVE DIGEST MISMATCH: $zhash != pinned $EXPECTED_ANDROID_ZIP_SHA256"; exit 1; }
+          echo "archive digest verified: $zhash"
           mkdir -p qualified-android && unzip -o qualified-android.zip -d qualified-android >/dev/null
-          find qualified-android -type f | sort
-      - name: STAGE B - verify exact qualified bytes against the stage-A sha256 manifest
+      - name: STAGE B - verify exact qualified bytes, path-bound to the stage-A manifest
         if: ${{ inputs.send_remote }}
         shell: bash
         run: |
           set -euo pipefail
           cd qualified-android
           while read -r hash path; do
-            f=$(find . -name "$(basename "$path")" | head -1)
-            test -n "$f" || { echo "MISSING from artifact: $path"; exit 1; }
-            actual=$(sha256sum "$f" | cut -d' ' -f1)
+            case "$path" in *..*) echo "TRAVERSAL in manifest path: $path"; exit 1;; esac
+            test -f "$path" || { echo "MISSING at exact path: $path"; exit 1; }
+            actual=$(sha256sum "$path" | cut -d' ' -f1)
             [ "$actual" = "$hash" ] || { echo "SHA MISMATCH: $path"; exit 1; }
-            echo "verified exact bytes: $(basename "$path") $hash"
+            echo "verified exact path: $path $hash"
           done < android-artifact-sha256.txt
+          # No unexpected loadable files: every .apk in the tree must be
+          # manifest-listed at its exact path.
+          while IFS= read -r f; do
+            grep -qF "  $f" android-artifact-sha256.txt || { echo "UNEXPECTED loadable file: $f"; exit 1; }
+          done < <(find . -name '*.apk' | sed 's|^\./||')
+          echo 'no unexpected loadable files'
       - name: Emulator run (stage A loopback dump, egress blocked / stage B gated single send)
         shell: bash
         env:
           SCROBBLIX_SEND_REMOTE: ${{ inputs.send_remote }}
+          EXPECTED_DSN_SHA256: ${{ inputs.expected_dsn_sha256 }}
+          EXPECTED_ENDPOINT_HOST: ${{ inputs.expected_endpoint_host }}
+          EXPECTED_PROJECT_ID: ${{ inputs.expected_project_id }}
         run: |
           set -euo pipefail
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -133,40 +223,46 @@ jobs:
             sleep 2
           done
           if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
-          # adb root races adbd startup on fresh boots ('unable to connect for
-          # root: closed'); retry until adbd comes back as root.
-          adb_root_ok=false
-          for attempt in $(seq 1 10); do
-            if adb root 2>&1 | grep -qE 'restarting adbd as root|already running as root'; then adb_root_ok=true; break; fi
-            sleep 3
-            adb wait-for-device || true
-          done
-          if [ "$adb_root_ok" != true ]; then echo 'adb root failed after retries'; tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
-          adb wait-for-device
-          booted=false
-          for attempt in $(seq 1 60); do
-            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
-            sleep 2
-          done
-          if [ "$booted" != true ]; then echo 'boot lost after adb root'; exit 1; fi
           if [ "$SCROBBLIX_SEND_REMOTE" = 'true' ]; then
-            # STAGE B: install the EXACT qualified stage-A bytes. No iptables
-            # block: the ONE synthetic event must reach the baked endpoint.
-            apk=$(find qualified-android -name 'app-debug.apk' | head -1)
-            testapk=$(find qualified-android -name 'app-debug-androidTest.apk' | head -1)
+            # STAGE B: install the EXACT verified stage-A bytes (paths from
+            # the hash-verified manifest). No iptables block: the ONE
+            # synthetic event must reach the baked endpoint.
+            test -n "$EXPECTED_DSN_SHA256" -a -n "$EXPECTED_ENDPOINT_HOST" -a -n "$EXPECTED_PROJECT_ID" || { echo 'pinned endpoint expectations required'; exit 1; }
+            apk="qualified-android/$(grep -F 'outputs/apk/debug/' qualified-android/android-artifact-sha256.txt | awk '{print $2}' | grep -v androidTest | head -1)"
+            testapk="qualified-android/$(grep -F 'androidTest' qualified-android/android-artifact-sha256.txt | awk '{print $2}' | head -1)"
             testclass="dev.scrobblix.app.RemoteSendTest"
+            extra_args="-e expected_dsn_sha $EXPECTED_DSN_SHA256 -e expected_host $EXPECTED_ENDPOINT_HOST -e expected_project $EXPECTED_PROJECT_ID"
           else
             # STAGE A: no remote egress from the emulator - the dump is
-            # loopback-only, and the baked app cannot reach any external path.
+            # loopback-only, and the baked app cannot reach any external path
+            # before this guard is installed.
+            # adb root races adbd startup on fresh boots ('unable to connect
+            # for root: closed'); retry until adbd comes back as root.
+            adb_root_ok=false
+            for attempt in $(seq 1 10); do
+              if adb root 2>&1 | grep -qE 'restarting adbd as root|already running as root'; then adb_root_ok=true; break; fi
+              sleep 3
+              adb wait-for-device || true
+            done
+            if [ "$adb_root_ok" != true ]; then echo 'adb root failed after retries'; tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
+            adb wait-for-device
+            booted=false
+            for attempt in $(seq 1 60); do
+              if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+              sleep 2
+            done
+            if [ "$booted" != true ]; then echo 'boot lost after adb root'; exit 1; fi
             adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
             adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
             apk=$(ls android/app/build/outputs/apk/debug/*.apk)
             testapk=$(ls android/app/build/outputs/apk/androidTest/debug/*.apk)
             testclass="dev.scrobblix.app.WireDumpTest"
+            extra_args=""
           fi
           adb install -r "$apk" >/dev/null
           adb install -r "$testapk" >/dev/null
-          result=$(adb shell am instrument -w -r -e class "$testclass" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          # shellcheck disable=SC2086
+          result=$(adb shell am instrument -w -r $extra_args -e class "$testclass" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
           printf '%s\n' "$result"
           printf '%s\n' "$result" | grep -F 'OK (1 test)'
           if [ "$SCROBBLIX_SEND_REMOTE" = 'true' ]; then
@@ -224,12 +320,28 @@ jobs:
       - name: STAGE A - loopback wire dump (process firewalled to loopback only)
         if: ${{ !inputs.send_remote }}
         shell: pwsh
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
         run: |
+          # The DSN env is supplied here too: this build compiles
+          # Scrobblix.Windows via the WireDump ProjectReference, so the exe
+          # stage B runs carries the SAME DSN epoch as the Desktop build.
           dotnet build tests/Scrobblix.WireDump/Scrobblix.WireDump.csproj --configuration Debug
           if ($LASTEXITCODE -ne 0) { throw 'WireDump build failed' }
           $exe = Get-ChildItem -Recurse tests/Scrobblix.WireDump/bin/Debug -Filter Scrobblix.WireDump.exe | Select-Object -First 1
           if (-not $exe) { throw 'WireDump exe missing' }
           "resolved dump executable: " + $exe.FullName
+          # No-init readback of the baked const from the EXACT executing
+          # assembly's referenced Scrobblix.Windows.dll (pure metadata read,
+          # no SentrySdk.Init, no network), asserted against the dispatch DSN.
+          '=== baked DSN readback from the exact executing assembly (no init) ==='
+          if ($env:SCROBBLIX_SENTRY_DSN) {
+            $expected = [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
+            & $exe.FullName --read-dsn-sha $expected
+          } else {
+            & $exe.FullName --read-dsn-sha
+          }
+          if ($LASTEXITCODE -ne 0) { throw 'Baked DSN readback failed or mismatched' }
           # Guard causality, phase 1 - BASELINE before any rule: the SAME exe
           # MUST reach the external endpoint. A failed baseline makes the whole
           # guard proof inconclusive, so the job stops here with that verdict.
@@ -278,60 +390,108 @@ jobs:
         if: ${{ !inputs.send_remote }}
         shell: pwsh
         run: |
+          function Write-TreeManifest($root, $outFile) {
+            $resolved = (Resolve-Path $root).Path
+            $files = Get-ChildItem -Recurse $root -File
+            # Zero-byte non-runtime sentinels (e.g. Assets/.gitkeep) are not
+            # preserved by artifact upload: exclude them from the required
+            # manifest EXPLICITLY and list them, never weaken verification.
+            $files | Where-Object { $_.Length -eq 0 } | ForEach-Object {
+              "excluded zero-byte non-runtime sentinel from manifest: " + [IO.Path]::GetRelativePath($resolved, $_.FullName)
+            }
+            $files | Where-Object { $_.Length -gt 0 } | ForEach-Object {
+              (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath($resolved, $_.FullName)
+            } | Out-File $outFile -Encoding ascii
+            Get-Content $outFile
+          }
           $out = 'src/Scrobblix.Desktop/bin/Debug'
           $exe = Get-ChildItem -Recurse $out -Filter *.exe | Select-Object -First 1
           "resolved executable: " + $exe.FullName + ' (built, hashed, never run in stage A)'
-          Get-ChildItem -Recurse $out -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath((Resolve-Path $out).Path, $_.FullName) } | Tee-Object windows-deps-manifest-sha256.txt
-          $wd = 'tests/Scrobblix.WireDump/bin/Debug'
-          Get-ChildItem -Recurse $wd -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath((Resolve-Path $wd).Path, $_.FullName) } | Tee-Object windows-wiredump-manifest-sha256.txt
-      - name: STAGE B - download the qualified stage-A artifacts (exact bytes, no rebuild)
+          Write-TreeManifest $out 'windows-deps-manifest-sha256.txt'
+          Write-TreeManifest 'tests/Scrobblix.WireDump/bin/Debug' 'windows-wiredump-manifest-sha256.txt'
+      - name: STAGE B - validate qualified run provenance and pinned archive digest
         if: ${{ inputs.send_remote }}
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           QUALIFIED_RUN_ID: ${{ inputs.qualified_run_id }}
+          EXPECTED_SOURCE_HEAD: ${{ inputs.expected_source_head }}
+          EXPECTED_WINDOWS_ARTIFACT_ID: ${{ inputs.expected_windows_artifact_id }}
+          EXPECTED_WINDOWS_ZIP_SHA256: ${{ inputs.expected_windows_zip_sha256 }}
         run: |
-          if (-not $env:QUALIFIED_RUN_ID) { throw 'send_remote requires qualified_run_id' }
+          if ($env:QUALIFIED_RUN_ID -notmatch '^[0-9]+$') { throw 'qualified_run_id must be numeric' }
+          if ($env:EXPECTED_WINDOWS_ARTIFACT_ID -notmatch '^[0-9]+$') { throw 'expected_windows_artifact_id must be numeric' }
+          if (-not $env:EXPECTED_SOURCE_HEAD) { throw 'expected_source_head required' }
+          if (-not $env:EXPECTED_WINDOWS_ZIP_SHA256) { throw 'expected_windows_zip_sha256 required' }
           $api = "https://api.github.com/repos/${{ github.repository }}"
-          $art = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/runs/$env:QUALIFIED_RUN_ID/artifacts?per_page=100"
-          $id = ($art.artifacts | Where-Object { $_.name -eq 'ingest-prep-windows-debug-DISPOSABLE' -and -not $_.expired } | Select-Object -First 1).id
-          if (-not $id) { throw 'qualified windows artifact not found or expired' }
-          Invoke-WebRequest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/artifacts/$id/zip" -OutFile qualified-windows.zip
+          $run = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/runs/$env:QUALIFIED_RUN_ID"
+          if ($run.conclusion -ne 'success' -or $run.event -ne 'workflow_dispatch' -or $run.name -ne 'DISPOSABLE ingest synthetic prep' -or $run.head_sha -ne $env:EXPECTED_SOURCE_HEAD) {
+            throw 'PROVENANCE FAIL: run is not the pinned successful no-send stage-A dispatch at the reviewed head'
+          }
+          $art = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/artifacts/$env:EXPECTED_WINDOWS_ARTIFACT_ID"
+          if ($art.expired -or $art.name -ne 'ingest-prep-windows-debug-DISPOSABLE' -or [string]$art.workflow_run.id -ne $env:QUALIFIED_RUN_ID) {
+            throw 'PROVENANCE FAIL: pinned windows artifact id does not belong to the qualified run'
+          }
+          'provenance verified: run, head, workflow, dispatch, success, pinned artifact id'
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/artifacts/$env:EXPECTED_WINDOWS_ARTIFACT_ID/zip" -OutFile qualified-windows.zip
+          $zhash = (Get-FileHash qualified-windows.zip -Algorithm SHA256).Hash.ToLower()
+          if ($zhash -ne $env:EXPECTED_WINDOWS_ZIP_SHA256.ToLower()) { throw "ARCHIVE DIGEST MISMATCH: $zhash != pinned $env:EXPECTED_WINDOWS_ZIP_SHA256" }
+          "archive digest verified: $zhash"
           Expand-Archive qualified-windows.zip -DestinationPath qualified-windows -Force
-          Get-ChildItem -Recurse qualified-windows -File | ForEach-Object { $_.FullName }
-      - name: STAGE B - verify exact qualified bytes against the stage-A sha256 manifests
+      - name: STAGE B - verify exact qualified bytes, path-bound per manifest root
         if: ${{ inputs.send_remote }}
         shell: pwsh
         run: |
           $failed = $false
-          foreach ($manifest in @('windows-deps-manifest-sha256.txt', 'windows-wiredump-manifest-sha256.txt')) {
-            $m = Get-ChildItem -Recurse qualified-windows -Filter $manifest | Select-Object -First 1
-            if (-not $m) { throw "manifest missing from artifact: $manifest" }
-            foreach ($line in Get-Content $m.FullName) {
+          $verified = @{}
+          $wiredumpExeRel = $null
+          foreach ($pair in @(
+            @{ Manifest = 'windows-deps-manifest-sha256.txt'; Root = 'src/Scrobblix.Desktop/bin/Debug' },
+            @{ Manifest = 'windows-wiredump-manifest-sha256.txt'; Root = 'tests/Scrobblix.WireDump/bin/Debug' })) {
+            $m = Join-Path 'qualified-windows' $pair.Manifest
+            if (-not (Test-Path $m)) { throw "manifest missing from archive root: $($pair.Manifest)" }
+            $rootPath = Join-Path 'qualified-windows' $pair.Root
+            foreach ($line in Get-Content $m) {
               if (-not $line.Trim()) { continue }
               $hash, $rel = $line -split '\s+', 2
-              # The Desktop and WireDump bin trees share dependency names; a
-              # manifest line passes when ANY downloaded file of that name
-              # carries the exact stage-A bytes. Any unmatched line refuses
-              # the send (fails closed).
-              $ok = $false
-              foreach ($c in (Get-ChildItem -Recurse qualified-windows -Filter (Split-Path $rel -Leaf))) {
-                if ((Get-FileHash $c.FullName -Algorithm SHA256).Hash -eq $hash) { $ok = $true; break }
+              $rel = $rel.Trim()
+              if ($rel -match '\.\.') { throw "TRAVERSAL in manifest path: $rel" }
+              $p = Join-Path $rootPath $rel
+              if (-not (Test-Path $p)) { "MISSING at exact path: $($pair.Root)/$rel"; $failed = $true; continue }
+              $full = (Get-Item $p).FullName
+              $actual = (Get-FileHash $full -Algorithm SHA256).Hash
+              if ($actual -ne $hash) { "SHA MISMATCH: $($pair.Root)/$rel"; $failed = $true }
+              else {
+                "verified exact path: $($pair.Root)/$rel $hash"
+                $verified[$full] = $true
+                if ($pair.Manifest -eq 'windows-wiredump-manifest-sha256.txt' -and (Split-Path $rel -Leaf) -eq 'Scrobblix.WireDump.exe') { $wiredumpExeRel = $full }
               }
-              if ($ok) { "verified exact bytes: $rel $hash" } else { "MISSING or MISMATCHED: $rel"; $failed = $true }
+            }
+            # No unexpected loadable files: every dll/exe under this exact root
+            # must be manifest-verified.
+            Get-ChildItem -Recurse $rootPath -Include *.dll,*.exe | ForEach-Object {
+              if (-not $verified.ContainsKey($_.FullName)) { "UNEXPECTED loadable file: $($_.FullName)"; $failed = $true }
             }
           }
+          if (-not $wiredumpExeRel) { throw 'verified WireDump exe path not found in manifest' }
           if ($failed) { throw 'qualified byte verification failed - refusing to send' }
+          "QUALIFIED_WIREDUMP_EXE=$wiredumpExeRel" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "qualified WireDump exe (verified path): $wiredumpExeRel"
       - name: STAGE B - GATED single remote send from the verified qualified bytes
         if: ${{ inputs.send_remote }}
         shell: pwsh
+        env:
+          EXPECTED_DSN_SHA256: ${{ inputs.expected_dsn_sha256 }}
+          EXPECTED_ENDPOINT_HOST: ${{ inputs.expected_endpoint_host }}
+          EXPECTED_PROJECT_ID: ${{ inputs.expected_project_id }}
         run: |
+          if (-not $env:EXPECTED_DSN_SHA256 -or -not $env:EXPECTED_ENDPOINT_HOST -or -not $env:EXPECTED_PROJECT_ID) { throw 'pinned endpoint expectations required' }
           # Exactly ONE real synthetic event to the baked DSN's endpoint via
-          # the production boundary, from the EXACT qualified stage-A bytes.
+          # the production boundary, from the EXACT verified path. The exe
+          # asserts the baked endpoint against the pinned expectations BEFORE
+          # any init/capture, with the transport capped at one attempt.
           # No retry: a failure here is a finding.
-          $exe = Get-ChildItem -Recurse qualified-windows -Filter Scrobblix.WireDump.exe | Select-Object -First 1
-          if (-not $exe) { throw 'qualified WireDump exe missing' }
-          & $exe.FullName --send-remote
+          & $env:QUALIFIED_WIREDUMP_EXE --send-remote $env:EXPECTED_DSN_SHA256 $env:EXPECTED_ENDPOINT_HOST $env:EXPECTED_PROJECT_ID
           if ($LASTEXITCODE -ne 0) { throw "Remote send did not complete (exit $LASTEXITCODE) - finding, no retry" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: ${{ !inputs.send_remote }}
