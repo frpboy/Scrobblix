@@ -155,6 +155,25 @@ jobs:
           netsh advfirewall firewall add rule name="scrobblix-wiredump-block-out" dir=out action=block program="$($exe.FullName)" remoteip=any | Out-Host
           netsh advfirewall firewall add rule name="scrobblix-wiredump-allow-loop" dir=out action=allow program="$($exe.FullName)" remoteip=127.0.0.1 | Out-Host
           try {
+            # Guard evidence: the ACTUAL installed rules with their real
+            # action/program/address filters (not the requested names).
+            '=== installed firewall rules (actual state) ==='
+            Get-NetFirewallRule | Where-Object { $_.DisplayName -like 'scrobblix-wiredump-*' } | ForEach-Object {
+              $app = $_ | Get-NetFirewallApplicationFilter
+              $addr = $_ | Get-NetFirewallAddressFilter
+              [pscustomobject]@{
+                DisplayName = $_.DisplayName
+                Enabled = $_.Enabled
+                Direction = $_.Direction
+                Action = $_.Action
+                Program = $app.Program
+                RemoteAddress = ($addr.RemoteAddress -join ',')
+              } | Format-List | Out-Host
+            }
+            # Guard proof FROM THE SAME EXECUTABLE: loopback must connect,
+            # external egress must not. Empirical, not rule-name inference.
+            & $exe.FullName --guard-probe
+            if ($LASTEXITCODE -ne 0) { throw 'Guard probe failed: external egress not blocked or loopback broken' }
             & $exe.FullName wire-dump-windows.txt
             if ($LASTEXITCODE -ne 0) { throw 'Wire dump failed' }
           } finally {

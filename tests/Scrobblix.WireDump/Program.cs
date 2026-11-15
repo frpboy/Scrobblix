@@ -12,6 +12,11 @@ using System.Net.Sockets;
 using System.Text;
 using Scrobblix.Windows;
 
+// --guard-probe: empirical proof of the CI egress guard FROM THIS SAME
+// EXECUTABLE (the identity the process-scoped firewall rules cover): a
+// loopback connection must succeed and an external connection must not.
+if (args.Length > 0 && args[0] == "--guard-probe") return GuardProbe();
+
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
 var port = ((IPEndPoint)listener.LocalEndpoint).Port;
@@ -57,6 +62,52 @@ var raw = receiveTask.GetAwaiter().GetResult();
 Console.WriteLine("release on wire: " + release);
 File.WriteAllBytes(args.Length > 0 ? args[0] : "wire-dump-windows.txt", raw);
 Console.WriteLine("wire dump written: " + raw.Length + " raw bytes captured");
+
+static int GuardProbe()
+{
+    // Positive: loopback must stay reachable under the guard.
+    var loopOk = false;
+    var probeListener = new TcpListener(IPAddress.Loopback, 0);
+    probeListener.Start();
+    try
+    {
+        var probePort = ((IPEndPoint)probeListener.LocalEndpoint).Port;
+        using var loop = new TcpClient();
+        loop.Connect(IPAddress.Loopback, probePort);
+        using var accepted = probeListener.AcceptTcpClient();
+        loopOk = loop.Connected && accepted.Connected;
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine("loopback probe threw: " + e.GetType().Name);
+    }
+    finally { probeListener.Stop(); }
+    if (!loopOk)
+    {
+        Console.WriteLine("GUARD PROBE FAIL: loopback unreachable (guard too tight)");
+        return 2;
+    }
+    Console.WriteLine("loopback probe: OK");
+    // Negative: external egress must NOT succeed from this process. Literal
+    // IPv4 (no DNS); success OR an unexpected quick failure both reported.
+    try
+    {
+        using var ext = new TcpClient();
+        var connect = ext.ConnectAsync(IPAddress.Parse("1.1.1.1"), 443);
+        if (connect.Wait(TimeSpan.FromSeconds(8)) && ext.Connected)
+        {
+            Console.WriteLine("GUARD PROBE FAIL: external egress to 1.1.1.1:443 SUCCEEDED under the guard");
+            return 3;
+        }
+        Console.WriteLine("external probe: no connection within 8s (egress blocked)");
+    }
+    catch (Exception e)
+    {
+        Console.WriteLine("external probe: refused (" + e.GetType().Name + ")");
+    }
+    Console.WriteLine("guard probe OK: loopback reachable, external egress blocked");
+    return 0;
+}
 
 static byte[] CaptureOneRequest(TcpListener listener)
 {
