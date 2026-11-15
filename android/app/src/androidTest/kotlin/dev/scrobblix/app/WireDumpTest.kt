@@ -74,7 +74,11 @@ class WireDumpTest {
         reader.join(15_000)
         val raw=received.get()
         assertNotNull("loopback server received the raw request",raw)
+        val bytes=raw!!
+        val text=String(bytes,Charsets.ISO_8859_1)
+        assertTrue("fixed generic UA replaces the runtime default",text.contains("User-Agent: scrobblix-boundary/1"))
+        assertTrue("no Dalvik/OS/build fingerprint in headers",!text.contains("Dalvik"))
         val context=InstrumentationRegistry.getInstrumentation().targetContext
-        java.io.File(context.filesDir,"scrobblix-wiredump-android.txt").writeBytes(raw!!)
+        java.io.File(context.filesDir,"scrobblix-wiredump-android.txt").writeBytes(bytes)
     }
 }

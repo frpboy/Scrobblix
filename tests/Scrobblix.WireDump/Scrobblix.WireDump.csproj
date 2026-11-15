@@ -1,8 +1,9 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <!-- DISPOSABLE TEST-ONLY harness (branch test/ingest-synthetic-prep-20261116,
        never merged to main): captures the exact outbound request bytes the
-       production crash transport emits, via an in-memory handler. No remote
-       egress. One synthetic event only. -->
+       production crash transport emits AFTER HttpClient finalization, via a
+       raw loopback TCP listener. The CI job firewalls the process to loopback.
+       No remote egress. One synthetic event only. -->
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
