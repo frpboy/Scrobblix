@@ -35,6 +35,11 @@ object CrashReporting {
             options.environment="android"
             options.release="scrobblix-android@"+BuildConfig.VERSION_NAME
             options.beforeSend=CrashEventFilter
+            // Final gate at the transport boundary: whatever reaches this point is
+            // rebuilt to an event-only envelope with a fresh constant header.
+            options.setTransportFactory { opts, requestDetails ->
+                FilteringEnvelopeTransport(io.sentry.AsyncHttpTransportFactory().create(opts, requestDetails))
+            }
         }
         enabled=true
     }

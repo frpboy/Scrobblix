@@ -82,7 +82,7 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     // capture time, not in the event constructor.
     hostile.SentryExceptions = new[]
     {
-        new Sentry.SentryException
+        new Sentry.Protocol.SentryException
         {
             Type = "InvalidOperationException",
             Value = hostileMessage,
@@ -107,7 +107,7 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     Assert(hostileHint.Attachments.Count == 0, "Crash boundary drops hint attachments");
     // Request/User getters lazily re-create empty objects, so the serialized JSON
     // assertions below (not property reads) are the proof those carriers are gone.
-    Assert(!filtered.Breadcrumbs.Any(), "Crash boundary drops breadcrumbs");
+    Assert(filtered.Breadcrumbs.Count == 0, "Crash boundary drops breadcrumbs");
     Assert(filtered.Message is null, "Crash boundary drops event message");
     var filteredExceptions = filtered.SentryExceptions!.ToList();
     Assert(filteredExceptions.Count == 1 && filteredExceptions[0].Value == filteredExceptions[0].Type, "Crash boundary replaces exception messages with types");
@@ -127,38 +127,61 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
 }
 
 // Transport-level proof: scope-injected payloads and scope attachments never reach
-// the wire. The captured envelope must be event-only and free of hostile bytes.
+// the wire. The production FilteringEnvelopeTransport is driven against a recording
+// HTTP handler, so the asserted content is the actual HTTP request body bytes.
 {
     const string hostileMessage = "played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678";
-    var captured = new List<Sentry.Protocol.Envelopes.Envelope>();
+    var bodies = new List<byte[]>();
     var options = new Sentry.SentryOptions
     {
         Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
-        Transport = new CapturingTransport(captured),
         AutoSessionTracking = false
     };
     options.SetBeforeSend((e, h) => CrashReporting.ApplyPrivacyBoundary(e, h));
+    options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)));
     using (Sentry.SentrySdk.Init(options))
-    using (Sentry.SentrySdk.ConfigureScope(scope =>
     {
-        scope.User = new Sentry.SentryUser { Username = "rahul" };
-        scope.SetTag("account", "rahul-lastfm");
-        scope.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
-        scope.AddAttachment(new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
-            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
-    }))
-    {
+        Sentry.SentrySdk.ConfigureScope(scope =>
+        {
+            scope.User = new Sentry.SentryUser { Username = "rahul" };
+            scope.SetTag("account", "rahul-lastfm");
+            scope.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
+            scope.AddAttachment(new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+                new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
+        });
         Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage));
         Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
     }
-    var eventEnvelope = captured.FirstOrDefault(env => env.Items.Any(i => i.TryGetType() == "event"));
-    Assert(eventEnvelope is not null, "Pipeline produced an event envelope");
-    Assert(eventEnvelope!.Items.All(i => i.TryGetType() == "event"), "Captured envelope carries no attachment items");
-    using var envStream = new MemoryStream();
-    eventEnvelope.SerializeAsync(envStream, null).GetAwaiter().GetResult();
-    var envBytes = Encoding.UTF8.GetString(envStream.ToArray());
+    Assert(bodies.Count == 1, "Exactly one HTTP request left the transport");
+    var wire = Encoding.UTF8.GetString(bodies[0]);
+    Assert(wire.Contains("\"event\""), "Wire envelope carries an event item");
+    Assert(!wire.Contains("\"attachment\""), "Wire envelope carries no attachment items");
+    Assert(!wire.Contains("\"trace\""), "Wire header carries no trace context");
     foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing", "history.json" })
-        Assert(!envBytes.Contains(hostileString), "Captured envelope carries no " + hostileString);
+        Assert(!wire.Contains(hostileString), "Wire bytes carry no " + hostileString);
+}
+
+// Direct custom-envelope bypass: a hand-built envelope, no hooks involved. The gate
+// must drop non-event envelopes, strip attachment items and rebuild the header.
+{
+    var eventItem = Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent());
+    var attachmentItem = Sentry.Protocol.Envelopes.EnvelopeItem.FromAttachment(
+        new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes("history")), "history.json", "application/json"));
+    var hostileHeader = new Dictionary<string, object?>
+    {
+        ["event_id"] = Guid.NewGuid().ToString("N"),
+        ["trace"] = new { trace_id = "4bf92f3577b34da6a3ce929d0e0e4736", release = "hostile-trace" },
+        ["custom"] = "hostile-header"
+    };
+    var hostileEnvelope = new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem, eventItem });
+    Assert(FilteringEnvelopeTransport.RebuildToEventsOnly(
+        new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem })) is null,
+        "Gate drops non-event envelopes entirely");
+    var rebuilt = FilteringEnvelopeTransport.RebuildToEventsOnly(hostileEnvelope);
+    Assert(rebuilt is not null, "Gate keeps event items");
+    Assert(rebuilt!.Items.All(i => i.TryGetType() == "event"), "Gate strips non-event items");
+    Assert(rebuilt.Header.Keys.All(k => k == "event_id"), "Gate rebuilds a constant header");
 }
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
@@ -176,11 +199,12 @@ sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
 
 sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
 
-sealed class CapturingTransport(List<Sentry.Protocol.Envelopes.Envelope> captured) : Sentry.Extensibility.ITransport
+sealed class RecordingHandler(List<byte[]> bodies) : HttpMessageHandler
 {
-    public Task SendEnvelopeAsync(Sentry.Protocol.Envelopes.Envelope envelope, CancellationToken cancellationToken = default)
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
-        lock (captured) captured.Add(envelope);
-        return Task.CompletedTask;
+        var bytes = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+        lock (bodies) bodies.Add(bytes);
+        return new HttpResponseMessage(HttpStatusCode.OK);
     }
 }

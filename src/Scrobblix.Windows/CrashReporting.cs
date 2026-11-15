@@ -39,6 +39,12 @@ public static class CrashReporting
             options.StackTraceMode = StackTraceMode.Original;
             options.Environment = "windows";
             options.SetBeforeSend((sentryEvent, hint) => ApplyPrivacyBoundary(sentryEvent, hint));
+            // Final gate at the transport boundary: whatever reaches this point is
+            // rebuilt to an event-only envelope with a fresh constant header.
+            options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new HttpClientHandler
+            {
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
+            }));
         });
         AppDomain.CurrentDomain.UnhandledException += (_, args) =>
             Capture(args.ExceptionObject as Exception ?? new InvalidOperationException("Unknown process exception"));

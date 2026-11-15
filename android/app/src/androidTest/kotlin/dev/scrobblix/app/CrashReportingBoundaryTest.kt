@@ -18,6 +18,10 @@ import io.sentry.protocol.SentryStackTrace
 import io.sentry.protocol.User
 import io.sentry.transport.ITransport
 import io.sentry.transport.RateLimiter
+import io.sentry.SentryEnvelopeHeader
+import io.sentry.SentryEnvelopeItem
+import io.sentry.JsonObjectReader
+import java.io.StringReader
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -80,7 +84,7 @@ class CrashReportingBoundaryTest {
         assertTrue(filtered.tags.isNullOrEmpty())
         assertTrue(filtered.extras.isNullOrEmpty())
         assertEquals("RuntimeException",filtered.exceptions!![0].value)
-        assertNull(filtered.exceptions!![0].stacktrace!!.frames[0].absPath)
+        assertNull(filtered.exceptions!![0].stacktrace!!.frames!![0].absPath)
         assertNull(filtered.contexts.get("response"))
         // Actual SDK serialization: no hostile string may survive into the JSON the SDK emits.
         val writer=StringWriter()
@@ -103,7 +107,9 @@ class CrashReportingBoundaryTest {
         }
         val options=SentryOptions().apply {
             dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1"
-            setTransportFactory { _, _ -> transport }
+            // Exercise the production gate: the capture path ends at the real
+            // FilteringEnvelopeTransport wrapping the recorder.
+            setTransportFactory { _, _ -> FilteringEnvelopeTransport(transport) }
             setBeforeSend(CrashEventFilter)
         }
         val client=SentryClient(options)
@@ -119,6 +125,48 @@ class CrashReportingBoundaryTest {
             "captured envelopes carry no attachment items",
             sent.all { envelope -> envelope.items.all { it.header.type==SentryItemType.Event } }
         )
-        assertNoHostileStrings(String(eventEnvelope!!.items.first { it.header.type==SentryItemType.Event }.getData()))
+        val provenEnvelope=eventEnvelope!!
+        assertNull("gate drops the trace header",provenEnvelope.header.traceContext)
+        assertNoHostileStrings(String(provenEnvelope.items.first { it.header.type==SentryItemType.Event }.getData()))
+    }
+
+    @Test fun transportGateRebuildsHostileCustomEnvelopes() {
+        // Direct custom-envelope bypass: hand-built envelope with a hostile trace
+        // header, an unknown header key, an attachment item and no hook involvement.
+        val headerJson="""{"event_id":"4bf92f3577b34da6a3ce929d0e0e4736","trace":{"trace_id":"4bf92f3577b34da6a3ce929d0e0e4736","public_key":"09034d8c28716f3d06cdd57fe02eb47d","release":"ArtistX"},"custom":"ArtistX"}"""
+        val hostileHeader=SentryEnvelopeHeader.Deserializer().deserialize(JsonObjectReader(StringReader(headerJson)),io.sentry.NoOpLogger.getInstance())
+        val serializer=JsonSerializer(SentryOptions())
+        val attachmentItem=SentryEnvelopeItem.fromAttachment(serializer,io.sentry.NoOpLogger.getInstance(),Attachment(hostileMessage.toByteArray(),"history.json"),10L*1024*1024)
+        val eventItem=SentryEnvelopeItem.fromEvent(serializer,hostileEvent())
+        val hostileEnvelope=SentryEnvelope(hostileHeader,listOf(attachmentItem,eventItem))
+        // Non-event envelopes are dropped outright.
+        assertNull(EnvelopeGate.rebuildToEventsOnly(SentryEnvelope(hostileHeader,listOf(attachmentItem))))
+        // Mixed envelopes are rebuilt to event items under a fresh constant header.
+        val rebuilt=EnvelopeGate.rebuildToEventsOnly(hostileEnvelope)!!
+        assertTrue(rebuilt.items.all { it.header.type==SentryItemType.Event })
+        assertNull(rebuilt.header.traceContext)
+        assertNull(rebuilt.header.unknown)
+        val out=java.io.ByteArrayOutputStream()
+        serializer.serialize(rebuilt,out)
+        // Header payloads (trace release "ArtistX", custom value) never reach the bytes.
+        // The event item itself is pre-beforeSend here by construction, so this case
+        // asserts structure (event-only, clean header), while the pipeline case above
+        // asserts hostile content absence end to end.
+        assertFalse(out.toString(Charsets.UTF_8.name()).contains("custom"))
+        // The real wrapper drops non-event envelopes and forwards rebuilt ones.
+        val recorded=mutableListOf<SentryEnvelope>()
+        val recorder=object:ITransport {
+            override fun send(envelope:SentryEnvelope,hint:Hint) { recorded.add(envelope) }
+            override fun flush(timeoutMillis:Long) {}
+            override fun getRateLimiter():RateLimiter? = null
+            override fun close() {}
+            override fun close(isRestarting:Boolean) {}
+        }
+        val gate=FilteringEnvelopeTransport(recorder)
+        gate.send(SentryEnvelope(hostileHeader,listOf(attachmentItem)),Hint())
+        gate.send(hostileEnvelope,Hint())
+        assertEquals(1,recorded.size)
+        assertTrue(recorded[0].items.all { it.header.type==SentryItemType.Event })
+        assertNull(recorded[0].header.traceContext)
     }
 }

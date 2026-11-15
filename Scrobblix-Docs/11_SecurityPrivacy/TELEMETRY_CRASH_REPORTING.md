@@ -47,6 +47,12 @@ Scope, deliberately minimal:
 - listening history, track/artist/album metadata, queue contents, artwork, exported logs and credentials are never attached to events;
 - manual local logs and the user-initiated support ZIP remain unchanged.
 
+Enforcement is two-layer on both platforms:
+1. a beforeSend filter (CrashEventFilter on Android, CrashReporting.ApplyPrivacyBoundary on Windows) strips every event carrier - request, user, breadcrumbs, message, tags, extras, non-allowlist contexts and frame absolute paths - and clears the hint-level carriers that bypass event field mutation (attachments, screenshot, view hierarchy, thread dump, tombstone); exception messages are replaced with their type names because messages can embed track metadata, URLs or user paths;
+2. a final transport gate (EnvelopeGate/FilteringEnvelopeTransport on Android, FilteringEnvelopeTransport on Windows), independent of every hook: whatever envelope reaches the wire is rebuilt to event items only under a fresh constant header (event id and SDK version; fresh sent-at; no trace context), and non-event envelopes (sessions, client reports, replays) are dropped entirely.
+
+Both layers are proven by tests that serialize the actual SDK envelope: hostile payloads are injected through every carrier, through a direct scope/attachment bypass attempt against a real SentryClient, and through a hand-built custom envelope straight at the gate; the Windows test drives the production transport against a recording HTTP handler and asserts on the actual request bytes.
+
 Open follow-ups before any release ships this: public privacy-notice wording (owner review), an actual ingest test on the exact signed artifact proving events arrive and carry only the scoped fields, and free-tier capacity confirmation (no paid plan).
 
 ## Qualification and release
