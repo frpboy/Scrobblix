@@ -127,7 +127,10 @@ class AppRuntimeTest {
             InstrumentationRegistry.getInstrumentation().uiAutomation
                 .executeShellCommand("screencap -p /sdcard/Download/scrobblix-private-config-prefail.png").use {
                 android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
-            java.io.File("/sdcard/Download/scrobblix-private-config-prefail.txt").writeText(diag)
+            val b64=android.util.Base64.encodeToString(diag.toByteArray(),android.util.Base64.NO_WRAP)
+            InstrumentationRegistry.getInstrumentation().uiAutomation
+                .executeShellCommand("echo $b64 | base64 -d > /sdcard/Download/scrobblix-private-config-prefail.txt").use {
+                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
         }
         try {
             ui.onNodeWithText("Settings",useUnmergedTree=true).performClick()
