@@ -133,7 +133,9 @@ public sealed partial class MainWindow : IDisposable
         panel.Children.Add(new TextBlock { Text = title, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["SubtitleTextBlockStyle"] });
         panel.Children.Add(new ScrollViewer { MaxHeight = 320, Content = new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap } });
         panel.Children.Add(buttons);
-        return new Border
+        // Hosted in RootLayout, a two-column grid (nav + content): an overlay that stays in
+        // column 0 renders as a cramped strip over the rail instead of dimming the window.
+        var scrim = new Border
         {
             Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.4 },
             Child = new Border
@@ -148,6 +150,8 @@ public sealed partial class MainWindow : IDisposable
                 Child = panel,
             },
         };
+        Grid.SetColumnSpan(scrim, 2);
+        return scrim;
     }
 
     private async Task ShowUpdateDialogAsync(WindowsRelease release, string lead)
