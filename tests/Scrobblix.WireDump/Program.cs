@@ -92,7 +92,7 @@ static byte[] CaptureOneRequest(TcpListener listener)
     {
         var m = System.Text.RegularExpressions.Regex.Match(headerText, "(?i)Content-Length: (\\d+)");
         if (!m.Success) throw new InvalidOperationException("neither chunked nor Content-Length framing");
-        contentLength = long.Parse(m.Groups[1].Value);
+        contentLength = long.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
     }
     bool Complete()
     {
