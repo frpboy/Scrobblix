@@ -152,6 +152,7 @@ public sealed partial class MainWindow : IDisposable
 
     private async Task ShowUpdateDialogAsync(WindowsRelease release, string lead)
     {
+        if (_isClosed || _updateCheckDisposed) return;
         var notes = release.Notes.Trim();
         if (notes.Length > 4000) notes = notes[..4000] + "…";
         var dialog = new ContentDialog
@@ -172,8 +173,8 @@ public sealed partial class MainWindow : IDisposable
             CloseButtonText = "Not now",
             DefaultButton = ContentDialogButton.Close,
         };
-        if (_isClosed || _updateCheckDisposed) return;
         var result = await dialog.ShowAsync();
+        if (_isClosed || _updateCheckDisposed) return;
         if (result == ContentDialogResult.Secondary)
         {
             try
@@ -195,9 +196,9 @@ public sealed partial class MainWindow : IDisposable
     {
         CheckUpdatesButton.IsEnabled = false;
         var progress = new Progress<(long Done, long? Total)>(value =>
-            UpdateCheckStatusText.Text = value.Total is { } total
+            SetUpdateStatus(value.Total is { } total
                 ? $"Downloading… {value.Done / 1048576} of {total / 1048576} MB"
-                : $"Downloading… {value.Done / 1048576} MB");
+                : $"Downloading… {value.Done / 1048576} MB"));
         try
         {
             SetUpdateStatus("Downloading the installer…");
@@ -216,9 +217,10 @@ public sealed partial class MainWindow : IDisposable
             };
             if (_isClosed || _updateCheckDisposed) return;
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
-            UpdateCheckStatusText.Text = _updateCheck.OpenInstallerVerified(download.StagedPath, download.Sha256)
+            if (_isClosed || _updateCheckDisposed) return;
+            SetUpdateStatus(_updateCheck.OpenInstallerVerified(download.StagedPath, download.Sha256)
                 ? "The installer was opened. Finish the steps in Windows; Scrobblix keeps running until you close it."
-                : "The installer could not be opened, or its file changed after verification." + (download.DownloadsPath is null ? "" : " A verified copy is in your Downloads folder.");
+                : "The installer could not be opened, or its file changed after verification." + (download.DownloadsPath is null ? "" : " A verified copy is in your Downloads folder."));
         }
         catch (OperationCanceledException)
         {
