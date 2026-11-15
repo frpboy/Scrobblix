@@ -10,6 +10,8 @@ android {
         versionCode = 7
         versionName = "0.1.0-alpha.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+        // Only "github" builds may self-check and hand updates to the installer; store channels never self-update.
+        buildConfigField("String","DISTRIBUTION_CHANNEL","\"github\"")
     }
     buildFeatures { compose = true; buildConfig = true }
     signingConfigs {
@@ -36,6 +38,7 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.ui:ui")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("androidx.core:core:1.17.0")
     androidTestImplementation(platform("androidx.compose:compose-bom:2026.09.00"))
     androidTestImplementation("androidx.test:runner:1.7.0")
     androidTestImplementation("androidx.test.ext:junit:1.3.0")
