@@ -143,6 +143,19 @@ public sealed partial class MainWindow
             throw new InvalidOperationException("Unexpected initial update status");
         if (!CheckUpdatesButton.IsEnabled) throw new InvalidOperationException("Update check button not actionable");
         await capture("update-check-about");
+        var synthetic = new Scrobblix.Domain.Updates.WindowsRelease("windows-v0.1.0-beta.99", "beta 99", true, false,
+            "### Fixed\n- Synthetic changelog entry for layout qualification only.\n\n### Added\n- A second synthetic entry so the notes list wraps across lines.",
+            new[] { new Scrobblix.Domain.Updates.WindowsReleaseAsset(Scrobblix.Domain.Updates.WindowsUpdateCatalog.InstallerName, "https://github.com/frpboy/Scrobblix/releases/download/x/setup.exe", 100) });
+        var changelog = BuildUpdateChangelogOverlay(synthetic, "A newer preview is available. Review the notes, then download and verify it. Nothing installs by itself.");
+        RootLayout.Children.Add(changelog);
+        await Task.Delay(400);
+        await capture("update-check-dialog-changelog");
+        RootLayout.Children.Remove(changelog);
+        var verified = BuildInstallerVerifiedOverlay(Scrobblix.Domain.Updates.WindowsUpdateCatalog.InstallerName);
+        RootLayout.Children.Add(verified);
+        await Task.Delay(400);
+        await capture("update-check-dialog-verified");
+        RootLayout.Children.Remove(verified);
         ShowDestination("home");
     }
     private async Task QualifyHistoryRefreshAsync(string output, Func<string, Task> capture)

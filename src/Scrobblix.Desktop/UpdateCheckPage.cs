@@ -12,6 +12,7 @@ namespace Scrobblix.Desktop;
 public sealed partial class MainWindow
 {
     private bool _updateCheckInFlight;
+    private readonly UpdateCheckService _updateCheck = new();
 
     private static string? BuildSourceRevision()
     {
@@ -27,7 +28,7 @@ public sealed partial class MainWindow
         UpdateCheckStatusText.Text = "Checking the official release channel…";
         try
         {
-            var latest = await UpdateCheckService.FindLatestAsync(CancellationToken.None);
+            var latest = await _updateCheck.FindLatestAsync(CancellationToken.None);
             if (latest is null)
             {
                 UpdateCheckStatusText.Text = "No published Windows release was found. Your build is unchanged.";
@@ -41,7 +42,7 @@ public sealed partial class MainWindow
                     "This build does not record its source revision, so Scrobblix cannot confirm whether you already have this preview. Review the notes and download only if you want it.");
                 return;
             }
-            var state = await UpdateCheckService.CompareAsync(revision, latest.Tag, CancellationToken.None);
+            var state = await _updateCheck.CompareAsync(revision, latest.Tag, CancellationToken.None);
             switch (state)
             {
                 case WindowsUpdateState.UpToDate:
@@ -75,6 +76,50 @@ public sealed partial class MainWindow
             CheckUpdatesButton.IsEnabled = true;
             _updateCheckInFlight = false;
         }
+    }
+
+    /// <summary>The changelog dialog content as an overlay element (used by UI qualification; popups cannot be pixel-captured).</summary>
+    internal UIElement BuildUpdateChangelogOverlay(WindowsRelease release, string lead)
+    {
+        var notes = release.Notes.Trim();
+        if (notes.Length > 4000) notes = notes[..4000] + "…";
+        return DialogOverlay($"Update available: {release.Tag}",
+            lead + "\n\n" + (notes.Length == 0 ? "This release has no published notes." : notes),
+            "Download update", "View on GitHub", "Not now");
+    }
+
+    /// <summary>The verified-download confirmation content as an overlay element (UI qualification only).</summary>
+    internal UIElement BuildInstallerVerifiedOverlay(string installerName) =>
+        DialogOverlay("Installer downloaded and verified",
+            installerName + " passed integrity verification against the published SHA-256 checksum. A verified copy is in your Downloads folder."
+            + "\n\nThe installer is unsigned, so Windows will show a SmartScreen warning. Opening it starts the usual installer; Scrobblix stays running until you close it.",
+            "Open installer", null, "Later");
+
+    private static UIElement DialogOverlay(string title, string body, string primary, string? secondary, string close)
+    {
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
+        buttons.Children.Add(new Button { Content = primary, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["AccentButtonStyle"], IsEnabled = false });
+        if (secondary is not null) buttons.Children.Add(new Button { Content = secondary, IsEnabled = false });
+        buttons.Children.Add(new Button { Content = close, IsEnabled = false });
+        var panel = new StackPanel { Spacing = 12 };
+        panel.Children.Add(new TextBlock { Text = title, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["SubtitleTextBlockStyle"] });
+        panel.Children.Add(new ScrollViewer { MaxHeight = 320, Content = new TextBlock { Text = body, TextWrapping = TextWrapping.Wrap } });
+        panel.Children.Add(buttons);
+        return new Border
+        {
+            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black) { Opacity = 0.4 },
+            Child = new Border
+            {
+                MaxWidth = 560,
+                MaxHeight = 480,
+                Padding = new Thickness(24),
+                CornerRadius = new CornerRadius(8),
+                Background = (Microsoft.UI.Xaml.Media.Brush)Microsoft.UI.Xaml.Application.Current.Resources["CardBackgroundFillColorDefaultBrush"],
+                HorizontalAlignment = HorizontalAlignment.Center,
+                VerticalAlignment = VerticalAlignment.Center,
+                Child = panel,
+            },
+        };
     }
 
     private async Task ShowUpdateDialogAsync(WindowsRelease release, string lead)
@@ -127,22 +172,23 @@ public sealed partial class MainWindow
         try
         {
             UpdateCheckStatusText.Text = "Downloading the installer…";
-            var download = await UpdateCheckService.DownloadInstallerAsync(release, progress, CancellationToken.None);
+            var download = await _updateCheck.DownloadInstallerAsync(release, progress, CancellationToken.None);
             UpdateCheckStatusText.Text = $"Downloaded and verified {download.Installer.Name}.";
             var confirm = new ContentDialog
             {
                 XamlRoot = Content.XamlRoot,
                 Title = "Installer downloaded and verified",
-                Content = download.Installer.Name + " was saved to your Downloads folder and its SHA-256 matches the published checksum."
+                Content = download.Installer.Name + " passed integrity verification against the published SHA-256 checksum."
+                    + (download.DownloadsPath is null ? "" : " A verified copy is in your Downloads folder.")
                     + "\n\nThe installer is unsigned, so Windows will show a SmartScreen warning. Opening it starts the usual installer; Scrobblix stays running until you close it.",
                 PrimaryButtonText = "Open installer",
                 CloseButtonText = "Later",
                 DefaultButton = ContentDialogButton.Close,
             };
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
-            UpdateCheckStatusText.Text = UpdateCheckService.OpenInstaller(download.Path)
+            UpdateCheckStatusText.Text = _updateCheck.OpenInstallerVerified(download.StagedPath, download.Sha256)
                 ? "The installer was opened. Finish the steps in Windows; Scrobblix keeps running until you close it."
-                : "The installer could not be opened. It is saved in your Downloads folder.";
+                : "The installer could not be opened, or its file changed after verification." + (download.DownloadsPath is null ? "" : " A verified copy is in your Downloads folder.");
         }
         catch (UpdateCheckService.UpdateCheckException failure)
         {

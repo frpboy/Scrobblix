@@ -75,6 +75,9 @@ public static class WindowsUpdateCatalog
 {
     public const string TagPrefix = "windows-v";
     public const string ChecksumsName = "SHA256SUMS.txt";
+    /// <summary>The exact installer asset contract produced by the Windows build pipeline.
+    /// Only this name is an update candidate; any other executable is ignored.</summary>
+    public const string InstallerName = "Scrobblix-Windows-x64-Setup.exe";
 
     public static WindowsVersion? ParseTag(string tag) =>
         tag.StartsWith(TagPrefix, StringComparison.Ordinal) ? WindowsVersion.Parse(tag[TagPrefix.Length..]) : null;
@@ -88,7 +91,7 @@ public static class WindowsUpdateCatalog
             if (release.Draft) continue;
             var version = ParseTag(release.Tag);
             if (version is null) continue;
-            if (!release.Assets.Any(asset => asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))) continue;
+            if (!release.Assets.Any(asset => asset.Name == InstallerName)) continue;
             if (best is null || version.Value > bestVersion!.Value)
             {
                 best = release;
@@ -114,13 +117,28 @@ public static class WindowsUpdateCatalog
         return null;
     }
 
-    /// <summary>Plain file names only: no separators, traversal or control characters.</summary>
-    public static bool SafeAssetName(string name) =>
-        !string.IsNullOrWhiteSpace(name) && name.Length <= 200
-        && name == Path.GetFileName(name)
-        && !name.Contains("..", StringComparison.Ordinal)
-        && !name.Contains('/') && !name.Contains('\\')
-        && !name.Any(char.IsControl);
+    private static readonly char[] WindowsInvalidNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
+    private static readonly HashSet<string> WindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "CON", "PRN", "AUX", "NUL",
+        "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+        "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    };
+
+    /// <summary>Plain file names only, safe on Windows: no separators, traversal, control or
+    /// Windows-invalid characters, no trailing dot/space, no device names.</summary>
+    public static bool SafeAssetName(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 200) return false;
+        if (name != Path.GetFileName(name)) return false;
+        if (name.Contains("..", StringComparison.Ordinal)) return false;
+        if (name.IndexOfAny(WindowsInvalidNameChars) >= 0) return false;
+        if (name.Any(char.IsControl)) return false;
+        if (name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal)) return false;
+        var stem = name.Split('.')[0];
+        if (WindowsDeviceNames.Contains(stem)) return false;
+        return true;
+    }
 }
 
 /// <summary>How the running build relates to the newest published Windows release.</summary>

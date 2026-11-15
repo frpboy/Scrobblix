@@ -28,32 +28,39 @@ internal static class WindowsUpdateChecks
 
         // Selection: newest windows-v* with an installer asset; drafts skipped.
         var beta11 = new WindowsRelease("windows-v0.1.0-beta.11", "beta 11", true, false, "notes",
-            new[] { new WindowsReleaseAsset("Scrobblix-Setup-11.exe", "https://github.com/frpboy/Scrobblix/releases/download/x/11.exe", 100) });
+            new[] { new WindowsReleaseAsset(WindowsUpdateCatalog.InstallerName, "https://github.com/frpboy/Scrobblix/releases/download/x/11.exe", 100) });
         var beta12 = new WindowsRelease("windows-v0.1.0-beta.12", "beta 12", true, false, "notes",
-            new[] { new WindowsReleaseAsset("Scrobblix-Setup-12.exe", "https://github.com/frpboy/Scrobblix/releases/download/x/12.exe", 100),
+            new[] { new WindowsReleaseAsset(WindowsUpdateCatalog.InstallerName, "https://github.com/frpboy/Scrobblix/releases/download/x/12.exe", 100),
                     new WindowsReleaseAsset("SHA256SUMS.txt", "https://github.com/frpboy/Scrobblix/releases/download/x/sums", 10) });
         var draftNewer = new WindowsRelease("windows-v0.2.0", "draft", false, true, "notes",
-            new[] { new WindowsReleaseAsset("Scrobblix-Setup-2.exe", "https://github.com/frpboy/Scrobblix/releases/download/x/2.exe", 100) });
+            new[] { new WindowsReleaseAsset(WindowsUpdateCatalog.InstallerName, "https://github.com/frpboy/Scrobblix/releases/download/x/2.exe", 100) });
         var android = new WindowsRelease("android-v0.1.0-alpha.3", "android", true, false, "notes",
             new[] { new WindowsReleaseAsset("app.apk", "https://github.com/frpboy/Scrobblix/releases/download/x/app.apk", 100) });
         var noInstaller = new WindowsRelease("windows-v0.3.0", "zip only", false, false, "notes",
             new[] { new WindowsReleaseAsset("portable.zip", "https://github.com/frpboy/Scrobblix/releases/download/x/p.zip", 100) });
-        Assert(WindowsUpdateCatalog.SelectLatest(new[] { beta11, beta12, draftNewer, android, noInstaller }) == beta12,
-            "newest non-draft windows release with installer selected");
-        Assert(WindowsUpdateCatalog.SelectLatest(new[] { android }) is null, "no windows release means none selected");
+        var otherExe = new WindowsRelease("windows-v0.4.0", "other exe", false, false, "notes",
+            new[] { new WindowsReleaseAsset("SomeOther-Setup.exe", "https://github.com/frpboy/Scrobblix/releases/download/x/o.exe", 100) });
+        Assert(WindowsUpdateCatalog.SelectLatest(new[] { beta11, beta12, draftNewer, android, noInstaller, otherExe }) == beta12,
+            "newest non-draft windows release with the exact installer asset selected");
+        Assert(WindowsUpdateCatalog.SelectLatest(new[] { android, otherExe }) is null,
+            "no release with the exact installer contract means none selected");
 
         // Checksums: exact "hash  filename" lines only.
-        var sums = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  Scrobblix-Setup-12.exe\n" +
+        var sums = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef  " + WindowsUpdateCatalog.InstallerName + "\n" +
                    "fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321  Other-Tool.exe\n";
-        Assert(WindowsUpdateCatalog.ChecksumFor(sums, "Scrobblix-Setup-12.exe") ==
+        Assert(WindowsUpdateCatalog.ChecksumFor(sums, WindowsUpdateCatalog.InstallerName) ==
                "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef", "checksum line matched");
         Assert(WindowsUpdateCatalog.ChecksumFor(sums, "Missing.exe") is null, "missing checksum rejected");
-        Assert(WindowsUpdateCatalog.ChecksumFor("nothex  Scrobblix-Setup-12.exe\n", "Scrobblix-Setup-12.exe") is null, "non-hash rejected");
+        Assert(WindowsUpdateCatalog.ChecksumFor("nothex  " + WindowsUpdateCatalog.InstallerName + "\n", WindowsUpdateCatalog.InstallerName) is null, "non-hash rejected");
 
-        // Safe names.
-        Assert(WindowsUpdateCatalog.SafeAssetName("Scrobblix-Setup-12.exe"), "plain name allowed");
+        // Safe names, including Windows-specific rules.
+        Assert(WindowsUpdateCatalog.SafeAssetName(WindowsUpdateCatalog.InstallerName), "contract installer name allowed");
         Assert(!WindowsUpdateCatalog.SafeAssetName("../evil.exe"), "traversal rejected");
         Assert(!WindowsUpdateCatalog.SafeAssetName("a/b.exe") && !WindowsUpdateCatalog.SafeAssetName("a\\b.exe"), "separators rejected");
+        Assert(!WindowsUpdateCatalog.SafeAssetName("a:b.exe") && !WindowsUpdateCatalog.SafeAssetName("a|b.exe"), "windows-invalid characters rejected");
+        Assert(!WindowsUpdateCatalog.SafeAssetName("name.exe.") && !WindowsUpdateCatalog.SafeAssetName("name.exe "), "trailing dot or space rejected");
+        Assert(!WindowsUpdateCatalog.SafeAssetName("CON.exe") && !WindowsUpdateCatalog.SafeAssetName("com1.exe"), "device names rejected");
+        Assert(WindowsUpdateCatalog.SafeAssetName("console.exe"), "device-name prefix is not a device name");
 
         // Build identity and compare interpretation.
         Assert(WindowsUpdateDecision.SourceRevision("1.0.0+101e3c5358b041712f9e8efe8728bb20c1ec42fb") ==

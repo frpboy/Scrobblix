@@ -28,6 +28,7 @@ await MigrationTextChecks.RunAsync();
 if (args.Contains("--migration-text-check",StringComparer.Ordinal)) return;
 
 await WindowsUpdateChecks.RunAsync();
+await WindowsUpdateDownloadChecks.RunAsync();
 if (args.Contains("--windows-update-check",StringComparer.Ordinal)) return;
 
 // Exercise actual image-response rejection with synthetic HTTP only, no remote traffic.

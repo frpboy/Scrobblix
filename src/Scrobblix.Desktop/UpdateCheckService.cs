@@ -1,7 +1,6 @@
-using System.Net;
-using System.Net.Http;
-using System.Security.Cryptography;
+using System.Runtime.InteropServices;
 using System.Text.Json;
+using Scrobblix.Application.Updates;
 using Scrobblix.Domain.Updates;
 
 namespace Scrobblix.Desktop;
@@ -9,8 +8,7 @@ namespace Scrobblix.Desktop;
 /// <summary>
 /// Guided update check against the official GitHub Releases channel.
 /// Manual checks only: nothing runs on a timer, nothing installs silently, no signing change.
-/// Transport policy matches the Android direct channel: HTTPS, official release hosts only,
-/// bounded response sizes, redirects constrained to the same hosts.
+/// Download staging, hashing and custody live in Scrobblix.Application.Updates.WindowsUpdateDownload.
 /// </summary>
 public sealed class UpdateCheckService
 {
@@ -19,87 +17,26 @@ public sealed class UpdateCheckService
         public UpdateCheckException(string diagnostic) : base(diagnostic) { }
     }
 
-    public sealed record InstallerDownload(WindowsRelease Release, WindowsReleaseAsset Installer, string Path, string Sha256);
+    public sealed record InstallerDownload(WindowsRelease Release, WindowsReleaseAsset Installer, string StagedPath, string? DownloadsPath, string Sha256);
 
     private const string ReleasesApi = "https://api.github.com/repos/frpboy/Scrobblix/releases?per_page=20";
     private const string CompareApiPrefix = "https://api.github.com/repos/frpboy/Scrobblix/compare/";
-    private const int MaxReleasesBytes = 1024 * 1024;
-    private const int MaxChecksumsBytes = 256 * 1024;
-    private const long MaxInstallerBytes = 512L * 1024 * 1024;
-    private const int MaxRedirects = 4;
+    private const int MaxApiBytes = 1024 * 1024;
 
-    private static readonly HttpClient Client = new(new HttpClientHandler { AllowAutoRedirect = false });
+    private readonly WindowsUpdateDownload _download = new();
 
-    private static bool AllowedHost(string host) =>
-        host is "api.github.com" or "github.com" or "codeload.github.com"
-        || host.EndsWith(".githubusercontent.com", StringComparison.Ordinal);
-
-    private static bool AllowedUrl(string url) =>
-        Uri.TryCreate(url, UriKind.Absolute, out var uri)
-        && uri.Scheme == Uri.UriSchemeHttps
-        && string.IsNullOrEmpty(uri.UserInfo)
-        && uri.IsDefaultPort
-        && AllowedHost(uri.Host);
-
-    private static HttpRequestMessage Request(string url)
+    /// <summary>Newest non-draft windows-v* release with the exact installer asset, or null.</summary>
+    public async Task<WindowsRelease?> FindLatestAsync(CancellationToken cancellation)
     {
-        if (!AllowedUrl(url)) throw new UpdateCheckException("The update destination was not a recognized secure release address.");
-        var request = new HttpRequestMessage(HttpMethod.Get, url);
-        request.Headers.UserAgent.ParseAdd("Scrobblix-Windows-UpdateCheck");
-        request.Headers.Accept.ParseAdd("application/vnd.github+json");
-        return request;
-    }
-
-    private static async Task<HttpResponseMessage> SendFollowingRedirectsAsync(string url, CancellationToken cancellation)
-    {
-        var current = url;
-        for (var redirect = 0; ; redirect++)
+        byte[] body;
+        try
         {
-            using var request = Request(current);
-            var response = await Client.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellation);
-            var status = (int)response.StatusCode;
-            if (status is >= 300 and < 400)
-            {
-                var location = response.Headers.Location;
-                response.Dispose();
-                if (location is null) throw new UpdateCheckException("The update service redirect was incomplete.");
-                var resolved = new Uri(new Uri(current), location).AbsoluteUri;
-                if (redirect >= MaxRedirects) throw new UpdateCheckException("The update service redirected too many times.");
-                if (!AllowedUrl(resolved)) throw new UpdateCheckException("The update service redirected to an unrecognized destination.");
-                current = resolved;
-                continue;
-            }
-            return response;
+            body = await _download.GetBytesAsync(ReleasesApi, MaxApiBytes, cancellation);
         }
-    }
-
-    private static async Task<byte[]> ReadBoundedAsync(HttpResponseMessage response, long maxBytes, CancellationToken cancellation)
-    {
-        await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
-        using var output = new MemoryStream();
-        var buffer = new byte[64 * 1024];
-        while (true)
+        catch (WindowsUpdateDownload.UpdateDownloadException failure)
         {
-            var read = await stream.ReadAsync(buffer, cancellation);
-            if (read == 0) break;
-            if (output.Length + read > maxBytes) throw new UpdateCheckException("The update service response was larger than expected.");
-            output.Write(buffer, 0, read);
+            throw new UpdateCheckException(failure.Message);
         }
-        return output.ToArray();
-    }
-
-    private static async Task<byte[]> GetBytesAsync(string url, long maxBytes, CancellationToken cancellation)
-    {
-        using var response = await SendFollowingRedirectsAsync(url, cancellation);
-        if (!response.IsSuccessStatusCode)
-            throw new UpdateCheckException($"Update information could not be retrieved (HTTP {(int)response.StatusCode}).");
-        return await ReadBoundedAsync(response, maxBytes, cancellation);
-    }
-
-    /// <summary>Newest non-draft windows-v* release with an installer asset, or null.</summary>
-    public static async Task<WindowsRelease?> FindLatestAsync(CancellationToken cancellation)
-    {
-        var body = await GetBytesAsync(ReleasesApi, MaxReleasesBytes, cancellation);
         using var document = JsonDocument.Parse(body);
         if (document.RootElement.ValueKind != JsonValueKind.Array) throw new UpdateCheckException("Update information was not in the expected format.");
         var releases = new List<WindowsRelease>();
@@ -132,73 +69,65 @@ public sealed class UpdateCheckService
     }
 
     /// <summary>GitHub compare between this build's source revision and the release tag; Unknown when it cannot be established.</summary>
-    public static async Task<WindowsUpdateState> CompareAsync(string sourceRevision, string tag, CancellationToken cancellation)
+    public async Task<WindowsUpdateState> CompareAsync(string sourceRevision, string tag, CancellationToken cancellation)
     {
-        var body = await GetBytesAsync(CompareApiPrefix + Uri.EscapeDataString(sourceRevision) + "..." + Uri.EscapeDataString(tag), MaxReleasesBytes, cancellation);
+        byte[] body;
+        try
+        {
+            body = await _download.GetBytesAsync(CompareApiPrefix + Uri.EscapeDataString(sourceRevision) + "..." + Uri.EscapeDataString(tag), MaxApiBytes, cancellation);
+        }
+        catch (WindowsUpdateDownload.UpdateDownloadException failure)
+        {
+            throw new UpdateCheckException(failure.Message);
+        }
         using var document = JsonDocument.Parse(body);
         var status = document.RootElement.TryGetProperty("status", out var statusValue) ? statusValue.GetString() : null;
         return WindowsUpdateDecision.FromCompareStatus(status);
     }
 
-    /// <summary>Download the installer to the user's Downloads folder and verify it against SHA256SUMS.
-    /// Any failure deletes the partial file. Nothing is executed.</summary>
-    public static async Task<InstallerDownload> DownloadInstallerAsync(WindowsRelease release, IProgress<(long Done, long? Total)>? progress, CancellationToken cancellation)
+    /// <summary>Stage, hash-verify and copy the installer; nothing is executed.</summary>
+    public async Task<InstallerDownload> DownloadInstallerAsync(WindowsRelease release, IProgress<(long Done, long? Total)>? progress, CancellationToken cancellation)
     {
-        var installer = release.Assets.FirstOrDefault(asset => asset.Name.EndsWith(".exe", StringComparison.OrdinalIgnoreCase))
-            ?? throw new UpdateCheckException("This release does not include a Windows installer.");
-        var checksumsAsset = release.Assets.FirstOrDefault(asset => asset.Name == WindowsUpdateCatalog.ChecksumsName)
-            ?? throw new UpdateCheckException("This release does not publish integrity information; the download was not attempted.");
-        var checksumsBody = await GetBytesAsync(checksumsAsset.DownloadUrl, MaxChecksumsBytes, cancellation);
-        var expected = WindowsUpdateCatalog.ChecksumFor(System.Text.Encoding.UTF8.GetString(checksumsBody), installer.Name)
-            ?? throw new UpdateCheckException("Integrity information for this exact installer is missing; the download was not attempted.");
-
-        var downloads = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
-        Directory.CreateDirectory(downloads);
-        var target = Path.Combine(downloads, installer.Name);
+        var staging = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Scrobblix", "updates");
         try
         {
-            using (var response = await SendFollowingRedirectsAsync(installer.DownloadUrl, cancellation))
+            var result = await _download.DownloadAsync(release, staging, DownloadsFolder(), progress, cancellation);
+            return new InstallerDownload(release, result.Installer, result.StagedPath, result.DownloadsPath, result.Sha256);
+        }
+        catch (WindowsUpdateDownload.UpdateDownloadException failure)
+        {
+            throw new UpdateCheckException(failure.Message);
+        }
+    }
+
+    /// <summary>Re-hash the staged copy immediately before launching; a changed file is refused.</summary>
+    public bool OpenInstallerVerified(string stagedPath, string expectedSha256) =>
+        _download.OpenInstallerVerified(stagedPath, expectedSha256);
+
+    /// <summary>The real per-user Downloads folder (redirect-aware); falls back to the profile folder.</summary>
+    private static string DownloadsFolder()
+    {
+        if (OperatingSystem.IsWindows())
+        {
+            try
             {
-                if (!response.IsSuccessStatusCode)
-                    throw new UpdateCheckException($"The installer could not be downloaded (HTTP {(int)response.StatusCode}).");
-                long? total = response.Content.Headers.ContentLength;
-                await using var stream = await response.Content.ReadAsStreamAsync(cancellation);
-                await using var file = new FileStream(target, FileMode.Create, FileAccess.Write, FileShare.None);
-                var buffer = new byte[256 * 1024];
-                long done = 0;
-                while (true)
+                if (SHGetKnownFolderPath(FolderDownloads, 0, IntPtr.Zero, out var path) == 0 && path != IntPtr.Zero)
                 {
-                    var read = await stream.ReadAsync(buffer, cancellation);
-                    if (read == 0) break;
-                    done += read;
-                    if (done > MaxInstallerBytes) throw new UpdateCheckException("The installer is larger than expected.");
-                    await file.WriteAsync(buffer.AsMemory(0, read), cancellation);
-                    progress?.Report((done, total));
+                    var folder = Marshal.PtrToStringUni(path);
+                    Marshal.FreeCoTaskMem(path);
+                    if (!string.IsNullOrWhiteSpace(folder)) return folder;
                 }
             }
-            var actual = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(target, cancellation))).ToLowerInvariant();
-            if (actual != expected)
-                throw new UpdateCheckException("The downloaded installer failed integrity verification and was deleted.");
-            return new InstallerDownload(release, installer, target, actual);
+            catch
+            {
+                // fall through to the profile folder
+            }
         }
-        catch
-        {
-            try { if (File.Exists(target)) File.Delete(target); } catch { /* best effort cleanup */ }
-            throw;
-        }
+        return Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads");
     }
 
-    /// <summary>Launch the verified installer for the user to confirm in Windows. Returns false if it could not start.</summary>
-    public static bool OpenInstaller(string path)
-    {
-        try
-        {
-            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
-            return true;
-        }
-        catch
-        {
-            return false;
-        }
-    }
+    private static readonly Guid FolderDownloads = new("374DE290-123F-4565-9164-39C4925E467B");
+
+    [DllImport("shell32.dll")]
+    private static extern int SHGetKnownFolderPath([MarshalAs(UnmanagedType.LPStruct)] Guid id, uint flags, IntPtr token, out IntPtr path);
 }
