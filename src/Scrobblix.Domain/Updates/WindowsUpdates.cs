@@ -117,7 +117,8 @@ public static class WindowsUpdateCatalog
         return null;
     }
 
-    private static readonly char[] WindowsInvalidNameChars = new[] { '<', '>', ':', '"', '/', '\\', '|', '?', '*' };
+    private static readonly System.Buffers.SearchValues<char> WindowsInvalidNameChars =
+        System.Buffers.SearchValues.Create("<>:\"/\\|?*");
     private static readonly HashSet<string> WindowsDeviceNames = new(StringComparer.OrdinalIgnoreCase)
     {
         "CON", "PRN", "AUX", "NUL",
