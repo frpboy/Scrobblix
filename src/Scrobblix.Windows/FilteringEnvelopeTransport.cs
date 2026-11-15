@@ -63,13 +63,18 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
     /// concurrent attempts never overwrite each other's result.</summary>
     public sealed class AttemptResult
     {
-        public AttemptResult(string? eventId, bool exchangeCompleted)
+        public AttemptResult(string? eventId, bool exchangeCompleted, string? wireTimestamp)
         {
             EventId = eventId;
             ExchangeCompleted = exchangeCompleted;
+            WireTimestamp = wireTimestamp;
         }
         public string? EventId { get; }
         public bool ExchangeCompleted { get; }
+        // DISPOSABLE-branch readback (test lane only): the exact timestamp the
+        // gate put on the FINAL wire event, teed with the id for the project
+        // owner's exact receipt lookup.
+        public string? WireTimestamp { get; }
     }
 
     private static readonly ConcurrentDictionary<string, AttemptResult> Attempts = new();
@@ -89,7 +94,7 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
 
     public async Task SendEnvelopeAsync(Envelope envelope, CancellationToken cancellationToken = default)
     {
-        var rebuilt = RebuildToGenericEvent(envelope, _release, _environment);
+        var rebuilt = RebuildToGenericEvent(envelope, _release, _environment, out var wireTimestamp);
         if (rebuilt is null) return;
         // Bounded send budget: one send in flight, a minimum attempt interval and a
         // hard per-process cap, so a crash loop can never become a network or quota
@@ -104,7 +109,7 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
                 // Bounded diagnostic bookkeeping, not persistence: keep the table small.
                 if (Attempts.Count > 64) Attempts.Clear();
                 attemptKey = originalId.ToString()!;
-                Attempts[attemptKey] = new AttemptResult(null, false);
+                Attempts[attemptKey] = new AttemptResult(null, false, null);
             }
             var nowTicks = DateTimeOffset.UtcNow.UtcTicks;
             if (Volatile.Read(ref _attempts) >= MaxAttemptsPerProcess ||
@@ -127,7 +132,7 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
                     if (response.IsSuccessStatusCode && attemptKey is not null)
                     {
                         var wireId = rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null;
-                        Attempts[attemptKey] = new AttemptResult(wireId, true);
+                        Attempts[attemptKey] = new AttemptResult(wireId, true, wireTimestamp.ToString("o", System.Globalization.CultureInfo.InvariantCulture));
                     }
                 }
                 catch (Exception)
@@ -143,8 +148,18 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
     }
 
     public static Envelope? RebuildToGenericEvent(Envelope envelope, string release, string environment)
+        => RebuildToGenericEvent(envelope, release, environment, out _);
+
+    // DISPOSABLE-branch overload (test lane only): also returns the exact FINAL
+    // wire timestamp the gate put on the rebuilt event, so the synthetic test
+    // tees UUID+timestamp for the project owner's exact receipt lookup.
+    public static Envelope? RebuildToGenericEvent(Envelope envelope, string release, string environment, out DateTimeOffset wireTimestamp)
     {
-        if (!envelope.Items.Any(item => item.TryGetType() == "event")) return null;
+        if (!envelope.Items.Any(item => item.TryGetType() == "event"))
+        {
+            wireTimestamp = default;
+            return null;
+        }
         var fresh = new SentryEvent
         {
             Level = SentryLevel.Error,
@@ -156,6 +171,7 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
         // Fresh constant header: the new event id only. No trace context, no SDK
         // header, no unknown keys - whatever the original envelope carried stays
         // behind.
+        wireTimestamp = fresh.Timestamp;
         var header = new Dictionary<string, object?> { ["event_id"] = fresh.EventId.ToString() };
         return new Envelope(header, new[] { EnvelopeItem.FromEvent(fresh) });
     }

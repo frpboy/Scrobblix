@@ -114,6 +114,10 @@ object SendBudget {
  */
 class WireAttemptResult {
     @Volatile var eventId:String?=null
+    // DISPOSABLE-branch readback (test lane only): the exact timestamp the gate
+    // put on the FINAL wire event, teed with the id for the project owner's
+    // exact receipt lookup.
+    @Volatile var wireTimestamp:String?=null
     @Volatile var exchangeCompleted:Boolean=false
 }
 
@@ -173,6 +177,12 @@ class FilteringEnvelopeTransport(
         // reach the network path.
         val rebuilt=EnvelopeGate.rebuildToGenericEvent(envelope,release,environment) ?: return
         val wireEventId=rebuilt.header.eventId?.toString()
+        // DISPOSABLE-branch readback (test lane only): the exact FINAL wire
+        // timestamp from the rebuilt event, so the synthetic test tees
+        // UUID+timestamp, never echoed content, for remote receipt lookup.
+        val wireTimestamp=rebuilt.items.firstOrNull { it.header.type==SentryItemType.Event }
+            ?.let { runCatching { it.getEvent(serializer)?.timestamp }.getOrNull() }
+            ?.toInstant()?.toString()
         val result=hint.getAs(RESULT_HINT_KEY,WireAttemptResult::class.java)
         val bytes=try {
             val out=ByteArrayOutputStream()
@@ -192,6 +202,7 @@ class FilteringEnvelopeTransport(
                     // leaves both untouched.
                     if (delivered) {
                         result?.eventId=wireEventId
+                        result?.wireTimestamp=wireTimestamp
                         result?.exchangeCompleted=true
                         runCatching { flushNotification?.markFlushed() }
                     }

@@ -21,6 +21,14 @@ if (args.Length > 0 && args[0] == "--guard-probe") return GuardProbe();
 // control (expect 'open') and inside GuardProbe (expect 'blocked'). Literal
 // IPv4, no DNS, no TLS, no application data.
 if (args.Length == 2 && args[0] == "--probe-external") return ProbeExternal(args[1] == "open");
+// --send-remote: DISPOSABLE gated candidate step (dispatch send_remote only):
+// exactly ONE real synthetic crash event to the DSN baked into the
+// Scrobblix.Windows assembly at build time, through the production option
+// shape (ApplyPrivacyBoundary on the hook path, FilteringEnvelopeTransport
+// gate, production handler shape). No retry: a non-delivered exchange is a
+// finding. Tees the FINAL wire event id and timestamp for the project owner's
+// exact receipt lookup.
+if (args.Length > 0 && args[0] == "--send-remote") return SendRemote();
 
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
@@ -127,6 +135,57 @@ static int ProbeExternal(bool expectOpen)
     Console.WriteLine($"external probe 1.1.1.1:443: {(connected ? "SUCCESS" : "FAIL")} - {detail}");
     if (expectOpen) return connected ? 0 : 4;
     return connected ? 3 : 0;
+}
+
+static int SendRemote()
+{
+    // The DSN comes from the generated source baked into the built assembly
+    // (ScrobblixSentryDsn.g.cs from SCROBBLIX_SENTRY_DSN at build time): the
+    // send proves the baked-artifact binding, not a workflow-supplied value.
+    var dsnField = typeof(CrashReporting).Assembly.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
+        ?.GetField("Value", System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.NonPublic | System.Reflection.BindingFlags.Static);
+    var dsn = dsnField?.GetValue(null) as string;
+    if (string.IsNullOrEmpty(dsn))
+    {
+        Console.WriteLine("baked DSN empty: refusing remote send (this build is local-only)");
+        return 5;
+    }
+    var uri = new Uri(dsn);
+    Console.WriteLine("endpoint binding: host=" + uri.Host + " project=" + dsn.TrimEnd('/').Split('/').Last());
+    Console.WriteLine("baked dsn-sha256: " + Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(dsn))).ToLowerInvariant());
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    FilteringEnvelopeTransport.MinAttemptInterval = TimeSpan.Zero;
+    var release = "scrobblix-windows@" + (
+        typeof(CrashReporting).Assembly
+            .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+            is { Length: > 0 } attrs
+            ? ((System.Reflection.AssemblyInformationalVersionAttribute)attrs[0]).InformationalVersion
+            : typeof(CrashReporting).Assembly.GetName().Version?.ToString() ?? "unknown");
+    var options = new Sentry.SentryOptions
+    {
+        Dsn = dsn,
+        AutoSessionTracking = false,
+        SendClientReports = false,
+        SendDefaultPii = false,
+        TracesSampleRate = 0.0,
+        MaxQueueItems = 1
+    };
+    options.SetBeforeSend((e, h) => CrashReporting.ApplyPrivacyBoundary(e, h));
+    options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new HttpClientHandler
+    {
+        AutomaticDecompression = DecompressionMethods.GZip | DecompressionMethods.Deflate,
+        AllowAutoRedirect = false
+    }), release, "windows");
+    Sentry.SentryId originalId;
+    using (Sentry.SentrySdk.Init(options))
+    {
+        originalId = Sentry.SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
+        Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(15)).GetAwaiter().GetResult();
+    }
+    var result = FilteringEnvelopeTransport.GetAttemptResult(originalId.ToString());
+    Console.WriteLine($"FINAL wire event: {result?.EventId} at {result?.WireTimestamp} delivered={result?.ExchangeCompleted}");
+    // No retry: a non-delivered exchange is a finding, reported as-is.
+    return result is { ExchangeCompleted: true } ? 0 : 6;
 }
 
 static byte[] CaptureOneRequest(TcpListener listener)
