@@ -131,16 +131,22 @@ jobs:
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
           adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
-          # Egress proof, not just rule presence: an actual outbound attempt must fail,
-          # and an inconclusive probe (e.g. ping missing) fails this step, never green.
-          ping_out="$(adb shell ping -c 1 -W 3 1.1.1.1 2>&1)"; ping_rc=$?
-          printf '%s\n' "$ping_out"
-          if [ "$ping_rc" = 0 ]; then
+          # Egress smoke: the outbound ping must fail with a rejection signature. The
+          # assignment is guarded so the expected failure cannot trip the step's -e.
+          # Ping is only an ICMP smoke test; the block itself is proven by the intended
+          # rules being present on both families, with counters dumped for the log.
+          # No requests to actual providers.
+          if ping_out="$(adb shell ping -c 1 -W 3 1.1.1.1 2>&1)"; then
+            printf '%s\n' "$ping_out"
             echo "egress block ineffective: outbound ping succeeded" >&2
             exit 1
           fi
-          printf '%s\n' "$ping_out" | grep -qiE "100% packet loss|Operation not permitted|Network is unreachable|Destination.*unreachable|sendto|sendmsg"             || { echo "egress probe inconclusive: ping did not run or failed for an unexpected reason" >&2; exit 1; }
-          adb shell iptables -L OUTPUT -v -n | grep -c REJECT
+          printf '%s\n' "$ping_out"
+          printf '%s\n' "$ping_out" | grep -qiE "100% packet loss|Operation not permitted|Network is unreachable|Destination.*unreachable|sendto|sendmsg" || { echo "egress probe inconclusive: ping did not run or failed for an unexpected reason" >&2; exit 1; }
+          test "$(adb shell iptables -L OUTPUT -n | grep -c REJECT)" -ge 1
+          test "$(adb shell ip6tables -L OUTPUT -n | grep -c REJECT)" -ge 1
+          adb shell iptables -L OUTPUT -v -n
+          adb shell ip6tables -L OUTPUT -v -n
           if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
             # Synthetic test data only. Preserve exact test/runner failures in job logs.
             find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \; || true
