@@ -20,11 +20,14 @@ object OnboardingState {
      * Instrumented runs must never see first-run onboarding. isRunningInTestHarness() reads
      * persist.sys.test_harness, which app uids cannot read on several API levels (SELinux
      * property policy), so CI also sets a global setting that apps are allowed to read.
-     * Either signal suppresses onboarding; real installs have neither.
+     * The settings path is compiled into debug builds only: a production release build can
+     * never inherit the suppression, whatever the device's settings contain. The suppression
+     * itself is conservative either way: it skips the first-run guide and the silent launch
+     * update check (opt-in), never artifact verification or user-confirmed installs.
      */
     fun harnessSkipped(context:android.content.Context):Boolean =
         android.app.ActivityManager.isRunningInTestHarness() ||
-        Settings.Global.getInt(context.contentResolver,"scrobblix_test_harness",0)==1
+        (BuildConfig.DEBUG && Settings.Global.getInt(context.contentResolver,"scrobblix_test_harness",0)==1)
 }
 
 /** First-install-only guided setup. Shown once; upgrades and existing installs skip it. */
