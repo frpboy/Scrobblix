@@ -203,6 +203,7 @@ public sealed partial class MainWindow : IDisposable
         {
             SetUpdateStatus("Downloading the installer…");
             var download = await _updateCheck.DownloadInstallerAsync(release, progress, _updateCheckCancellation.Token);
+            if (_isClosed || _updateCheckDisposed) return;
             SetUpdateStatus($"Downloaded and verified {download.Installer.Name}.");
             var confirm = new ContentDialog
             {
