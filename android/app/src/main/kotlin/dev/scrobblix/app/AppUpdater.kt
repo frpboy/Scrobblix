@@ -34,8 +34,10 @@ class AppUpdater(private val context:Context,
         suspend fun download(update:AvailableUpdate,onProgress:(Long,Long?)->Unit):File
         fun verifyDownload(apk:File,update:AvailableUpdate):Boolean
         fun canInstall():Boolean
-        fun launchInstall(apk:File)
-        fun openInstallPermission()
+        /** true when the installer was actually handed to the system; false means nothing launched. */
+        fun launchInstall(apk:File):Boolean
+        /** true when the permission screen actually opened; false means it could not be shown. */
+        fun openInstallPermission():Boolean
     }
     sealed interface CheckOutcome {
         data class Available(val update:AvailableUpdate):CheckOutcome
@@ -131,19 +133,22 @@ class AppUpdater(private val context:Context,
     override fun canInstall():Boolean =
         try { Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls() }
         catch(_:Exception) { false }
-    override fun launchInstall(apk:File) {
-        try {
+    override fun launchInstall(apk:File):Boolean {
+        return try {
             val uri=FileProvider.getUriForFile(context,"$packageName.fileprovider",apk)
             context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri,"application/vnd.android.package-archive")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch(_:Exception) { /* no installer launch on any platform error */ }
+            true
+        } catch(_:Exception) { false }
     }
-    override fun openInstallPermission() {
-        try {
-            if(Build.VERSION.SDK_INT>=26)context.startActivity(
+    override fun openInstallPermission():Boolean {
+        if(Build.VERSION.SDK_INT<26)return true
+        return try {
+            context.startActivity(
                 Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,Uri.parse("package:$packageName"))
                     .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
-        } catch(_:Exception) { /* settings screen unavailable; user can reach it manually */ }
+            true
+        } catch(_:Exception) { false }
     }
 
     data class FetchResult(val status:Int,val body:ByteArray)

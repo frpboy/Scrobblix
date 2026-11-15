@@ -38,8 +38,8 @@ class UpdateRuntimeTest {
         }
         override fun verifyDownload(apk:java.io.File,update:AvailableUpdate)=true
         override fun canInstall()=true
-        override fun launchInstall(apk:java.io.File) { installs++ }
-        override fun openInstallPermission() { }
+        override fun launchInstall(apk:java.io.File):Boolean { installs++;return true }
+        override fun openInstallPermission()=true
     }
     @Test fun dialogShowsChangelogAndCompletesSyntheticDownload() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext

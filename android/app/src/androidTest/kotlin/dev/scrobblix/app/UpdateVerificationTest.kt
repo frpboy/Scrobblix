@@ -20,6 +20,11 @@ import java.io.File
  * do not exercise HTTP, redirect handling or the body limits, and no install is attempted.
  * URL and redirect policy is covered separately by deterministic core unit tests
  * (UpdateTransportPolicy in AppUpdateTest).
+ * Known gap: the signer-equality branch itself is NOT runtime-exercised here. Exercising it
+ * needs two signed APKs with the same package (same-signer positive, wrong-signer negative),
+ * which this harness cannot build on-device. No signer-runtime qualification is claimed;
+ * the branch is fail-closed (missing or mismatched signers return false) and every negative
+ * above fails before or at that check.
  */
 @RunWith(AndroidJUnit4::class)
 class UpdateVerificationTest {

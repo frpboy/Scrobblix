@@ -425,13 +425,13 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 val apk=downloadedApk
                 if(apk!=null) {
                     Row(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
-                        if(!probe.canInstall())TextButton(onClick={ probe.openInstallPermission() }) { Text("Open install permission") }
+                        if(!probe.canInstall())TextButton(onClick={ if(!probe.openInstallPermission())updateError="The Android settings screen for install permission could not be opened. Open Android Settings, Apps, Scrobblix, Install unknown apps manually." }) { Text("Open install permission") }
                         Button(onClick={
                             when {
                                 !probe.canInstall() -> updateError="Android needs your permission to install apps from Scrobblix. Open install permission, allow it once, return and tap Install."
                                 !probe.verifyDownload(apk,update) -> updateError="The downloaded package identity does not match this installation. It was not offered to the installer."
-                                else -> try { probe.launchInstall(apk) }
-                                    catch(_:Exception) { updateError="The Android installer could not be opened. Nothing was installed." }
+                                else -> if(!probe.launchInstall(apk))
+                                    updateError="The Android installer could not be opened. Nothing was installed."
                             }
                         }) { Text("Install") }
                     }
