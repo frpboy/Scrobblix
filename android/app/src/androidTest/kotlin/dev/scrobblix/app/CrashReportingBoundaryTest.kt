@@ -312,14 +312,50 @@ class CrashReportingBoundaryTest {
     }
 
     @Test fun disconnectAfterBodyNeverRetriesAndNeverMarksLatch() {
-        // A downstream that accepts and closes mid-request: the fixed-length
-        // POST fails, exactly one attempt is counted (no transparent replay),
-        // the latch is never marked, and the budget is released afterwards.
+        // A downstream that reads the full request (headers plus the whole
+        // Content-Length body), closes WITHOUT responding and keeps accepting:
+        // the fixed-length POST fails, exactly one request reaches the wire
+        // (a transparent replay would surface as a second accepted connection
+        // inside the window), the latch is never marked and the budget is
+        // released afterwards.
         SendBudget.resetForTesting()
         SendBudget.minIntervalMs=0
         val server=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
+        val requestCount=java.util.concurrent.atomic.AtomicInteger(0)
         val reader=kotlin.concurrent.thread {
-            try { val c=server.accept(); c.soTimeout=5_000; c.getInputStream().read(); c.close() } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
+            try {
+                server.soTimeout=2_000
+                val deadline=System.currentTimeMillis()+8_000
+                while (System.currentTimeMillis()<deadline) {
+                    val conn=try { server.accept() } catch (_:java.net.SocketTimeoutException) { break }
+                    requestCount.incrementAndGet()
+                    try {
+                        conn.soTimeout=2_000
+                        val input=conn.getInputStream()
+                        val acc=java.io.ByteArrayOutputStream()
+                        val tmp=ByteArray(8192)
+                        fun readSome():Boolean { val n=input.read(tmp); if (n<0) return false; acc.write(tmp,0,n); return true }
+                        fun headerEnd(bytes:ByteArray):Int {
+                            outer@ for (i in 0..bytes.size-4) {
+                                for (j in 0..3) { if (bytes[i+j]!="\r\n\r\n"[j].code.toByte()) continue@outer }
+                                return i
+                            }
+                            return -1
+                        }
+                        if (!readSome()) break
+                        while (headerEnd(acc.toByteArray())<0) { if (!readSome()) break }
+                        var buffered=acc.toByteArray()
+                        val end=headerEnd(buffered)
+                        if (end>=0) {
+                            val headers=String(buffered,0,end,Charsets.ISO_8859_1)
+                            val pos=end+4
+                            val length=Regex("(?i)Content-Length: (\\d+)").find(headers)?.groupValues?.get(1)?.toInt() ?: 0
+                            while (buffered.size-pos<length) { if (!readSome()) break; buffered=acc.toByteArray() }
+                        }
+                        // Close WITHOUT any response: a replay would connect again.
+                    } catch (_:Exception) {} finally { try { conn.close() } catch (_:Exception) {} }
+                }
+            } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
         }
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
@@ -334,9 +370,10 @@ class CrashReportingBoundaryTest {
         val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(2_000,io.sentry.NoOpLogger.getInstance())
         client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
         assertFalse("a broken exchange never marks the crash latch",latch.waitFlush())
+        reader.join(15_000)
         SendBudget.waitForIdle(5_000)
-        assertTrue("exactly one attempt, no transparent replay",SendBudget.attemptsSoFar==1)
-        reader.join(10_000)
+        assertTrue("exactly one poster attempt counted",SendBudget.attemptsSoFar==1)
+        assertEquals("exactly one request reached the wire (no HTTP-level replay)",1,requestCount.get())
     }
 
     @Test fun sendBudgetCapsAttemptsPerProcess() {
