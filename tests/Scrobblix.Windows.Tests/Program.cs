@@ -110,11 +110,11 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     Assert(filtered.Breadcrumbs.Count == 0, "Crash boundary drops breadcrumbs");
     Assert(filtered.Message is null, "Crash boundary drops event message");
     var filteredExceptions = filtered.SentryExceptions!.ToList();
-    Assert(filteredExceptions.Count == 1 && filteredExceptions[0].Value == filteredExceptions[0].Type, "Crash boundary replaces exception messages with types");
+    Assert(filteredExceptions.Count == 1 && filteredExceptions[0].Value == FilteringEnvelopeTransport.GenericType && filteredExceptions[0].Type == FilteringEnvelopeTransport.GenericType, "Crash boundary replaces exception types and messages with the generic constant");
     Assert(filteredExceptions[0].Stacktrace!.Frames.All(f => f.AbsolutePath is null), "Crash boundary drops frame absolute paths");
     Assert(filtered.Tags.Count == 0, "Crash boundary drops tags");
     Assert(filtered.Extra.Count == 0, "Crash boundary drops extras");
-    Assert(!filtered.Contexts.ContainsKey("response"), "Crash boundary drops non-allowlist contexts");
+    Assert(filtered.Contexts.Count == 0, "Crash boundary drops all contexts");
     // Actual SDK event serialization: no hostile string may survive into the JSON the SDK emits.
     using var stream = new MemoryStream();
     using (var jsonWriter = new System.Text.Json.Utf8JsonWriter(stream))
@@ -138,7 +138,7 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
         AutoSessionTracking = false
     };
     options.SetBeforeSend((e, h) => CrashReporting.ApplyPrivacyBoundary(e, h));
-    options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)));
+    options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
     using (Sentry.SentrySdk.Init(options))
     {
         Sentry.SentrySdk.ConfigureScope(scope =>
@@ -157,6 +157,10 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     Assert(wire.Contains("\"event\""), "Wire envelope carries an event item");
     Assert(!wire.Contains("\"attachment\""), "Wire envelope carries no attachment items");
     Assert(!wire.Contains("\"trace\""), "Wire header carries no trace context");
+    Assert(wire.Contains(FilteringEnvelopeTransport.GenericType), "Wire event is the generic constants-only report");
+    Assert(!wire.Contains("InvalidOperationException"), "Input exception type is input-derived and dropped");
+    Assert(!wire.Contains("stacktrace"), "No stack frames cross the boundary");
+    Assert(!wire.Contains("\"contexts\""), "No SDK or device contexts cross the boundary");
     foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing", "history.json" })
         Assert(!wire.Contains(hostileString), "Wire bytes carry no " + hostileString);
 }
@@ -175,13 +179,19 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
         ["custom"] = "hostile-header"
     };
     var hostileEnvelope = new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem, eventItem });
-    Assert(FilteringEnvelopeTransport.RebuildToEventsOnly(
-        new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem })) is null,
+    Assert(FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem }), "scrobblix-windows@test", "windows") is null,
         "Gate drops non-event envelopes entirely");
-    var rebuilt = FilteringEnvelopeTransport.RebuildToEventsOnly(hostileEnvelope);
-    Assert(rebuilt is not null, "Gate keeps event items");
-    Assert(rebuilt!.Items.All(i => i.TryGetType() == "event"), "Gate strips non-event items");
+    var rebuilt = FilteringEnvelopeTransport.RebuildToGenericEvent(hostileEnvelope, "scrobblix-windows@test", "windows");
+    Assert(rebuilt is not null, "Gate rebuilds an event envelope");
+    Assert(rebuilt!.Items.Count == 1 && rebuilt.Items.All(i => i.TryGetType() == "event"), "Gate emits exactly one generic event item");
     Assert(rebuilt.Header.Keys.All(k => k == "event_id"), "Gate rebuilds a constant header");
+    Assert(!Equals(rebuilt.Header["event_id"], hostileHeader["event_id"]), "Gate issues a fresh event id, not the hostile one");
+    using var rebuiltBytes = new MemoryStream();
+    rebuilt.Serialize(rebuiltBytes, null);
+    var rebuiltText = Encoding.UTF8.GetString(rebuiltBytes.ToArray());
+    Assert(rebuiltText.Contains(FilteringEnvelopeTransport.GenericType), "Rebuilt envelope carries the generic constant");
+    Assert(!rebuiltText.Contains("hostile-trace") && !rebuiltText.Contains("hostile-header"), "Hostile header payloads never reach the bytes");
 }
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler

@@ -8,4 +8,15 @@
   <ItemGroup>
     <PackageReference Include="Sentry" Version="7.0.0" />
   </ItemGroup>
+  <!-- Optional automatic crash reporting (public ingest DSN, not a secret): the
+       SCROBBLIX_SENTRY_DSN environment variable is baked into generated source.
+       An empty value keeps diagnostics local-only, matching the documented baseline. -->
+  <Target Name="ScrobblixGenerateSentryDsn" BeforeTargets="CoreCompile">
+    <WriteLinesToFile File="$(IntermediateOutputPath)ScrobblixSentryDsn.g.cs"
+                      Lines="namespace Scrobblix.Windows; internal static class ScrobblixSentryDsn { public const string Value = &quot;$(SCROBBLIX_SENTRY_DSN)&quot;; }"
+                      Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)ScrobblixSentryDsn.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

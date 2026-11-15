@@ -82,6 +82,9 @@ public sealed partial class MainWindow : Window
     {
         InitializeComponent();
         ConfigureInitialWindowSize();
+#if DEBUG
+        CrashReportingDiagnosticsPanel.Visibility = Visibility.Visible;
+#endif
         InitializeAboutBuildIdentity();
         ApplyBrandAsset();
         RootLayout.ActualThemeChanged += (_, _) => ApplyBrandAsset();
@@ -963,6 +966,11 @@ public sealed partial class MainWindow : Window
             observation?.PlaybackState.ToString() ?? "unknown",
             observation?.ObservedAtUtc,
             _trackingMode.IsEnabled);
+    }
+
+    private void SendTestCrashReportButton_Click(object sender, RoutedEventArgs args)
+    {
+        CrashReportingTestStatusText.Text = CrashReporting.CaptureDiagnosticTestReport();
     }
 
     private async void ExportSupportBundleButton_Click(object sender, RoutedEventArgs args)

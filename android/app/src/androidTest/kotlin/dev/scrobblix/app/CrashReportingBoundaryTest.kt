@@ -96,7 +96,7 @@ class CrashReportingBoundaryTest {
         // Direct bypass attempt: hostile data injected through the scope (user, tags,
         // breadcrumbs, attachment) and the event, run through a real SentryClient with
         // the production filter, captured at the transport boundary. The envelope that
-        // would go to the wire must contain only fresh headers/constants/event JSON.
+        // would go to the wire must be a generic constants-only event.
         val sent=CopyOnWriteArrayList<SentryEnvelope>()
         val transport=object:ITransport {
             override fun send(envelope:SentryEnvelope,hint:Hint) { sent.add(envelope) }
@@ -109,7 +109,7 @@ class CrashReportingBoundaryTest {
             dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1"
             // Exercise the production gate: the capture path ends at the real
             // FilteringEnvelopeTransport wrapping the recorder.
-            setTransportFactory { _, _ -> FilteringEnvelopeTransport(transport) }
+            setTransportFactory { _, _ -> FilteringEnvelopeTransport(transport,"scrobblix-android@test","android") }
             setBeforeSend(CrashEventFilter)
         }
         val client=SentryClient(options)
@@ -118,7 +118,8 @@ class CrashReportingBoundaryTest {
         scope.setTag("account","rahul-lastfm")
         scope.addBreadcrumb(Breadcrumb.info("ui.click play"))
         scope.addAttachment(Attachment(hostileMessage.toByteArray(),"history.json"))
-        client.captureEvent(hostileEvent(),scope,Hint())
+        val hostile=hostileEvent()
+        client.captureEvent(hostile,scope,Hint())
         val eventEnvelope=sent.firstOrNull { envelope -> envelope.items.any { it.header.type==SentryItemType.Event } }
         assertTrue("pipeline produced an event envelope",eventEnvelope!=null)
         assertTrue(
@@ -127,7 +128,12 @@ class CrashReportingBoundaryTest {
         )
         val provenEnvelope=eventEnvelope!!
         assertNull("gate drops the trace header",provenEnvelope.header.traceContext)
-        assertNoHostileStrings(String(provenEnvelope.items.first { it.header.type==SentryItemType.Event }.getData()))
+        assertTrue("gate issues a fresh event id",provenEnvelope.header.eventId!=hostile.eventId)
+        val payload=String(provenEnvelope.items.first { it.header.type==SentryItemType.Event }.getData())
+        assertTrue("outbound event is the generic constants-only report",payload.contains(EnvelopeGate.GENERIC_TYPE))
+        assertFalse("input exception type is input-derived and dropped",payload.contains("InvalidOperationException"))
+        assertFalse("no stack frames cross the boundary",payload.contains("stacktrace") || payload.contains("frames"))
+        assertNoHostileStrings(payload)
     }
 
     @Test fun transportGateRebuildsHostileCustomEnvelopes() {
@@ -140,19 +146,23 @@ class CrashReportingBoundaryTest {
         val eventItem=SentryEnvelopeItem.fromEvent(serializer,hostileEvent())
         val hostileEnvelope=SentryEnvelope(hostileHeader,listOf(attachmentItem,eventItem))
         // Non-event envelopes are dropped outright.
-        assertNull(EnvelopeGate.rebuildToEventsOnly(SentryEnvelope(hostileHeader,listOf(attachmentItem))))
-        // Mixed envelopes are rebuilt to event items under a fresh constant header.
-        val rebuilt=EnvelopeGate.rebuildToEventsOnly(hostileEnvelope)!!
+        assertNull(EnvelopeGate.rebuildToGenericEvent(SentryEnvelope(hostileHeader,listOf(attachmentItem)),"scrobblix-android@test","android"))
+        // Mixed envelopes become one generic constants-only event under a fresh header.
+        val rebuilt=EnvelopeGate.rebuildToGenericEvent(hostileEnvelope,"scrobblix-android@test","android")!!
         assertTrue(rebuilt.items.all { it.header.type==SentryItemType.Event })
+        assertTrue(rebuilt.items.size==1)
         assertNull(rebuilt.header.traceContext)
         assertNull(rebuilt.header.unknown)
+        assertTrue("fresh event id, not the hostile header id",rebuilt.header.eventId.toString()!="4bf92f3577b34da6a3ce929d0e0e4736")
         val out=java.io.ByteArrayOutputStream()
         serializer.serialize(rebuilt,out)
-        // Header payloads (trace release "ArtistX", custom value) never reach the bytes.
-        // The event item itself is pre-beforeSend here by construction, so this case
-        // asserts structure (event-only, clean header), while the pipeline case above
-        // asserts hostile content absence end to end.
-        assertFalse(out.toString(Charsets.UTF_8.name()).contains("custom"))
+        val bytes=out.toString(Charsets.UTF_8.name())
+        assertTrue(bytes.contains(EnvelopeGate.GENERIC_TYPE))
+        // Header payloads (trace release "ArtistX", custom value) never reach the bytes,
+        // and the original pre-filter event item bytes are not retained either.
+        assertFalse(bytes.contains("custom"))
+        assertFalse(bytes.contains("ArtistX"))
+        assertFalse(bytes.contains("InvalidOperationException"))
         // The real wrapper drops non-event envelopes and forwards rebuilt ones.
         val recorded=mutableListOf<SentryEnvelope>()
         val recorder=object:ITransport {
@@ -162,7 +172,7 @@ class CrashReportingBoundaryTest {
             override fun close() {}
             override fun close(isRestarting:Boolean) {}
         }
-        val gate=FilteringEnvelopeTransport(recorder)
+        val gate=FilteringEnvelopeTransport(recorder,"scrobblix-android@test","android")
         gate.send(SentryEnvelope(hostileHeader,listOf(attachmentItem)),Hint())
         gate.send(hostileEnvelope,Hint())
         assertEquals(1,recorded.size)

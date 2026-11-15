@@ -38,22 +38,33 @@ Crashes may be diagnosed from local event logs and Windows Application events. R
 
 ### Optional automatic crash reporting (build-time, added 2026-11-15)
 
-On 2026-11-15 the owner directed minimal automatic crash/error reporting across his apps. Scrobblix implements it as a build-time option on both Android and Windows: a release built with the public Sentry ingest DSN reports unhandled exceptions; a build without the DSN keeps the local-only baseline above. The DSN is a public write-only ingest identifier, not a credential.
+On 2026-11-15 the owner directed minimal automatic crash/error reporting across his apps. Scrobblix implements it as a build-time option on both Android and Windows: a release built with the public Sentry ingest DSN reports unhandled exceptions; a build without the DSN keeps the local-only baseline above. The DSN is a public write-only ingest identifier, not a credential. On Windows the DSN reaches the code through generated source (SCROBBLIX_SENTRY_DSN environment variable baked into ScrobblixSentryDsn.g.cs at build time); on Android through BuildConfig. CI validates that a nonempty synthetic DSN actually reaches the compiled assembly, so an empty-DSN green build can never masquerade as a wired one.
 
-Scope, deliberately minimal:
-- unhandled exceptions with stack traces, app version and OS/device context only;
-- no performance traces, no session replay, no screenshots or view hierarchies, no automatic breadcrumbs (no UI interaction, network, lifecycle or system crumbs: Last.fm URLs and UI text must never leave the device);
-- sendDefaultPii is false and no user, account or IP-identifying field is attached;
-- listening history, track/artist/album metadata, queue contents, artwork, exported logs and credentials are never attached to events;
-- manual local logs and the user-initiated support ZIP remain unchanged.
+What a report contains, deliberately minimal:
+- a fresh event id and timestamp, the app release and platform, and a fixed exception type/value constant (ScrobblixGenericCrash) meaning "an unhandled error occurred";
+- nothing derived from the captured exception, the device or the SDK pipeline: no exception type names (type names are input-derived too), no exception messages, no stack frames, threads, mechanism, contexts, tags, extras, breadcrumbs, request or user data, and no original or SDK envelope headers (no trace context);
+- the event says only: this app version on this platform reported an unhandled error. Remote receipt verification for tests is by timestamp correlation, never by echoed content.
 
 Enforcement is two-layer on both platforms:
-1. a beforeSend filter (CrashEventFilter on Android, CrashReporting.ApplyPrivacyBoundary on Windows) strips every event carrier - request, user, breadcrumbs, message, tags, extras, non-allowlist contexts and frame absolute paths - and clears the hint-level carriers that bypass event field mutation (attachments, screenshot, view hierarchy, thread dump, tombstone); exception messages are replaced with their type names because messages can embed track metadata, URLs or user paths;
-2. a final transport gate (EnvelopeGate/FilteringEnvelopeTransport on Android, FilteringEnvelopeTransport on Windows), independent of every hook: whatever envelope reaches the wire is rebuilt to event items only under a fresh constant header (event id and SDK version; fresh sent-at; no trace context), and non-event envelopes (sessions, client reports, replays) are dropped entirely.
+1. a beforeSend filter (CrashEventFilter on Android, CrashReporting.ApplyPrivacyBoundary on Windows) strips every event carrier - request, user, breadcrumbs, message, tags, extras, all contexts and frame absolute paths - and clears the hint-level carriers that bypass event field mutation (attachments, screenshot, view hierarchy, thread dump, tombstone). This is defense-in-depth only;
+2. the authoritative final transport gate (EnvelopeGate + FilteringEnvelopeTransport on Android, FilteringEnvelopeTransport on Windows), independent of every hook: whatever envelope reaches the wire is REBUILT from code-owned constants with a fresh event id and timestamp. Original envelope bytes and original event items are never retained. Non-event envelopes (sessions, client reports, replays) are dropped entirely. Context-name allowlists were rejected as insufficient: the boundary owns the whole event, it does not filter fields.
 
-Both layers are proven by tests that serialize the actual SDK envelope: hostile payloads are injected through every carrier, through a direct scope/attachment bypass attempt against a real SentryClient, and through a hand-built custom envelope straight at the gate; the Windows test drives the production transport against a recording HTTP handler and asserts on the actual request bytes.
+Both layers are proven by tests that serialize the actual SDK envelope: hostile payloads are injected through every carrier, through a direct scope/attachment bypass attempt against a real SentryClient, and through a hand-built custom envelope straight at the gate; the Windows test drives the production transport against a recording HTTP handler and asserts on the actual request bytes. Asserted: the outbound event is the generic constants-only report, input exception types and stack frames never cross, fresh event ids replace hostile ones, and no injected string survives.
 
-Open follow-ups before any release ships this: public privacy-notice wording (owner review), an actual ingest test on the exact signed artifact proving events arrive and carry only the scoped fields, and free-tier capacity confirmation (no paid plan).
+Platform SDK hardening, explicit at init:
+- Android: NDK/native crash capture, scope sync, ANR, auto session tracking, activity lifecycle breadcrumbs and all auto breadcrumbs are disabled; manual SentryAndroid.init (not the manifest provider) so these overrides cannot be bypassed;
+- Windows: capture is the SDK default chain (AppDomain unhandled exceptions, unobserved task exceptions) with no custom duplicate handlers; HTTP redirects are disabled so a hostile or misconfigured endpoint can never bounce the payload;
+- both: no performance traces, no session replay, no screenshots; sendDefaultPii is false and no user, account or IP-identifying field is ever attached; listening history, track/artist/album metadata, queue contents, artwork, exported logs and credentials are never attached to events; manual local logs and the user-initiated support ZIP remain unchanged.
+
+Delivery bounds, deliberate: delivery is best-effort with no guarantee of crash delivery. The queue is bounded (Android maxQueueSize=1, NoOp disk cache; Windows no cache directory), a send failure drops the report instead of retrying, and crash reports are never persisted to disk.
+
+Debug-only validation: debug builds expose "Send synthetic test crash report" (Settings on Android, Diagnostics on Windows). It sends one explicitly synthetic report through the same boundary - safe by construction, because the generic gate leaves no real exception content behind. It never appears in release builds.
+
+Open follow-ups before any release ships this: public privacy-notice wording (owner review; DRAFT below), an actual ingest test on the exact signed artifact proving the generic event arrives, and free-tier capacity confirmation (no paid plan).
+
+DRAFT public privacy-notice wording (PENDING OWNER REVIEW - not approved for publication):
+
+> Automatic crash reporting. If a release of this app was built with crash reporting enabled, the app sends a minimal crash report when an unexpected error closes it. A report says only that this app version on this platform crashed; it carries no exception details, no device information, no listening history or account names, and no identifiers about you. Reports are sent to Sentry (sentry.io), retained for 30 days, and never shared further. If the build has crash reporting disabled, nothing leaves your device automatically. Local diagnostic logs and the manual support-bundle export are unchanged.
 
 ## Qualification and release
 

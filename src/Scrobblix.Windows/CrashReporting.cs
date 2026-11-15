@@ -3,62 +3,71 @@ using Sentry;
 namespace Scrobblix.Windows;
 
 /// <summary>
-/// Optional automatic crash reporting. Disabled unless a DSN was baked in at build
-/// time (SCROBBLIX_SENTRY_DSN); an empty DSN keeps diagnostics local-only, matching
-/// the documented baseline.
+/// Optional automatic crash reporting. Disabled unless a DSN was baked in at
+/// build time through the SCROBBLIX_SENTRY_DSN environment variable, which the
+/// build bakes into generated source (ScrobblixSentryDsn.g.cs); an empty DSN
+/// keeps diagnostics local-only, matching the documented baseline.
 ///
-/// Privacy boundary, deliberate and enforced in <see cref="ApplyPrivacyBoundary"/>:
+/// Privacy boundary, deliberate and enforced at the transport gate:
+/// - the outbound envelope is REBUILT from code-owned constants with a fresh
+///   event id and timestamp; nothing derived from the captured exception, the
+///   device or the SDK pipeline crosses the wire: no exception type names or
+///   values (type names are input-derived too), no frames/threads/mechanism/
+///   contexts/tags/extras/breadcrumbs/request/user, no original or SDK headers;
+/// - the event says only: this app version on this platform reported an
+///   unhandled error;
+/// - <see cref="ApplyPrivacyBoundary"/> remains as defense-in-depth on the
+///   hook path, but the gate is the authoritative boundary;
 /// - unhandled exceptions only: no performance traces, no session replay,
-///   no screenshots, no breadcrumbs, no request/user/extra payloads;
-/// - exception MESSAGES are replaced with their type names because messages can
-///   embed track metadata, URLs or user paths; stack frames and mechanism stay;
-/// - sendDefaultPii stays false and no user/account is ever attached;
-/// - listening history, queue contents, artwork paths and credentials are never
-///   attached to events.
+///   no screenshots; sendDefaultPii stays false and no user/account is ever
+///   attached; listening history, queue contents, artwork paths and
+///   credentials are never attached to events;
+/// - capture is the SDK default chain (AppDomain unhandled exceptions and
+///   unobserved task exceptions); delivery is best-effort, bounded, and never
+///   persisted to disk.
 /// </summary>
 public static class CrashReporting
 {
-#if SCROBBLIX_SENTRY_DSN
-    private const string Dsn = SCROBBLIX_SENTRY_DSN;
-#else
-    private const string Dsn = "";
-#endif
+    // Generated at build time from SCROBBLIX_SENTRY_DSN (ScrobblixSentryDsn.g.cs).
+    private const string Dsn = ScrobblixSentryDsn.Value;
 
     private static bool _enabled;
 
     public static void Initialize()
     {
         if (Dsn.Length == 0 || _enabled) return;
+        var release = "scrobblix-windows@" + (
+            typeof(CrashReporting).Assembly
+                .GetCustomAttributes(typeof(System.Reflection.AssemblyInformationalVersionAttribute), false)
+                is { Length: > 0 } attrs
+                ? ((System.Reflection.AssemblyInformationalVersionAttribute)attrs[0]).InformationalVersion
+                : typeof(CrashReporting).Assembly.GetName().Version?.ToString() ?? "unknown");
         SentrySdk.Init(options =>
         {
             options.Dsn = Dsn;
+            options.Release = release;
+            options.Environment = "windows";
             options.SendDefaultPii = false;
             options.TracesSampleRate = 0.0;
             options.AutoSessionTracking = false;
             options.IsGlobalModeEnabled = true;
             options.StackTraceMode = StackTraceMode.Original;
-            options.Environment = "windows";
             options.SetBeforeSend((sentryEvent, hint) => ApplyPrivacyBoundary(sentryEvent, hint));
             // Final gate at the transport boundary: whatever reaches this point is
-            // rebuilt to an event-only envelope with a fresh constant header.
+            // rebuilt into a constants-only generic event. Redirects stay off so a
+            // hostile or misconfigured endpoint can never bounce the payload.
             options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new HttpClientHandler
             {
-                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate
-            }));
+                AutomaticDecompression = System.Net.DecompressionMethods.GZip | System.Net.DecompressionMethods.Deflate,
+                AllowAutoRedirect = false
+            }), release, "windows");
         });
-        AppDomain.CurrentDomain.UnhandledException += (_, args) =>
-            Capture(args.ExceptionObject as Exception ?? new InvalidOperationException("Unknown process exception"));
-        TaskScheduler.UnobservedTaskException += (_, args) =>
-        {
-            Capture(args.Exception);
-            args.SetObserved();
-        };
+        // Capture is the SDK default integration chain (AppDomain unhandled
+        // exceptions + unobserved task exceptions). No custom duplicate handlers.
         _enabled = true;
     }
 
-    private static readonly HashSet<string> AllowedContexts = new(StringComparer.Ordinal) { "os", "device", "app", "runtime" };
-
-    /// <summary>The privacy boundary every outbound event passes through.</summary>
+    /// <summary>The privacy boundary on the hook path, defense-in-depth only.</summary>
     public static SentryEvent ApplyPrivacyBoundary(SentryEvent sentryEvent, SentryHint? hint = null)
     {
         // Attachments bypass event field mutation: they travel on the hint (scope
@@ -81,7 +90,8 @@ public static class CrashReporting
         {
             foreach (var exception in sentryEvent.SentryExceptions)
             {
-                exception.Value = exception.Type ?? "Error";
+                exception.Value = FilteringEnvelopeTransport.GenericType;
+                exception.Type = FilteringEnvelopeTransport.GenericType;
                 if (exception.Stacktrace?.Frames is not null)
                 {
                     foreach (var frame in exception.Stacktrace.Frames)
@@ -93,7 +103,7 @@ public static class CrashReporting
         }
         foreach (var key in sentryEvent.Contexts.Keys.ToList())
         {
-            if (!AllowedContexts.Contains(key)) sentryEvent.Contexts.Remove(key);
+            sentryEvent.Contexts.Remove(key);
         }
         return sentryEvent;
     }
@@ -102,4 +112,43 @@ public static class CrashReporting
     {
         if (_enabled) SentrySdk.CaptureException(error);
     }
+
+    /// <summary>
+    /// Deliberate synthetic crash report for validating the ingest route end to
+    /// end, gated to debug builds. It goes through the same boundary and is
+    /// explicitly labelled synthetic (release carries "-diagnostic"), never
+    /// disguised as a real crash. Safe by construction: the generic gate leaves
+    /// no real exception content behind, so no real crash has to be induced and
+    /// no user data is at risk.
+    /// </summary>
+    public static string CaptureDiagnosticTestReport()
+    {
+#if !DEBUG
+        return "disabled (non-debug build)";
+#else
+        if (!_enabled) return "disabled (no DSN configured in this build)";
+        try
+        {
+            // The tag is deliberately synthetic-only and the gate drops tags anyway;
+            // it exists so the hook path can be told apart from real crashes in tests.
+            using (SentrySdk.PushScope())
+            {
+                SentrySdk.ConfigureScope(scope => scope.SetTag("scrobblix.diagnostic", "synthetic"));
+                SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
+            }
+            SentrySdk.Flush(TimeSpan.FromSeconds(2));
+            return "sent (synthetic test report)";
+        }
+        catch (Exception error)
+        {
+            return "failed locally: " + error.GetType().Name;
+        }
+#endif
+    }
+}
+
+/// <summary>Exception type used only by <see cref="CrashReporting.CaptureDiagnosticTestReport"/>.</summary>
+public sealed class ScrobblixDiagnosticsTestException : Exception
+{
+    public ScrobblixDiagnosticsTestException() : base("Synthetic crash-reporting test. This is not a real crash.") { }
 }

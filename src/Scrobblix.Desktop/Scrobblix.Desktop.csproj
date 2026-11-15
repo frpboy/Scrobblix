@@ -10,11 +10,6 @@
   <PropertyGroup Condition="'$(ScrobblixUiQualification)' == 'true'">
     <DefineConstants>$(DefineConstants);SCROBBLIX_UI_QUALIFICATION</DefineConstants>
   </PropertyGroup>
-  <!-- Optional automatic crash reporting (public ingest DSN, not a secret).
-       Empty default keeps diagnostics local-only, matching the documented baseline. -->
-  <PropertyGroup Condition="'$(SCROBBLIX_SENTRY_DSN)' != ''">
-    <DefineConstants>$(DefineConstants);SCROBBLIX_SENTRY_DSN=%22$(SCROBBLIX_SENTRY_DSN)%22</DefineConstants>
-  </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
     <ProjectReference Include="../Scrobblix.Infrastructure/Scrobblix.Infrastructure.csproj" />
