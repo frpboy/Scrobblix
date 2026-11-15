@@ -2,7 +2,7 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Local diagnostics by default; optional build-time automatic crash reporting added 2026-11-15 (owner-directed, minimal scope); no shipped release contains it and no current build bakes a DSN  
+> **Status:** Local diagnostics by default; optional build-time automatic crash reporting added 2026-11-15 (owner-directed, minimal scope); no shipped release contains it, and regular release builds reviewed so far are not activated (isolated synthetic config tests are separate)  
 > **Last reviewed:** 2026-11-16  
 > **Review note:** the public privacy-notice wording for this change is drafted below (coordinated legal/review draft) and still requires owner review before any release that ships it.
 
@@ -42,9 +42,9 @@ On 2026-11-15 the owner directed minimal automatic crash/error reporting across 
 
 What a report contains, deliberately minimal:
 - a fresh event id and timestamp, the app release and platform, and a fixed exception type/value constant (ScrobblixGenericCrash) meaning "an unhandled error occurred";
-- nothing derived from the captured exception, the device or the SDK pipeline: no exception type names (type names are input-derived too), no exception messages, no stack frames, threads, mechanism, contexts, tags, extras, breadcrumbs, request or user data, and no original or SDK envelope headers (no trace context);
+- no content derived from the captured exception, the device, the user or the SDK pipeline survives the rebuild: no exception type names (type names are input-derived too), no exception messages, no stack frames, threads, mechanism, contexts, tags, extras, breadcrumbs, request or user data, and no original or SDK envelope headers (no trace context). The wire does carry code-owned or SDK-default structural fields, observed per platform: Android emits an empty contexts object; Windows emits an empty sdk object, platform csharp, and a sent_at in the envelope header;
 - the event says only: this app version on this platform reported an unhandled error. Because the boundary rewrites event ids, remote receipt verification for tests is an exact lookup of the FINAL wire event id - captured privately per attempt - plus its timestamp, done by the Sentry project owner; timestamp correlation or echoed content alone never counts as receipt.
-- outbound HTTP headers are code-owned as well: Android sets a fixed generic User-Agent (scrobblix-boundary/1) in place of the platform default (which would carry OS and device-build metadata); the pinned Windows SDK transport sends no User-Agent of its own; both carry the code-owned X-Sentry-Auth and Content-Type and no cookies. Verified against actual wire captures of the production transport, not field assignments.
+- outbound HTTP headers, observed on the actual wire per platform (verified against captures of the production transport, not field assignments). Android sends exactly: User-Agent (fixed generic scrobblix-boundary/1 in place of the platform default, which would carry OS and device-build metadata), Content-Type: application/x-sentry-envelope, code-owned X-Sentry-Auth, Content-Length, Host, Connection, Accept-Encoding: gzip. Windows sends exactly: Host, code-owned X-Sentry-Auth, Transfer-Encoding: chunked, Accept-Encoding: gzip, deflate - no User-Agent and no Content-Type. Neither sends cookies or device-derived headers.
 
 Enforcement is two-layer on both platforms:
 1. a beforeSend filter (CrashEventFilter on Android, CrashReporting.ApplyPrivacyBoundary on Windows) strips every event carrier - request, user, breadcrumbs, message, tags, extras, all contexts and frame absolute paths - and clears the hint-level carriers that bypass event field mutation (attachments, screenshot, view hierarchy, thread dump, tombstone). This is defense-in-depth only;
