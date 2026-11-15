@@ -20,11 +20,11 @@ import java.io.File
  * do not exercise HTTP, redirect handling or the body limits, and no install is attempted.
  * URL and redirect policy is covered separately by deterministic core unit tests
  * (UpdateTransportPolicy in AppUpdateTest).
- * Known gap: the signer-equality branch itself is NOT runtime-exercised here. Exercising it
- * needs two signed APKs with the same package (same-signer positive, wrong-signer negative),
- * which this harness cannot build on-device. No signer-runtime qualification is claimed;
- * the branch is fail-closed (missing or mismatched signers return false) and every negative
- * above fails before or at that check.
+ * Signer-branch qualification runs in CI via the signedFixturesQualifySignerBranch test with
+ * two CI-built fixture APKs (same package, higher versionCode): one signed with the same debug
+ * key as the app under test (positive), one signed with a throwaway keystore (negative).
+ * Locally, without provisioned fixtures, that test is skipped by assumption; every other test
+ * still runs. No release key or real credential is ever involved.
  */
 @RunWith(AndroidJUnit4::class)
 class UpdateVerificationTest {
@@ -113,6 +113,19 @@ class UpdateVerificationTest {
         val u=AppUpdater(context)
         val testApk=File(testContext.packageCodePath)
         assertFalse(u.verifyDownload(testApk,update("ab")))
+    }
+
+    @Test
+    fun signedFixturesQualifySignerBranch() {
+        val args=InstrumentationRegistry.getArguments()
+        val same=args.getString("fixtureSameSigner")?.let(::File)?.takeIf { it.exists() }
+        val wrong=args.getString("fixtureWrongSigner")?.let(::File)?.takeIf { it.exists() }
+        org.junit.Assume.assumeTrue("signed fixtures not provisioned (CI-only)",same!=null && wrong!=null)
+        val u=AppUpdater(context)
+        // Fixture versionName is 0.1.0-alpha.3 and versionCode 8, strictly above the installed app.
+        val next=update().copy(version=ReleaseVersion(0,1,0,"alpha",3))
+        assertTrue("same-package same-signer higher-version fixture must pass",u.verifyDownload(same!!,next))
+        assertFalse("same-package wrong-signer fixture must fail",u.verifyDownload(wrong!!,next))
     }
 
     @Test
