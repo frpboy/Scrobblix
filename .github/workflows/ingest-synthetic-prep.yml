@@ -100,6 +100,11 @@ on:
         type: string
         required: false
         default: ''
+      expected_execution_head:
+        description: 'Stage B: reviewed head sha this send dispatch itself must run at'
+        type: string
+        required: false
+        default: ''
   push:
     branches: [test/ingest-synthetic-prep-20261116]
 permissions:
@@ -387,6 +392,7 @@ jobs:
           EXPECTED_SOURCE_HEAD: ${{ inputs.expected_source_head }}
           EXPECTED_ANDROID_ARTIFACT_ID: ${{ inputs.expected_android_artifact_id }}
           EXPECTED_WINDOWS_ARTIFACT_ID: ${{ inputs.expected_windows_artifact_id }}
+          EXPECTED_EXECUTION_HEAD: ${{ inputs.expected_execution_head }}
         run: |
           set -euo pipefail
           re='^[0-9]+$'
@@ -394,16 +400,25 @@ jobs:
             [[ "$v" =~ $re ]] || { echo 'run and artifact ids must be numeric'; exit 1; }
           done
           test -n "$EXPECTED_SOURCE_HEAD" || { echo 'expected_source_head required'; exit 1; }
+          test -n "$EXPECTED_EXECUTION_HEAD" || { echo 'expected_execution_head required'; exit 1; }
+          # This send dispatch itself must run at the reviewed execution head.
+          [ "${{ github.sha }}" = "$EXPECTED_EXECUTION_HEAD" ] || { echo "EXECUTION HEAD MISMATCH: ${{ github.sha }} != pinned $EXPECTED_EXECUTION_HEAD"; exit 1; }
+          echo "execution head verified: ${{ github.sha }}"
           api="https://api.github.com/repos/${{ github.repository }}"
           run=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs/$QUALIFIED_RUN_ID")
           printf '%s' "$run" | jq -e --arg head "$EXPECTED_SOURCE_HEAD" \
             '.conclusion=="success" and .event=="workflow_dispatch" and .path==".github/workflows/ingest-synthetic-prep.yml" and .head_sha==$head' >/dev/null \
             || { echo 'PROVENANCE FAIL: run is not the pinned successful stage-A dispatch of this workflow at the reviewed head'; exit 1; }
-          # No-send attestation: the qualified run must have contained ONLY
-          # the two stage-A jobs - a send-mode run would add stage-b jobs.
+          # No-send attestation: both stage-A jobs must have SUCCEEDED, and
+          # every send/preflight job must be skipped or absent - an effect job
+          # may never have run in the qualified run. GitHub may return skipped
+          # jobs, so skipped and absent are both accepted, success is not.
           jobs=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs/$QUALIFIED_RUN_ID/jobs?per_page=100")
-          printf '%s' "$jobs" | jq -e '[.jobs[].name] | sort == ["android-debug-apk","windows-debug-build"]' >/dev/null \
-            || { echo 'PROVENANCE FAIL: qualified run job set is not exactly the two no-send stage-A jobs'; exit 1; }
+          printf '%s' "$jobs" | jq -e '
+            ([.jobs[].name] | all(. as $n | ["android-debug-apk","windows-debug-build","stage-b-preflight","android-send","windows-send"] | index($n) != null))
+            and ([.jobs[] | select(.name=="android-debug-apk" or .name=="windows-debug-build") | .conclusion] | sort == ["success","success"])
+            and ([.jobs[] | select(.name=="stage-b-preflight" or .name=="android-send" or .name=="windows-send") | .conclusion] | all(. == "skipped"))' >/dev/null \
+            || { echo 'PROVENANCE FAIL: qualified run job set is not exactly the two successful no-send stage-A jobs with no effect job run'; exit 1; }
           for pair in "$EXPECTED_ANDROID_ARTIFACT_ID ingest-prep-android-debug-DISPOSABLE" "$EXPECTED_WINDOWS_ARTIFACT_ID ingest-prep-windows-debug-DISPOSABLE"; do
             set -- $pair
             art=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/artifacts/$1")
@@ -513,7 +528,8 @@ jobs:
           # No iptables block here: the ONE synthetic event must reach the
           # baked endpoint. The transport budget boots DISARMED (cap 0) on
           # this branch; the test asserts the pinned endpoint, proves a
-          # pre-arming capture cannot send, then arms exactly one attempt.
+          # pre-arming capture cannot send, then arms exactly one send keyed
+          # to that capture.
           apk="qualified-android/${{ needs.stage-b-preflight.outputs.android_apk_rel }}"
           testapk="qualified-android/${{ needs.stage-b-preflight.outputs.android_testapk_rel }}"
           adb install -r "$apk" >/dev/null

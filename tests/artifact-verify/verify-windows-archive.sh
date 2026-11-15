@@ -24,8 +24,13 @@ verify_tree() {
   [ -d "$root" ] || { echo "FAIL: expected tree root missing: $root"; exit 1; }
   local line hash rel path actual
   while IFS= read -r line; do
+    # Manifests are written on Windows: strip the CRLF carriage return only
+    # (no other normalization), and compare hashes case-insensitively because
+    # Get-FileHash emits uppercase while sha256sum emits lowercase.
+    line="${line%$'\r'}"
     [ -z "$line" ] && continue
     hash="${line%%  *}"
+    hash="${hash,,}"
     rel="${line#*  }"
     rel="${rel//\\//}"
     case "$rel" in

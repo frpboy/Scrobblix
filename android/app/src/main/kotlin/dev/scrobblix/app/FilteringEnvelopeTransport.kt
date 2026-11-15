@@ -99,6 +99,18 @@ object SendBudget {
             }
         }
     }
+    /** DISPOSABLE remote-send arming: exactly one send, keyed to the intended
+     * capture's per-attempt result object. A delayed, queued or foreign
+     * capture carries a different (or null) result and can never consume the
+     * armed send, regardless of when it reaches the transport. */
+    private val armedRef=java.util.concurrent.atomic.AtomicReference<WireAttemptResult?>()
+    /** Arms the single permitted send for the capture carrying [result]. */
+    fun armOnceFor(result:WireAttemptResult) { armedRef.set(result) }
+    /** Consumes the armed send only for the capture carrying the armed result. */
+    internal fun tryAcquireArmed(result:WireAttemptResult?):Boolean {
+        val armed=armedRef.get() ?: return false
+        return result===armed && armedRef.compareAndSet(armed,null)
+    }
     /** Test-only: reset shared state and bounds so cases stay isolated. */
     fun resetForTesting() {
         attempts.set(0)
@@ -197,10 +209,10 @@ class FilteringEnvelopeTransport(
             serializer.serialize(rebuilt,out)
             out.toByteArray()
         } catch (_:Throwable) { return }
-        // Local send budget: at most one exchange in flight, a minimum attempt
-        // interval, a per-process cap and the server backoff window. A burst is
-        // dropped, not queued.
-        if (!SendBudget.tryAcquire()) return
+        // The intended capture's keyed permit wins first; otherwise the normal
+        // budget decides (loopback dump lane). A delayed or foreign capture
+        // cannot consume the armed single send.
+        if (!SendBudget.tryAcquireArmed(result) && !SendBudget.tryAcquire()) return
         try {
             worker.execute {
                 try {

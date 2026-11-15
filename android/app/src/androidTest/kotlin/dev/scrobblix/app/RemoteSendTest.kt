@@ -7,12 +7,14 @@ package dev.scrobblix.app
 // build-time baked DSN). Runs ONLY in the dispatch-gated stage-B send mode of
 // the disposable workflow; the loopback dump lane never reaches it.
 // Controls: the baked DSN's sha256/host/project are asserted against the
-// clearance-pinned expectations (instrumentation args) BEFORE any capture, and
-// the transport attempt budget is capped at 1 before any possible capture, so
-// no second event can leave on assertion or cleanup failure. No retry: a
-// non-delivered exchange is a finding, reported as-is. The FINAL wire event id
-// and timestamp are teed (file + stdout) for the project owner's exact receipt
-// lookup; the completed HTTP exchange itself is not a stored receipt.
+// clearance-pinned expectations (instrumentation args) BEFORE any capture. The
+// transport boots DISARMED (cap 0) on this branch, the test proves a
+// pre-arming capture is dropped unsent, then arms exactly ONE send keyed to
+// this capture's result object - a delayed, queued or foreign capture can
+// never consume it. No retry: a non-delivered exchange is a finding, reported
+// as-is. The FINAL wire event id and timestamp are teed (file + stdout) for
+// the project owner's exact receipt lookup; the completed HTTP exchange
+// itself is not a stored receipt.
 
 import androidx.test.platform.app.InstrumentationRegistry
 import org.junit.Assert.assertEquals
@@ -57,10 +59,12 @@ class RemoteSendTest {
         assertTrue("pre-arming capture must not complete an exchange", !negResult.exchangeCompleted)
         if (negResult.eventId != null) throw AssertionError("pre-arming capture produced wire id ${negResult.eventId}")
         assertEquals("a dropped pre-arming capture must not consume attempts", 0, SendBudget.attemptsSoFar)
-        // Arm exactly ONE attempt for the real capture. No reset: nothing may
-        // erase a prior attempt record.
-        SendBudget.maxAttemptsPerProcess=1
+        // Arm exactly ONE send, keyed to THIS capture's result object: a
+        // delayed, queued or foreign capture can never consume it, whenever it
+        // reaches the transport. No reset: nothing may erase a prior attempt
+        // record.
         val result=WireAttemptResult()
+        SendBudget.armOnceFor(result)
         val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(20_000,io.sentry.NoOpLogger.getInstance())
         val hint=io.sentry.util.HintUtils.createWithTypeCheckHint(latch)
         hint.set(FilteringEnvelopeTransport.RESULT_HINT_KEY,result)
