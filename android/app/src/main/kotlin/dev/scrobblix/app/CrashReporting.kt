@@ -2,7 +2,6 @@ package dev.scrobblix.app
 
 import android.content.Context
 import io.sentry.android.core.SentryAndroid
-import io.sentry.transport.NoOpEnvelopeCache
 
 /**
  * Optional automatic crash reporting. Disabled unless a DSN was baked in at build
@@ -19,8 +18,11 @@ import io.sentry.transport.NoOpEnvelopeCache
  * - the final transport boundary rebuilds every envelope from code-owned
  *   constants, so no exception, frame, thread or context content can leave the
  *   device regardless of what any producer attached;
- * - delivery is best-effort: no disk cache, queue depth one, failures drop.
- *   Crash reporting never blocks, retries indefinitely or crashes the app.
+ * - delivery is best-effort and bounded: no disk persistence, queue depth one,
+ *   at most one send in flight, a minimum attempt interval and a per-process
+ *   attempt cap; failures and budget excess drop. Crash reporting never blocks,
+ *   retries indefinitely or crashes the app;
+ * - client reports are off (init flag + fresh downstream hint).
  */
 object CrashReporting {
     private const val ENVIRONMENT="android"
@@ -47,9 +49,16 @@ object CrashReporting {
             options.isEnableAppComponentBreadcrumbs=false
             options.isAttachScreenshot=false
             options.isAttachViewHierarchy=false
-            // Bounded, non-persistent delivery: no on-disk envelope cache and the
+            // Client reports off at init as well; the transport's fresh downstream
+            // hint is the authoritative boundary (the SDK only attaches them to
+            // uncaught-hint envelopes).
+            options.isSendClientReports=false
+            // Bounded, non-persistent delivery: a dedicated no-op envelope cache
+            // (NOT the SDK sentinel, which the Android initializer would replace
+            // with the on-disk AndroidEnvelopeCache), no cache directory, and the
             // smallest send queue, so reports never pile up or survive the process.
-            options.envelopeDiskCache=NoOpEnvelopeCache.getInstance()
+            options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+            options.cacheDirPath=null
             options.maxQueueSize=1
             options.environment=ENVIRONMENT
             options.release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
@@ -75,7 +84,13 @@ object CrashReporting {
         if (!BuildConfig.DEBUG) return "Test reports are only available in debug builds."
         if (!enabled) return "Crash reporting is not active in this build."
         capture(ScrobblixDiagnosticsTestException())
-        return "Synthetic test report queued; it carries no listening data, account names or device content."
+        io.sentry.Sentry.flush(3_000)
+        val wireId=FilteringEnvelopeTransport.lastWireEventId
+        // Deliberately "attempted", never "sent": local flush proves nothing about
+        // remote receipt. Count it received only when the remote project shows this
+        // exact wire event id.
+        return if (wireId!=null) "Attempted; count as received only when remote receipt matches event id $wireId. Carries no listening data, account names or device content."
+        else "Attempted; no wire event id recorded (send budget or queue). Nothing was persisted."
     }
 }
 

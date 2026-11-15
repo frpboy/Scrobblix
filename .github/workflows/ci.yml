@@ -104,7 +104,21 @@ jobs:
           $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
           if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern "examplePublicKey" -SimpleMatch -Quiet)) { throw "Synthetic DSN did not reach the generated source" }
           $assembly = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-bin" -Filter Scrobblix.Windows.dll | Select-Object -First 1
-          if (-not $assembly -or -not (Select-String -Path $assembly.FullName -Pattern "examplePublicKey" -SimpleMatch -Quiet)) { throw "Synthetic DSN did not reach the compiled assembly" }
+          if (-not $assembly) { throw "Synthetic build produced no Scrobblix.Windows.dll" }
+          # .NET user strings live in the UTF-16 (#US) heap; an ASCII byte scan is unreliable.
+          $assemblyText = [Text.Encoding]::Unicode.GetString([IO.File]::ReadAllBytes($assembly.FullName))
+          if (-not $assemblyText.Contains("examplePublicKey")) { throw "Synthetic DSN did not reach the compiled assembly string table" }
+
+      - name: Validate empty DSN build stays empty (isolated outputs)
+        if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
+        shell: pwsh
+        run: |
+          dotnet build src/Scrobblix.Windows/Scrobblix.Windows.csproj --configuration Release -p:BaseIntermediateOutputPath="$env:RUNNER_TEMP\sentry-empty-obj\" -p:OutDir="$env:RUNNER_TEMP\sentry-empty-bin\" -p:RestorePackagesPath="$env:NUGET_PACKAGES"
+          if ($LASTEXITCODE -ne 0) { throw "Empty DSN build failed" }
+          $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-empty-obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
+          if (-not $generated) { throw "Empty build produced no generated DSN source" }
+          if (Select-String -Path $generated.FullName -Pattern "examplePublicKey" -SimpleMatch -Quiet) { throw "Empty build reused the synthetic DSN" }
+          if (-not (Select-String -Path $generated.FullName -Pattern 'Value = "";' -SimpleMatch -Quiet)) { throw "Empty build generated source does not carry an empty DSN" }
 
       - name: Validate native broker client contracts (synthetic only)
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}

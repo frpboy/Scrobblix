@@ -135,9 +135,22 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     var options = new Sentry.SentryOptions
     {
         Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
-        AutoSessionTracking = false
+        AutoSessionTracking = false,
+        SendClientReports = false,
+        MaxQueueItems = 1
     };
-    options.SetBeforeSend((e, h) => CrashReporting.ApplyPrivacyBoundary(e, h));
+    // First capture is dropped at the hook: a discarded event is exactly what a
+    // client report would carry. The wire must still contain no client_report.
+    var dropNext = true;
+    options.SetBeforeSend((e, h) =>
+    {
+        if (dropNext)
+        {
+            dropNext = false;
+            return null;
+        }
+        return CrashReporting.ApplyPrivacyBoundary(e, h);
+    });
     options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
     using (Sentry.SentrySdk.Init(options))
     {
@@ -149,15 +162,17 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
             scope.AddAttachment(new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
                 new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
         });
+        Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage + " dropped"));
         Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage));
         Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
     }
-    Assert(bodies.Count == 1, "Exactly one HTTP request left the transport");
+    Assert(bodies.Count == 1, "Exactly one HTTP request left the transport (hook-dropped capture stays local)");
     var wire = Encoding.UTF8.GetString(bodies[0]);
     Assert(wire.Contains("\"event\""), "Wire envelope carries an event item");
     Assert(!wire.Contains("\"attachment\""), "Wire envelope carries no attachment items");
     Assert(!wire.Contains("\"trace\""), "Wire header carries no trace context");
     Assert(wire.Contains(FilteringEnvelopeTransport.GenericType), "Wire event is the generic constants-only report");
+    Assert(!wire.Contains("client_report"), "Wire carries no client report after a discarded event");
     Assert(!wire.Contains("InvalidOperationException"), "Input exception type is input-derived and dropped");
     Assert(!wire.Contains("stacktrace"), "No stack frames cross the boundary");
     Assert(!wire.Contains("\"contexts\""), "No SDK or device contexts cross the boundary");
@@ -192,6 +207,31 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     var rebuiltText = Encoding.UTF8.GetString(rebuiltBytes.ToArray());
     Assert(rebuiltText.Contains(FilteringEnvelopeTransport.GenericType), "Rebuilt envelope carries the generic constant");
     Assert(!rebuiltText.Contains("hostile-trace") && !rebuiltText.Contains("hostile-header"), "Hostile header payloads never reach the bytes");
+}
+
+// Bounded send budget: a burst of crash envelopes collapses to one send per
+// interval; nothing retries, nothing queues beyond the single allowed attempt.
+{
+    var bodies = new List<byte[]>();
+    var options = new Sentry.SentryOptions
+    {
+        Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
+        SendClientReports = false
+    };
+    var transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
+    var first = FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(
+            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
+            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
+        "scrobblix-windows@test", "windows")!;
+    transport.SendEnvelopeAsync(first).GetAwaiter().GetResult();
+    var second = FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(
+            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
+            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
+        "scrobblix-windows@test", "windows")!;
+    transport.SendEnvelopeAsync(second).GetAwaiter().GetResult();
+    Assert(bodies.Count <= 1, "Send budget drops bursts instead of looping");
 }
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler

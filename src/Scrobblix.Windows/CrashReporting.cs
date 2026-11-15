@@ -23,8 +23,9 @@ namespace Scrobblix.Windows;
 ///   attached; listening history, queue contents, artwork paths and
 ///   credentials are never attached to events;
 /// - capture is the SDK default chain (AppDomain unhandled exceptions and
-///   unobserved task exceptions); delivery is best-effort, bounded, and never
-///   persisted to disk.
+///   unobserved task exceptions); client reports are off; delivery is
+///   best-effort, bounded (queue depth one, one send in flight, minimum
+///   attempt interval, per-process attempt cap) and never persisted to disk.
 /// </summary>
 public static class CrashReporting
 {
@@ -50,6 +51,8 @@ public static class CrashReporting
             options.SendDefaultPii = false;
             options.TracesSampleRate = 0.0;
             options.AutoSessionTracking = false;
+            options.SendClientReports = false;
+            options.MaxQueueItems = 1;
             options.IsGlobalModeEnabled = true;
             options.StackTraceMode = StackTraceMode.Original;
             options.SetBeforeSend((sentryEvent, hint) => ApplyPrivacyBoundary(sentryEvent, hint));
@@ -116,10 +119,13 @@ public static class CrashReporting
     /// <summary>
     /// Deliberate synthetic crash report for validating the ingest route end to
     /// end, gated to debug builds. It goes through the same boundary and is
-    /// explicitly labelled synthetic (release carries "-diagnostic"), never
-    /// disguised as a real crash. Safe by construction: the generic gate leaves
-    /// no real exception content behind, so no real crash has to be induced and
-    /// no user data is at risk.
+    /// never disguised as a real crash. The generic gate rebuilds it to the same
+    /// constants-only event as a real crash, so it is identified solely by the
+    /// wire event id shown after the attempt. Safe by construction: the gate
+    /// leaves no real exception content behind, so no real crash has to be
+    /// induced and no user data is at risk. Note this exercises the capture
+    /// path in a debug build only; it is not signed-release or unhandled-path
+    /// proof, which remains a separately held ingest test.
     /// </summary>
     public static string CaptureDiagnosticTestReport()
     {
@@ -129,19 +135,19 @@ public static class CrashReporting
         if (!_enabled) return "disabled (no DSN configured in this build)";
         try
         {
-            // The tag is deliberately synthetic-only and the gate drops tags anyway;
-            // it exists so the hook path can be told apart from real crashes in tests.
-            using (SentrySdk.PushScope())
-            {
-                SentrySdk.ConfigureScope(scope => scope.SetTag("scrobblix.diagnostic", "synthetic"));
-                SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
-            }
+            SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
             SentrySdk.Flush(TimeSpan.FromSeconds(2));
-            return "sent (synthetic test report)";
+            // Deliberately "attempted", never "sent": a local flush proves nothing
+            // about remote receipt. Count it received only when the remote project
+            // shows this exact wire event id.
+            var wireId = FilteringEnvelopeTransport.LastWireEventId;
+            return wireId is not null
+                ? "attempted; count as received only when remote receipt matches event id " + wireId
+                : "attempted; no wire event id recorded (send budget or queue). Nothing was persisted.";
         }
         catch (Exception error)
         {
-            return "failed locally: " + error.GetType().Name;
+            return "attempt failed locally: " + error.GetType().Name;
         }
 #endif
     }

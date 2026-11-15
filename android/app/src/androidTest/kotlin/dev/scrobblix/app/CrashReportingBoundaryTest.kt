@@ -179,4 +179,112 @@ class CrashReportingBoundaryTest {
         assertTrue(recorded[0].items.all { it.header.type==SentryItemType.Event })
         assertNull(recorded[0].header.traceContext)
     }
+
+    @Test fun downstreamWireAfterDiscardedEventCarriesNoClientReport() {
+        // Actual downstream wire through the REAL AsyncHttpTransport on loopback:
+        // one capture is dropped at the hook (exactly what a client report would
+        // record), then a crash-path capture (uncaught-hint marker - the only
+        // path where the SDK attaches a client report, right before the
+        // connection) goes through the production transport wrapper. The received
+        // request body must be the generic event only.
+        SendBudget.resetForTesting()
+        val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
+        val server=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
+        val reader=kotlin.concurrent.thread {
+            try {
+                val conn=server.accept()
+                conn.soTimeout=10_000
+                val input=conn.getInputStream()
+                val acc=java.io.ByteArrayOutputStream()
+                val tmp=ByteArray(8192)
+                fun readSome() { val n=input.read(tmp); if (n<0) throw java.io.EOFException(); acc.write(tmp,0,n) }
+                fun headerEnd(bytes:ByteArray):Int {
+                    outer@ for (i in 0..bytes.size-4) {
+                        for (j in 0..3) { if (bytes[i+j]!="\r\n\r\n"[j].code.toByte()) continue@outer }
+                        return i
+                    }
+                    return -1
+                }
+                readSome()
+                while (headerEnd(acc.toByteArray())<0) readSome()
+                var buffered=acc.toByteArray()
+                val end=headerEnd(buffered)
+                val headers=String(buffered,0,end,Charsets.ISO_8859_1)
+                var pos=end+4
+                val body=java.io.ByteArrayOutputStream()
+                var done=false
+                if (headers.contains("chunked",ignoreCase=true)) {
+                    while (!done) {
+                        var lineEnd=-1
+                        var i=pos
+                        while (lineEnd<0) {
+                            while (i+1<buffered.size) { if (buffered[i]==0x0D.toByte() && buffered[i+1]==0x0A.toByte()) { lineEnd=i; break }; i++ }
+                            if (lineEnd<0) { readSome(); buffered=acc.toByteArray(); i=pos }
+                        }
+                        val size=String(buffered,pos,lineEnd-pos,Charsets.ISO_8859_1).trim().toInt(16)
+                        pos=lineEnd+2
+                        if (size==0) { done=true } else {
+                            while (buffered.size-pos<size+2) { readSome(); buffered=acc.toByteArray() }
+                            body.write(buffered,pos,size)
+                            pos+=size+2
+                        }
+                    }
+                } else {
+                    val length=Regex("(?i)Content-Length: (\\d+)").find(headers)!!.groupValues[1].toInt()
+                    body.write(buffered,pos,buffered.size-pos)
+                    while (body.size()<length) { readSome(); buffered=acc.toByteArray(); body.write(buffered,pos,buffered.size-pos); pos=buffered.size }
+                }
+                receivedBody.set(body.toByteArray())
+                conn.getOutputStream().write("HTTP/1.1 200 OK\r\nContent-Length: 0\r\nConnection: close\r\n\r\n".toByteArray())
+                conn.getOutputStream().flush()
+                conn.close()
+            } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
+        }
+        val options=SentryOptions().apply {
+            dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
+            isSendClientReports=false
+            envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+            maxQueueSize=1
+            setTransportFactory { opts, requestDetails ->
+                FilteringEnvelopeTransport(io.sentry.AsyncHttpTransportFactory().create(opts,requestDetails),"scrobblix-android@test","android")
+            }
+            var dropNext=true
+            setBeforeSend { event, _ -> if (dropNext) { dropNext=false; null } else event }
+        }
+        val client=SentryClient(options)
+        client.captureEvent(hostileEvent())
+        val uncaught=io.sentry.util.HintUtils.createWithTypeCheckHint(
+            io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(5_000,io.sentry.NoOpLogger.getInstance()))
+        client.captureEvent(hostileEvent(),uncaught)
+        client.flush(10_000)
+        reader.join(15_000)
+        val body=receivedBody.get()
+        assertTrue("loopback server received the wire body",body!=null)
+        val text=String(java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(body)).readBytes())
+        assertTrue("wire body is the generic constants-only event",text.contains(EnvelopeGate.GENERIC_TYPE))
+        assertFalse("no client_report on the actual downstream wire after a discarded event",text.contains("client_report"))
+        assertFalse("input exception type is input-derived and dropped",text.contains("InvalidOperationException"))
+        assertNoHostileStrings(text)
+    }
+
+    @Test fun productionInitKeepsNoopCacheAndWritesNothing() {
+        // The real Android init path with the production hardening flags: the
+        // dedicated no-op cache must survive AndroidOptionsInitializer (which
+        // replaces the SDK sentinel with the on-disk AndroidEnvelopeCache), and
+        // nothing may be persisted.
+        val context=androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        var used:io.sentry.android.core.SentryAndroidOptions?=null
+        io.sentry.android.core.SentryAndroid.init(context) { options ->
+            options.dsn="http://00000000000000000000000000000000@127.0.0.1:1/1"
+            options.isSendClientReports=false
+            options.cacheDirPath=null
+            options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+            options.maxQueueSize=1
+            used=options
+        }
+        assertTrue("dedicated no-op cache survives Android init", used!!.envelopeDiskCache is ScrobblixNoOpEnvelopeCache)
+        val sentryDir=java.io.File(context.cacheDir,"sentry")
+        assertTrue("no sentry cache files are persisted", !sentryDir.exists() || sentryDir.listFiles()!!.isEmpty())
+        io.sentry.Sentry.close()
+    }
 }
