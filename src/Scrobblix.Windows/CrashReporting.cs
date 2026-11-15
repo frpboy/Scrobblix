@@ -74,7 +74,9 @@ public static class CrashReporting
         ((List<Breadcrumb>)sentryEvent.Breadcrumbs).Clear();
         sentryEvent.Message = null;
         ((Dictionary<string, string>)sentryEvent.Tags).Clear();
-        sentryEvent.SetExtras(Array.Empty<KeyValuePair<string, object?>>());
+        // SetExtras MERGES into the backing dictionary (IHasExtra.cs loops SetExtra),
+        // so clearing needs the same backing-store cast as tags/breadcrumbs.
+        ((Dictionary<string, object?>)sentryEvent.Extra).Clear();
         if (sentryEvent.SentryExceptions is not null)
         {
             foreach (var exception in sentryEvent.SentryExceptions)
