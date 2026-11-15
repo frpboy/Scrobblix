@@ -232,7 +232,11 @@ class FilteringEnvelopeTransport(
          * never leave the device), host/port taken verbatim from the DSN,
          * redirects disabled, connect/read deadlines, the endpoint path built
          * from the DSN and a code-owned auth header (SDK request headers are
-         * not reused). The connect/read timeouts bound those phases only: DNS
+         * not reused), with a fixed-length body so a buffered POST is never
+         * transparently replayed after a connection loss. This transport never
+         * installs a CookieHandler and sets no Cookie header; it cannot strip
+         * cookies a process-global handler would add (none is installed by this
+         * app). The connect/read timeouts bound those phases only: DNS
          * resolution and the request write use the JVM/socket defaults, and
          * there is no single whole-request deadline. Runs only on the worker
          * thread. Returns true only on a 2xx response (accepted at the HTTP
@@ -254,6 +258,9 @@ class FilteringEnvelopeTransport(
                 conn.readTimeout=options.readTimeoutMillis
                 conn.requestMethod="POST"
                 conn.doOutput=true
+                // Fixed-length body: a buffered POST must never be transparently
+                // replayed after a connection loss (one attempt, no retry).
+                conn.setFixedLengthStreamingMode(bytes.size)
                 conn.setRequestProperty("Content-Type","application/x-sentry-envelope")
                 conn.setRequestProperty(
                     "X-Sentry-Auth",

@@ -55,16 +55,21 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
     private readonly string _release;
     private readonly string _environment;
 
-    /// <summary>Per-attempt correlation result: one entry per envelope that
-    /// passed the budget, keyed by the ORIGINAL envelope event id (a random
-    /// SDK-generated id, used in-process only and never sent). A completed
-    /// exchange fills in the rebuilt wire event id; concurrent attempts never
-    /// overwrite each other's result, so the debug diagnostic reports only its
-    /// own attempt.</summary>
+    /// <summary>Per-attempt correlation result: one immutable entry per
+    /// envelope that passed the gate, keyed by the ORIGINAL envelope event id
+    /// (a random SDK-generated id, used in-process only and never sent). A
+    /// completed exchange publishes a new completed entry atomically, so the
+    /// wire id and completion flag can never be observed inconsistently;
+    /// concurrent attempts never overwrite each other's result.</summary>
     public sealed class AttemptResult
     {
-        public string? EventId;
-        public bool ExchangeCompleted;
+        public AttemptResult(string? eventId, bool exchangeCompleted)
+        {
+            EventId = eventId;
+            ExchangeCompleted = exchangeCompleted;
+        }
+        public string? EventId { get; }
+        public bool ExchangeCompleted { get; }
     }
 
     private static readonly ConcurrentDictionary<string, AttemptResult> Attempts = new();
@@ -93,12 +98,13 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
         try
         {
             // Per-attempt correlation keyed by the original (never-sent) event id.
-            var attempt = new AttemptResult();
+            string? attemptKey = null;
             if (envelope.Header.TryGetValue("event_id", out var originalId) && originalId is not null)
             {
                 // Bounded diagnostic bookkeeping, not persistence: keep the table small.
                 if (Attempts.Count > 64) Attempts.Clear();
-                Attempts[originalId.ToString()!] = attempt;
+                attemptKey = originalId.ToString()!;
+                Attempts[attemptKey] = new AttemptResult(null, false);
             }
             var nowTicks = DateTimeOffset.UtcNow.UtcTicks;
             if (Volatile.Read(ref _attempts) >= MaxAttemptsPerProcess ||
@@ -115,12 +121,13 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
                     using var request = CreateRequest(processedEnvelope);
                     using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     await HandleResponseAsync(response, processedEnvelope, cancellationToken).ConfigureAwait(false);
-                    // Only a completed exchange earns the rebuilt wire event id;
-                    // a dropped or failed attempt leaves the result untouched.
-                    if (response.IsSuccessStatusCode)
+                    // Only a completed exchange earns the rebuilt wire event id,
+                    // published atomically; a dropped or failed attempt leaves the
+                    // pending entry untouched.
+                    if (response.IsSuccessStatusCode && attemptKey is not null)
                     {
-                        attempt.EventId = rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null;
-                        attempt.ExchangeCompleted = true;
+                        var wireId = rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null;
+                        Attempts[attemptKey] = new AttemptResult(wireId, true);
                     }
                 }
                 catch (Exception)

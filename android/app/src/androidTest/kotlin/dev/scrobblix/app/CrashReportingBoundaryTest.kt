@@ -311,6 +311,34 @@ class CrashReportingBoundaryTest {
         assertTrue("a later attempt proceeds after the hung one",receivedBody.get()!=null)
     }
 
+    @Test fun disconnectAfterBodyNeverRetriesAndNeverMarksLatch() {
+        // A downstream that accepts and closes mid-request: the fixed-length
+        // POST fails, exactly one attempt is counted (no transparent replay),
+        // the latch is never marked, and the budget is released afterwards.
+        SendBudget.resetForTesting()
+        SendBudget.minIntervalMs=0
+        val server=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
+        val reader=kotlin.concurrent.thread {
+            try { val c=server.accept(); c.soTimeout=5_000; c.getInputStream().read(); c.close() } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
+        }
+        val options=SentryOptions().apply {
+            dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
+            isSendClientReports=false
+            connectionTimeoutMillis=2_000
+            readTimeout=2_000
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
+            }
+        }
+        val client=SentryClient(options)
+        val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(2_000,io.sentry.NoOpLogger.getInstance())
+        client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
+        assertFalse("a broken exchange never marks the crash latch",latch.waitFlush())
+        SendBudget.waitForIdle(5_000)
+        assertTrue("exactly one attempt, no transparent replay",SendBudget.attemptsSoFar==1)
+        reader.join(10_000)
+    }
+
     @Test fun sendBudgetCapsAttemptsPerProcess() {
         SendBudget.resetForTesting()
         SendBudget.minIntervalMs=0
