@@ -23,6 +23,10 @@ internal fun credentialAvailableAndClear(result:SessionSecretStore.ReadResult):B
     return true
 }
 class ScrobblixApp:Application() {
+    override fun onCreate() {
+        super.onCreate()
+        CrashReporting.initialize(this)
+    }
     private val startup=StoreStartup {AppStore(this)}
     fun storeOrNull():AppStore?=startup.available()
     val store:AppStore get()=checkNotNull(storeOrNull()) {"Local store startup unavailable"}

@@ -2,8 +2,9 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Local diagnostics only; remote telemetry/crash upload not established  
-> **Last reviewed:** 2026-10-28
+> **Status:** Local diagnostics by default; optional build-time automatic crash reporting added 2026-11-15 (owner-directed, minimal scope)  
+> **Last reviewed:** 2026-11-15  
+> **Review note:** the public privacy-notice wording for this change is drafted below and still requires owner review before any release that ships it.
 
 ## Current default behavior
 
@@ -33,7 +34,20 @@ Prefer aggregate reliability counters that cannot reconstruct listening patterns
 
 ## Crash reporting
 
-Crashes may be diagnosed from local event logs and Windows Application events. Raw dumps can contain secrets, listening history and memory contents; they are not included in the support bundle by default. Any future crash-upload feature requires a threat/privacy review, separate consent, a strict allow-list and a retention/deletion process.
+Crashes may be diagnosed from local event logs and Windows Application events. Raw dumps can contain secrets, listening history and memory contents; they are not included in the support bundle by default.
+
+### Optional automatic crash reporting (build-time, added 2026-11-15)
+
+On 2026-11-15 the owner directed minimal automatic crash/error reporting across his apps. Scrobblix implements it as a build-time option on both Android and Windows: a release built with the public Sentry ingest DSN reports unhandled exceptions; a build without the DSN keeps the local-only baseline above. The DSN is a public write-only ingest identifier, not a credential.
+
+Scope, deliberately minimal:
+- unhandled exceptions with stack traces, app version and OS/device context only;
+- no performance traces, no session replay, no screenshots or view hierarchies, no automatic breadcrumbs (no UI interaction, network, lifecycle or system crumbs: Last.fm URLs and UI text must never leave the device);
+- sendDefaultPii is false and no user, account or IP-identifying field is attached;
+- listening history, track/artist/album metadata, queue contents, artwork, exported logs and credentials are never attached to events;
+- manual local logs and the user-initiated support ZIP remain unchanged.
+
+Open follow-ups before any release ships this: public privacy-notice wording (owner review), an actual ingest test on the exact signed artifact proving events arrive and carry only the scoped fields, and free-tier capacity confirmation (no paid plan).
 
 ## Qualification and release
 
