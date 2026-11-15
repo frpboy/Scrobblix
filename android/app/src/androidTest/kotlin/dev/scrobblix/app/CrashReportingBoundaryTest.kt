@@ -278,7 +278,7 @@ class CrashReportingBoundaryTest {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${blackhole.localPort}/1"
             isSendClientReports=false
             connectionTimeoutMillis=2_000
-            readTimeout=2_000
+            readTimeoutMillis=2_000
             setTransportFactory { opts, _ ->
                 FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
@@ -365,7 +365,7 @@ class CrashReportingBoundaryTest {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
             isSendClientReports=false
             connectionTimeoutMillis=2_000
-            readTimeout=2_000
+            readTimeoutMillis=2_000
             setTransportFactory { opts, _ ->
                 FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
@@ -390,7 +390,7 @@ class CrashReportingBoundaryTest {
             dsn="http://00000000000000000000000000000000@127.0.0.1:1/1"
             isSendClientReports=false
             connectionTimeoutMillis=500
-            readTimeout=500
+            readTimeoutMillis=500
             setTransportFactory { opts, _ ->
                 FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
