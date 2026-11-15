@@ -89,6 +89,8 @@ jobs:
 
       - name: Build .NET solution
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ vars.SCROBBLIX_SENTRY_DSN }}
         run: dotnet build Scrobblix.slnx --no-restore --configuration Release
 
       - name: Validate native broker client contracts (synthetic only)

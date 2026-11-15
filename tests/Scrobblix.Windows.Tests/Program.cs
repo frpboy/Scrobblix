@@ -87,3 +87,18 @@ sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
 }
 
 sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
+
+// Crash reporting privacy boundary: hostile payloads must not survive ApplyPrivacyBoundary.
+{
+    var hostile = new Sentry.SentryEvent(new InvalidOperationException("played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678"));
+    hostile.Request = new Sentry.Request { Url = "https://ws.audioscrobbler.com/2.0/?user=secret", Method = "GET" };
+    hostile.User = new Sentry.SentryUser { Username = "rahul" };
+    hostile.AddBreadcrumb("ui.click play");
+    hostile.Message = new Sentry.SentryMessage { Message = "track ArtistX" };
+    var filtered = CrashReporting.ApplyPrivacyBoundary(hostile);
+    Assert(filtered.Request is null, "Crash boundary drops request URLs");
+    Assert(filtered.User is null, "Crash boundary drops user identity");
+    Assert(!(filtered.Breadcrumbs?.Any() ?? false), "Crash boundary drops breadcrumbs");
+    Assert(filtered.Message is null, "Crash boundary drops event message");
+    Assert(filtered.SentryExceptions!.All(e => e.Value == e.Type), "Crash boundary replaces exception messages with types");
+}

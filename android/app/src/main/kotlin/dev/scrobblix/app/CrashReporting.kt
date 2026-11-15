@@ -32,6 +32,9 @@ object CrashReporting {
             options.isEnableAppComponentBreadcrumbs=false
             options.isAttachScreenshot=false
             options.isAttachViewHierarchy=false
+            options.environment="android"
+            options.release="scrobblix-android@"+BuildConfig.VERSION_NAME
+            options.beforeSend=CrashEventFilter
         }
         enabled=true
     }

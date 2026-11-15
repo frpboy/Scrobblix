@@ -5,4 +5,7 @@
   <ItemGroup>
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Sentry" Version="7.0.0" />
+  </ItemGroup>
 </Project>
