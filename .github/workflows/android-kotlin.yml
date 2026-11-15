@@ -79,6 +79,15 @@ jobs:
           cleanup_emulator() {
             status=$?
             set +e
+            # Remove the debug-only harness setting while the device is still live.
+            # Bounded; cleanup failure fails the job only when the run itself succeeded.
+            timeout 15 adb shell settings delete global scrobblix_test_harness
+            cleanup_rc=$?
+            leftover="$(timeout 15 adb shell settings get global scrobblix_test_harness | tr -d '\r')"
+            if [ "$cleanup_rc" -ne 0 ] || [ "$leftover" != "null" ]; then
+              echo "harness setting cleanup failed (rc=$cleanup_rc leftover=$leftover)" >&2
+              if [ "$status" -eq 0 ]; then status=1; fi
+            fi
             if [ "$status" -ne 0 ]; then
               timeout 10 adb devices -l
               tail -80 /tmp/scrobblix-emulator.log
@@ -190,14 +199,6 @@ jobs:
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done
-
-      - name: Remove the debug-only harness setting
-        if: always()
-        shell: bash
-        run: |
-          export PATH="$ANDROID_HOME/platform-tools:$PATH"
-          adb shell settings delete global scrobblix_test_harness || true
-          test "$(adb shell settings get global scrobblix_test_harness | tr -d '\r')" = "null"
 
       - name: Require both instrumentation XML evidence sets
         if: always()
