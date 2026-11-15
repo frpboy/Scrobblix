@@ -2,13 +2,13 @@
 
 > **Project:** Scrobblix  
 > **Owner:** Rahul Muraleedharan (`frpboy`)  
-> **Status:** Local diagnostics by default; optional build-time automatic crash reporting added 2026-11-15 (owner-directed, minimal scope)  
-> **Last reviewed:** 2026-11-15  
-> **Review note:** the public privacy-notice wording for this change is drafted below and still requires owner review before any release that ships it.
+> **Status:** Local diagnostics by default; optional build-time automatic crash reporting added 2026-11-15 (owner-directed, minimal scope); no shipped release contains it and no current build bakes a DSN  
+> **Last reviewed:** 2026-11-16  
+> **Review note:** the public privacy-notice wording for this change is drafted below (coordinated legal/review draft) and still requires owner review before any release that ships it.
 
 ## Current default behavior
 
-Scrobblix uses a local-first design. The current source baseline does not establish a Scrobblix-operated telemetry endpoint, remote usage analytics dashboard, automatic crash-report upload, or third-party crash SDK. Listening data and logs remain local unless a user chooses to share an exported support bundle or files through another channel.
+Scrobblix uses a local-first design. No shipped Scrobblix release (through Android 0.1.0-alpha.2 and the current Windows previews) establishes a Scrobblix-operated telemetry endpoint, remote usage analytics dashboard, automatic crash-report upload, or third-party crash SDK. The current source on main adds an optional build-time crash-reporting candidate (see below) that no shipped release contains and that current builds do not activate: every regular build bakes an empty DSN and keeps the local-only baseline. A source-level capability is not a shipped behavior. Listening data and logs remain local unless a user chooses to share an exported support bundle or files through another channel.
 
 Do not describe a telemetry toggle or automatic crash-reporting preference as a shipped UI control unless the exact release contains it.
 
@@ -43,7 +43,7 @@ On 2026-11-15 the owner directed minimal automatic crash/error reporting across 
 What a report contains, deliberately minimal:
 - a fresh event id and timestamp, the app release and platform, and a fixed exception type/value constant (ScrobblixGenericCrash) meaning "an unhandled error occurred";
 - nothing derived from the captured exception, the device or the SDK pipeline: no exception type names (type names are input-derived too), no exception messages, no stack frames, threads, mechanism, contexts, tags, extras, breadcrumbs, request or user data, and no original or SDK envelope headers (no trace context);
-- the event says only: this app version on this platform reported an unhandled error. Remote receipt verification for tests is by timestamp correlation, never by echoed content.
+- the event says only: this app version on this platform reported an unhandled error. Because the boundary rewrites event ids, remote receipt verification for tests is an exact lookup of the FINAL wire event id - captured privately per attempt - plus its timestamp, done by the Sentry project owner; timestamp correlation or echoed content alone never counts as receipt.
 
 Enforcement is two-layer on both platforms:
 1. a beforeSend filter (CrashEventFilter on Android, CrashReporting.ApplyPrivacyBoundary on Windows) strips every event carrier - request, user, breadcrumbs, message, tags, extras, all contexts and frame absolute paths - and clears the hint-level carriers that bypass event field mutation (attachments, screenshot, view hierarchy, thread dump, tombstone). This is defense-in-depth only;
@@ -61,11 +61,13 @@ Delivery bounds, deliberate: delivery is best-effort with no guarantee of crash 
 
 Debug-only validation: debug builds expose "Send synthetic test crash report" (Settings on Android, Diagnostics on Windows). It queues one synthetic exception through the same boundary and reports the resulting wire event id; the result wording is deliberately "attempted", never "sent", and receipt counts only when the remote project shows that exact event id. Safe by construction: the generic gate leaves no real exception content behind, so no real crash has to be induced. It never appears in release builds, and it is not signed-release or unhandled-path proof - that remains the separately held ingest test.
 
-Open follow-ups before any release ships this: public privacy-notice wording (owner review; DRAFT below), an actual ingest test on the exact signed artifact proving the generic event arrives, and free-tier capacity confirmation (no paid plan).
+Open follow-ups before any release ships this: public privacy-notice wording (owner review; coordinated DRAFT below), an isolated synthetic ingest test (at most one event per platform, test-only artifacts, no user devices) proving the generic event arrives and is verified by exact final wire event id plus timestamp, then signed-artifact unhandled-path qualification on real devices, and free-tier capacity confirmation (no paid plan).
 
-DRAFT public privacy-notice wording (PENDING OWNER REVIEW - not approved for publication):
+DRAFT public privacy-notice wording (PENDING OWNER REVIEW - not approved for publication; coordinated legal/review draft, 2026-11-16):
 
-> Automatic crash reporting. If a release of this app was built with crash reporting enabled, the app sends a minimal crash report when an unexpected error closes it. A report says only that this app version on this platform crashed; it carries no exception details, no device information, no listening history or account names, and no identifiers about you. Reports are sent to Sentry (sentry.io), retained for 30 days, and never shared further. If the build has crash reporting disabled, nothing leaves your device automatically. Local diagnostic logs and the manual support-bundle export are unchanged.
+> Some releases include automatic error reporting to Sentry. Whether it is enabled is set when that release is built; there is no in-app switch. When enabled, a report contains a newly generated event ID, a time, the app release and platform, and a fixed generic error label. The reviewed report format does not include the original error message or stack trace, listening history, track details, account names, credentials or support files. Sentry also receives ordinary connection information, including the connecting IP address. The current organisation settings are configured to prevent stored IP information and remove geographic fields, but that does not mean Sentry never processes the connection information. Sentry uses service providers to operate its service. Its documented default retention for error events on the current Developer plan is 30 days; this is not a deletion deadline for all app data or provider backups. If error reporting is disabled in a build, that reporting path does not send reports. Other network features, including Last.fm authorisation and automatic scrobbling, are described separately in the privacy policy. Local logs and any available manual support export are separate from automatic reporting.
+
+Drafting rules carried with it: replace "Some releases" with the specific release's verified enabled/disabled state in its final notice (build configuration is not an end-user opt-in); never say "nothing leaves your device automatically" (other features use the network); never say "never shared further" (Sentry's service providers/subprocessors are involved); never claim a retention setting deletes all logs or backups; never say "no identifiers" (a random event ID is present and connection metadata is processed); describe an error signal rather than guaranteeing every report represents a process exit. Payload exclusions remain subject to final independent egress qualification on the exact signed artifact, not inferred from documentation.
 
 ## Qualification and release
 

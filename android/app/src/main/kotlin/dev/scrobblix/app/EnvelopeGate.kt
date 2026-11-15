@@ -19,8 +19,9 @@ import io.sentry.protocol.SentryException
  * threads, mechanism, contexts, tags, extras, breadcrumbs, request, user.
  *
  * The outbound event intentionally says only: this app version on this platform
- * reported an unhandled error. Receipt verification for the ingest test is by
- * timestamp correlation, never by echoed content.
+ * reported an unhandled error. Receipt verification for the ingest test is an
+ * exact lookup of the final wire event id (captured privately per attempt) plus
+ * its timestamp, never by echoed content or timestamp correlation alone.
  */
 object EnvelopeGate {
     const val GENERIC_TYPE="ScrobblixGenericCrash"
