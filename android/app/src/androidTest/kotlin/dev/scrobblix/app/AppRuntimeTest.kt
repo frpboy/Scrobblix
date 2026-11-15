@@ -123,7 +123,8 @@ class AppRuntimeTest {
                 "force=${prefs.getBoolean(OnboardingState.FORCE_KEY,false)} " +
                 "prefKeys=${prefs.all.keys.sorted().joinToString(",")} " +
                 "account=${store.account()!=null} " +
-                "gate=${dev.scrobblix.core.OnboardingGate.shouldShow(prefs.getBoolean(OnboardingState.DONE_KEY,false),OnboardingState.existingInstall(store),android.app.ActivityManager.isRunningInTestHarness(),prefs.getBoolean(OnboardingState.FORCE_KEY,false))}"
+                "harnessSkip=${OnboardingState.harnessSkipped(store.context)} " +
+                "gate=${dev.scrobblix.core.OnboardingGate.shouldShow(prefs.getBoolean(OnboardingState.DONE_KEY,false),OnboardingState.existingInstall(store),OnboardingState.harnessSkipped(store.context),prefs.getBoolean(OnboardingState.FORCE_KEY,false))}"
             InstrumentationRegistry.getInstrumentation().uiAutomation
                 .executeShellCommand("screencap -p /sdcard/Download/scrobblix-private-config-prefail.png").use {
                 android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
