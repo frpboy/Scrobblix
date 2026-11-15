@@ -1,0 +1,142 @@
+name: DISPOSABLE ingest synthetic prep
+# Test-only lane for the held isolated synthetic ingest test. Never runs on
+# push/PR. The DSN arrives as a dispatch input (public write-only ingest id),
+# is baked into DEBUG test artifacts only, and is persisted nowhere: no repo
+# variable, no secret, no committed value. Artifacts upload with 1-day
+# retention and are never a release. Emulator egress is blocked (iptables);
+# the wire dump is loopback-only. The actual remote send stays separately
+# gated and is NOT performed here.
+on:
+  workflow_dispatch:
+    inputs:
+      dsn:
+        description: 'Public Sentry ingest DSN for this disposable test build only'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: ingest-synthetic-prep-${{ github.run_id }}
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build debug APKs with ephemeral DSN
+        shell: bash
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
+        run: |
+          set -euo pipefail
+          test -n "$SCROBBLIX_SENTRY_DSN"
+          echo "dsn-sha256: $(printf '%s' "$SCROBBLIX_SENTRY_DSN" | sha256sum | cut -d' ' -f1)"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
+      - name: Hash artifacts and export merged manifest
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(ls android/app/build/outputs/apk/debug/*.apk)
+          testapk=$(ls android/app/build/outputs/apk/androidTest/debug/*.apk)
+          sha256sum "$apk" "$testapk" | tee android-artifact-sha256.txt
+          manifest=$(find android/app/build/intermediates/merged_manifest -name 'AndroidManifest.xml' | head -1)
+          cp "$manifest" merged-AndroidManifest.xml
+          grep -n 'usesCleartextTraffic\|networkSecurityConfig' merged-AndroidManifest.xml || true
+      - name: API36 emulator, loopback wire dump (egress blocked)
+        shell: bash
+        run: |
+          set -euo pipefail
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$ANDROID_HOME/platform-tools:$ANDROID_HOME/emulator:$ANDROID_HOME/cmdline-tools/latest/bin:$PATH"
+          export ANDROID_USER_HOME="$RUNNER_TEMP/scrobblix-android"
+          export ANDROID_EMULATOR_HOME="$ANDROID_USER_HOME"
+          export ANDROID_AVD_HOME="$ANDROID_USER_HOME/avd"
+          mkdir -p "$ANDROID_AVD_HOME"
+          test -e /dev/kvm
+          sudo chmod a+rw /dev/kvm
+          sdkmanager 'emulator' 'system-images;android-36;default;x86_64' >/dev/null
+          echo no | avdmanager create avd -n scrobblix-dump -k 'system-images;android-36;default;x86_64' --path "$ANDROID_AVD_HOME/scrobblix-dump.avd" --force
+          emulator -avd scrobblix-dump -no-window -no-audio -no-snapshot -gpu swiftshader_indirect -no-boot-anim > /tmp/scrobblix-dump-emulator.log 2>&1 &
+          emulator_pid=$!
+          cleanup_emulator() { kill "$emulator_pid" 2>/dev/null || true; }
+          trap cleanup_emulator EXIT
+          timeout 180 adb wait-for-device
+          booted=false
+          for attempt in $(seq 1 120); do
+            if [ "$(adb shell getprop sys.boot_completed | tr -d '\r')" = 1 ]; then booted=true; break; fi
+            sleep 2
+          done
+          if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
+          # No remote egress from the emulator: the dump is loopback-only.
+          adb root
+          adb wait-for-device
+          adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+          adb install -r android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
+          adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk >/dev/null
+          result=$(adb shell am instrument -w -r -e class "dev.scrobblix.app.WireDumpTest" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          printf '%s\n' "$result"
+          printf '%s\n' "$result" | grep -F 'OK (1 test)'
+          adb shell run-as com.frpboy.scrobblix cat files/scrobblix-wiredump-android.txt > wiredump-android.txt
+          test -s wiredump-android.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          retention-days: 1
+          name: ingest-prep-android-debug-DISPOSABLE
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android/app/build/outputs/apk/androidTest/debug/*.apk
+            android-artifact-sha256.txt
+            merged-AndroidManifest.xml
+            wiredump-android.txt
+  windows-debug-build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore Scrobblix.slnx
+      - name: Build Desktop debug with ephemeral DSN
+        shell: pwsh
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
+        run: |
+          if (-not $env:SCROBBLIX_SENTRY_DSN) { throw 'DSN env missing' }
+          "dsn-sha256: " + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
+          dotnet build src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Debug --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Debug build failed' }
+          $generated = Get-ChildItem -Recurse src/Scrobblix.Windows/obj -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
+          if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern '09034d8c28716f3d06cdd57fe02eb47d' -SimpleMatch -Quiet)) { throw 'DSN did not reach generated source' }
+          'generated DSN source carries the dispatch value'
+      - name: Run in-memory wire dump (no egress)
+        shell: pwsh
+        run: |
+          dotnet run --project tests/Scrobblix.WireDump/Scrobblix.WireDump.csproj --configuration Debug -- wire-dump-windows.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Wire dump failed' }
+          if (-not (Test-Path wire-dump-windows.txt)) { throw 'Dump file missing' }
+      - name: Hash artifacts and resolve dependency manifest
+        shell: pwsh
+        run: |
+          $out = 'src/Scrobblix.Desktop/bin/Debug'
+          $exe = Get-ChildItem -Recurse $out -Filter *.exe | Select-Object -First 1
+          "resolved executable: " + $exe.FullName
+          Get-ChildItem -Recurse $out -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath((Resolve-Path $out).Path, $_.FullName) } | Tee-Object windows-deps-manifest-sha256.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          retention-days: 1
+          name: ingest-prep-windows-debug-DISPOSABLE
+          path: |
+            src/Scrobblix.Desktop/bin/Debug/**
+            windows-deps-manifest-sha256.txt
+            wire-dump-windows.txt

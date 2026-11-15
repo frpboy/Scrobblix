@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- DISPOSABLE TEST-ONLY harness (branch test/ingest-synthetic-prep-20261116,
+       never merged to main): captures the exact outbound request bytes the
+       production crash transport emits, via an in-memory handler. No remote
+       egress. One synthetic event only. -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Scrobblix.Windows/Scrobblix.Windows.csproj" />
+  </ItemGroup>
+</Project>
