@@ -17,14 +17,16 @@ import io.sentry.android.core.SentryAndroidOptions
  *   system, component) and no automatic session tracking;
  * - sendDefaultPii stays false and no user/account is ever attached;
  * - the final transport boundary rebuilds every envelope from code-owned
- *   constants, so no exception, frame, thread or context content can leave the
- *   device regardless of what any producer attached;
+ *   constants and serializes it before any worker handoff, so no exception,
+ *   frame, thread, context or hint carrier can leave the device regardless of
+ *   what any producer attached;
  * - client reports are off (init flag, and the SDK async transport that would
  *   attach them is not in the send path);
  * - delivery is best-effort and process-locally bounded: no disk persistence,
- *   at most one send in flight, a minimum attempt interval and a per-process
- *   attempt cap; failures and budget excess drop. Crash reporting never blocks
- *   the crash path beyond the actual exchange and never crashes the app.
+ *   at most one send in flight (held across the actual exchange, released only
+ *   when the worker returns), a minimum attempt interval, a per-process
+ *   attempt cap and a server backoff window; failures and budget excess drop.
+ *   Crash reporting never crashes the app.
  */
 object CrashReporting {
     private const val ENVIRONMENT="android"
@@ -75,9 +77,10 @@ object CrashReporting {
         options.release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
         options.beforeSend=CrashEventFilter
         // Final gate at the transport boundary: whatever reaches this point is
-        // rebuilt from code-owned constants and posted synchronously.
-        options.setTransportFactory { opts, requestDetails ->
-            FilteringEnvelopeTransport(opts,requestDetails,RELEASE_PREFIX+BuildConfig.VERSION_NAME,ENVIRONMENT)
+        // rebuilt from code-owned constants, serialized, and posted on a single
+        // bounded worker.
+        options.setTransportFactory { opts, _ ->
+            FilteringEnvelopeTransport(opts,RELEASE_PREFIX+BuildConfig.VERSION_NAME,ENVIRONMENT)
         }
     }
 
@@ -86,11 +89,10 @@ object CrashReporting {
     /**
      * Debug-only diagnostics affordance for ingest verification. Queues one
      * synthetic exception through the normal capture path on a background
-     * thread (the synchronous transport performs the real exchange inline, so
-     * the debug UI thread must not call this directly on the main thread for a
-     * responsive app - the join is bounded); the transport gate reduces it to
-     * the same generic constants-only event as a real crash. Receipt is
-     * verified remotely by the exact wire event id, never by echoed content.
+     * thread; the transport gate reduces it to the same generic constants-only
+     * event as a real crash, and the wait is bounded by the latch timeout.
+     * Receipt is verified remotely by the exact wire event id, never by echoed
+     * content.
      */
     fun captureDiagnosticTestReport():String {
         if (!BuildConfig.DEBUG) return "Test reports are only available in debug builds."

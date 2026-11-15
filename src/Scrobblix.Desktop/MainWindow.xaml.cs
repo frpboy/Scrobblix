@@ -968,9 +968,10 @@ public sealed partial class MainWindow : Window
             _trackingMode.IsEnabled);
     }
 
-    private void SendTestCrashReportButton_Click(object sender, RoutedEventArgs args)
+    private async void SendTestCrashReportButton_Click(object sender, RoutedEventArgs args)
     {
-        CrashReportingTestStatusText.Text = CrashReporting.CaptureDiagnosticTestReport();
+        CrashReportingTestStatusText.Text = "attempting...";
+        CrashReportingTestStatusText.Text = await CrashReporting.CaptureDiagnosticTestReportAsync();
     }
 
     private async void ExportSupportBundleButton_Click(object sender, RoutedEventArgs args)

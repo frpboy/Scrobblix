@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using Sentry;
 using Sentry.Extensibility;
 using Sentry.Http;
@@ -54,13 +55,25 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
     private readonly string _release;
     private readonly string _environment;
 
-    /// <summary>Event id of the most recent rebuilt event actually handed to the
-    /// wire. Receipt verification matches this id remotely; it is never a
-    /// delivery claim, and it is cleared per attempt.</summary>
-    public static string? LastWireEventId { get; private set; }
+    /// <summary>Per-attempt correlation result: one entry per envelope that
+    /// passed the budget, keyed by the ORIGINAL envelope event id (a random
+    /// SDK-generated id, used in-process only and never sent). A completed
+    /// exchange fills in the rebuilt wire event id; concurrent attempts never
+    /// overwrite each other's result, so the debug diagnostic reports only its
+    /// own attempt.</summary>
+    public sealed class AttemptResult
+    {
+        public string? EventId;
+        public bool ExchangeCompleted;
+    }
 
-    /// <summary>Clear per-attempt correlation before a new diagnostic attempt.</summary>
-    public static void ResetLastWireEventId() => LastWireEventId = null;
+    private static readonly ConcurrentDictionary<string, AttemptResult> Attempts = new();
+
+    /// <summary>The per-attempt result for a captured original event id, or
+    /// null when the attempt never reached the wire path (dropped at the gate
+    /// or by the send budget).</summary>
+    public static AttemptResult? GetAttemptResult(string originalEventId) =>
+        Attempts.TryGetValue(originalEventId, out var result) ? result : null;
 
     public FilteringEnvelopeTransport(SentryOptions options, HttpClient httpClient, string release, string environment) : base(options)
     {
@@ -79,7 +92,14 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
         if (Interlocked.Exchange(ref _inFlight, 1) == 1) return;
         try
         {
-            LastWireEventId = null;
+            // Per-attempt correlation keyed by the original (never-sent) event id.
+            var attempt = new AttemptResult();
+            if (envelope.Header.TryGetValue("event_id", out var originalId) && originalId is not null)
+            {
+                // Bounded diagnostic bookkeeping, not persistence: keep the table small.
+                if (Attempts.Count > 64) Attempts.Clear();
+                Attempts[originalId.ToString()!] = attempt;
+            }
             var nowTicks = DateTimeOffset.UtcNow.UtcTicks;
             if (Volatile.Read(ref _attempts) >= MaxAttemptsPerProcess ||
                 nowTicks - Interlocked.Read(ref _lastAttemptTicks) < MinAttemptInterval.Ticks) return;
@@ -95,11 +115,13 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
                     using var request = CreateRequest(processedEnvelope);
                     using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     await HandleResponseAsync(response, processedEnvelope, cancellationToken).ConfigureAwait(false);
-                    // Only a completed exchange earns the per-attempt correlation
-                    // id; a dropped or failed attempt leaves it cleared.
-                    LastWireEventId = response.IsSuccessStatusCode
-                        ? (rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null)
-                        : null;
+                    // Only a completed exchange earns the rebuilt wire event id;
+                    // a dropped or failed attempt leaves the result untouched.
+                    if (response.IsSuccessStatusCode)
+                    {
+                        attempt.EventId = rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null;
+                        attempt.ExchangeCompleted = true;
+                    }
                 }
                 catch (Exception)
                 {

@@ -122,13 +122,15 @@ public static class CrashReporting
     /// end, gated to debug builds. It goes through the same boundary and is
     /// never disguised as a real crash. The generic gate rebuilds it to the same
     /// constants-only event as a real crash, so it is identified solely by the
-    /// wire event id shown after the attempt. Safe by construction: the gate
-    /// leaves no real exception content behind, so no real crash has to be
-    /// induced and no user data is at risk. Note this exercises the capture
-    /// path in a debug build only; it is not signed-release or unhandled-path
-    /// proof, which remains a separately held ingest test.
+    /// wire event id of THIS attempt (per-attempt correlation keyed by the
+    /// original event id; a concurrent real crash can never be mistaken for
+    /// it). Safe by construction: the gate leaves no real exception content
+    /// behind, so no real crash has to be induced and no user data is at risk.
+    /// Note this exercises the capture path in a debug build only; it is not
+    /// signed-release or unhandled-path proof, which remains a separately held
+    /// ingest test. Awaited off the UI thread by the caller.
     /// </summary>
-    public static string CaptureDiagnosticTestReport()
+    public static async Task<string> CaptureDiagnosticTestReportAsync()
     {
 #if !DEBUG
         return "disabled (non-debug build)";
@@ -136,16 +138,15 @@ public static class CrashReporting
         if (!_enabled) return "disabled (no DSN configured in this build)";
         try
         {
-            FilteringEnvelopeTransport.ResetLastWireEventId();
-            SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
-            SentrySdk.Flush(TimeSpan.FromSeconds(5));
+            var originalId = SentrySdk.CaptureEvent(new SentryEvent(new ScrobblixDiagnosticsTestException()));
+            await SentrySdk.FlushAsync(TimeSpan.FromSeconds(5)).ConfigureAwait(false);
             // Deliberately "attempted", never "sent": a local flush proves nothing
             // about remote receipt. Count it received only when the remote project
             // shows this exact wire event id.
-            var wireId = FilteringEnvelopeTransport.LastWireEventId;
-            return wireId is not null
-                ? "attempted; count as received only when remote receipt matches event id " + wireId
-                : "attempted; no wire event id recorded (send budget or queue). Nothing was persisted.";
+            var attempt = FilteringEnvelopeTransport.GetAttemptResult(originalId.ToString());
+            return attempt?.ExchangeCompleted == true && attempt.EventId is not null
+                ? "attempted; count as received only when remote receipt matches event id " + attempt.EventId
+                : "attempted; no completed exchange (send budget, rate limit or downstream drop). Nothing was persisted.";
         }
         catch (Exception error)
         {

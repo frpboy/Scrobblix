@@ -2,20 +2,25 @@ package dev.scrobblix.app
 
 import io.sentry.Hint
 import io.sentry.JsonSerializer
-import io.sentry.RequestDetails
 import io.sentry.SentryEnvelope
+import io.sentry.SentryItemType
 import io.sentry.SentryOptions
 import io.sentry.cache.IEnvelopeCache
 import io.sentry.hints.DiskFlushNotification
 import io.sentry.transport.ITransport
 import io.sentry.transport.RateLimiter
+import io.sentry.util.HintUtils
+import java.io.ByteArrayOutputStream
+import java.io.InputStream
 import java.net.HttpURLConnection
+import java.net.URI
+import java.time.ZonedDateTime
+import java.time.format.DateTimeFormatter
 import java.util.concurrent.Executors
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.RejectedExecutionException
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.atomic.AtomicLong
-import java.util.zip.GZIPOutputStream
 
 /**
  * Dedicated no-op envelope cache. This is deliberately NOT the SDK's
@@ -35,12 +40,17 @@ class ScrobblixNoOpEnvelopeCache:IEnvelopeCache {
 
 /**
  * Bounded send budget shared by every transport instance: at most one exchange
- * in flight (held for the whole actual HTTP exchange, never merely an enqueue),
- * a minimum interval between attempts, a hard per-process attempt cap and a
- * provider backoff cooldown. These bounds are process-local hygiene (they reset
- * on restart): within a process a crash loop cannot turn into a network or
- * quota loop. Exceeding the budget drops the report; there is no guaranteed
- * delivery.
+ * in flight (held for the whole actual HTTP exchange including cleanup, never
+ * merely an enqueue), a minimum interval between attempts, a hard per-process
+ * attempt cap and a provider backoff cooldown. These bounds are process-local
+ * hygiene (they reset on restart): within a process a crash loop cannot turn
+ * into a network or quota loop. Exceeding the budget drops the report; there
+ * is no guaranteed delivery.
+ *
+ * Honest bound: the in-flight slot is released only when the worker actually
+ * returns. There is no whole-request cancellation, so a permanently stuck
+ * exchange holds its slot for the rest of the process - later sends drop
+ * instead of queueing. That is the deliberate posture.
  */
 object SendBudget {
     internal var maxAttemptsPerProcess=20
@@ -50,8 +60,10 @@ object SendBudget {
     private val lastAttemptAtMs=AtomicLong(0)
     private val cooldownUntilMs=AtomicLong(0)
     private val inFlight=AtomicBoolean(false)
+    private val idleLock=Object()
     internal val attemptsSoFar:Int get()=attempts.get()
     fun tryAcquire():Boolean {
+        // Single in-flight exchange; busy drops instead of queueing.
         if (!inFlight.compareAndSet(false,true)) return false
         val now=android.os.SystemClock.elapsedRealtime()
         if (attempts.get()>=maxAttemptsPerProcess || now-lastAttemptAtMs.get()<minIntervalMs || now<cooldownUntilMs.get()) {
@@ -62,13 +74,26 @@ object SendBudget {
         lastAttemptAtMs.set(now)
         return true
     }
-    /** Provider backoff: honor Retry-After instead of ignoring rate limits. */
-    fun noteRateLimited(retryAfterHeader:String?) {
-        val seconds=retryAfterHeader?.toLongOrNull()
-        val ms=if (seconds!=null && seconds>0) seconds*1000 else rateLimitCooldownMs
-        cooldownUntilMs.set(android.os.SystemClock.elapsedRealtime()+minOf(ms,300_000L))
+    /** Provider backoff: the longest server rate-limit window wins. */
+    fun noteBackoffSeconds(seconds:Long) {
+        if (seconds<=0L) return
+        cooldownUntilMs.set(android.os.SystemClock.elapsedRealtime()+seconds*1000L)
     }
-    fun release() { inFlight.set(false) }
+    fun release() {
+        inFlight.set(false)
+        synchronized(idleLock) { idleLock.notifyAll() }
+    }
+    /** Blocks the caller until no exchange is in flight or the deadline passes. */
+    fun waitForIdle(timeoutMillis:Long) {
+        val deadline=android.os.SystemClock.elapsedRealtime()+timeoutMillis
+        synchronized(idleLock) {
+            while (inFlight.get()) {
+                val remaining=deadline-android.os.SystemClock.elapsedRealtime()
+                if (remaining<=0L) return
+                runCatching { idleLock.wait(minOf(remaining,100L)) }
+            }
+        }
+    }
     /** Test-only: reset shared state and bounds so cases stay isolated. */
     fun resetForTesting() {
         attempts.set(0)
@@ -84,7 +109,8 @@ object SendBudget {
 /**
  * Per-attempt wire correlation carried on the capture hint (never shared
  * mutable state): the transport writes the attempted event id and the exchange
- * outcome here, so the debug diagnostic reports only its own attempt.
+ * outcome here, and only after a completed exchange, so the debug diagnostic
+ * reports only its own attempt.
  */
 class WireAttemptResult {
     @Volatile var eventId:String?=null
@@ -93,88 +119,227 @@ class WireAttemptResult {
 
 /**
  * The final transport, independent of every hook. Every envelope is rebuilt by
- * [EnvelopeGate] into the constants-only generic event and posted to the
- * configured DSN on a single bounded worker: the send budget is held for the
- * whole actual exchange (including cleanup), redirects are off, any response
- * body is drained before completion, a total deadline cancels stuck exchanges,
- * and provider rate limits are honored through a cooldown. Client reports have
+ * [EnvelopeGate] into the constants-only generic event and serialized to fixed
+ * bytes BEFORE the worker handoff - the raw envelope and hint stay on the
+ * caller, so attachments or hint carriers can never cross to the network path.
+ * Only the byte array, the crash flush latch and the per-attempt result
+ * reference cross, the latter two for lifecycle signaling only (never read,
+ * never sent).
+ *
+ * A single bounded worker owns each exchange end to end: the send budget is
+ * held across the actual blocking POST including cleanup (never merely an
+ * enqueue), redirects are off, response rate-limit headers feed a cooldown,
+ * and the response body is drained with a fixed byte cap. Client reports have
  * no attach point because the SDK async transport is not in the path; they are
  * additionally disabled at init.
  *
- * The original crash flush latch is bridged ONLY to a successfully completed
- * exchange (never to enqueue, cache or failure), so the uncaught handler
- * neither times out on success nor sees a false flush.
+ * The original crash flush latch (DiskFlushNotification, the SDK's
+ * uncaught-exception hint) is marked ONLY after a delivered exchange (2xx at
+ * the HTTP layer - not a server-side storage receipt: a swallowed or truncated
+ * response body still counts as accepted, matching the SDK's own transport
+ * semantics). A failed or dropped send never marks the latch, so the uncaught
+ * handler sees an honest failure instead of a false flush.
  *
  * Delivery is deliberately best-effort and bounded: a failure drops the report
  * instead of retrying, and init pairs this with the dedicated no-op envelope
  * cache, so crash reports never accumulate. There is no guaranteed crash
- * delivery.
+ * delivery. Connect and read timeouts bound those phases only: DNS resolution
+ * and the request write use the JVM/socket defaults and there is no
+ * whole-request deadline, so a stuck exchange holds its budget slot until the
+ * worker actually returns (potentially for the process lifetime).
  */
 class FilteringEnvelopeTransport(
     private val options:SentryOptions,
-    private val requestDetails:RequestDetails,
     private val release:String,
-    private val environment:String
+    private val environment:String,
+    private val poster:(ByteArray)->Boolean = { bytes ->
+        // No DSN configured means nothing to send; the report is dropped.
+        options.dsn?.let { dsn -> defaultPost(options,dsn,bytes) } ?: false
+    }
 ):ITransport {
     private val serializer by lazy { JsonSerializer(SentryOptions.empty()) }
-    private val worker=Executors.newSingleThreadExecutor { task -> Thread(task,"scrobblix-crash-sender").apply { isDaemon=true } }
-    private val watchdog=Executors.newSingleThreadScheduledExecutor { task -> Thread(task,"scrobblix-crash-watchdog").apply { isDaemon=true } }
 
     override fun send(envelope:SentryEnvelope,hint:Hint) {
+        // The SDK's uncaught-exception integration attaches a flush latch and
+        // blocks the crashing thread on waitFlush() after capture returns. The
+        // typed SDK hint lives under the type-check wrapper; HintUtils recovers
+        // it (plain io.sentry.Hint never implements DiskFlushNotification).
+        val flushNotification=HintUtils.getSentrySdkHint(hint) as? DiskFlushNotification
+        // Gate: only an envelope carrying an error/crash event item is worth
+        // reporting; session, client-report, replay and attachment-only
+        // envelopes are dropped and never converted into an error.
+        if (envelope.items.none { it.header.type==SentryItemType.Event }) return
+        // Sanitize BEFORE handoff: only the fixed generic event's bytes ever
+        // reach the network path.
         val rebuilt=EnvelopeGate.rebuildToGenericEvent(envelope,release,environment) ?: return
-        if (!SendBudget.tryAcquire()) return
+        val wireEventId=rebuilt.header.eventId?.toString()
         val result=hint.getAs(RESULT_HINT_KEY,WireAttemptResult::class.java)
-        worker.execute {
-            var connection:HttpURLConnection?=null
-            // Total bound: covers DNS, connect, write, read and cleanup, not just
-            // the socket timeouts.
-            val cancel=watchdog.schedule({ try { connection?.disconnect() } catch (_:Throwable) {} },TOTAL_TIMEOUT_MS,TimeUnit.MILLISECONDS)
-            try {
-                val conn=(requestDetails.url.openConnection() as HttpURLConnection).apply {
-                    requestMethod="POST"
-                    doOutput=true
-                    instanceFollowRedirects=false
-                    connectTimeout=options.connectionTimeoutMillis
-                    readTimeout=options.readTimeoutMillis
-                    for ((key,value) in requestDetails.headers) setRequestProperty(key,value)
-                    setRequestProperty("Content-Encoding","gzip")
-                    setRequestProperty("Content-Type","application/x-sentry-envelope")
-                    setRequestProperty("Accept","application/json")
-                    setRequestProperty("Connection","close")
+        val bytes=try {
+            val out=ByteArrayOutputStream()
+            serializer.serialize(rebuilt,out)
+            out.toByteArray()
+        } catch (_:Throwable) { return }
+        // Local send budget: at most one exchange in flight, a minimum attempt
+        // interval, a per-process cap and the server backoff window. A burst is
+        // dropped, not queued.
+        if (!SendBudget.tryAcquire()) return
+        try {
+            worker.execute {
+                try {
+                    val delivered=runCatching { poster(bytes) }.getOrDefault(false)
+                    // Per-attempt correlation and the crash latch are completed
+                    // ONLY after a delivered exchange; a failed or dropped send
+                    // leaves both untouched.
+                    if (delivered) {
+                        result?.eventId=wireEventId
+                        result?.exchangeCompleted=true
+                        runCatching { flushNotification?.markFlushed() }
+                    }
+                } finally {
+                    SendBudget.release()
                 }
-                connection=conn
-                conn.outputStream.use { raw -> GZIPOutputStream(raw).use { serializer.serialize(rebuilt,it) } }
-                val code=conn.responseCode
-                // Drain any response body so the socket closes cleanly.
-                try { (if (code in 200..299) conn.inputStream else conn.errorStream)?.readBytes() } catch (_:Throwable) {}
-                if (code==429) SendBudget.noteRateLimited(conn.getHeaderField("Retry-After"))
-                result?.eventId=rebuilt.header.eventId?.toString()
-                result?.exchangeCompleted=code in 200..299
-                if (code in 200..299) (io.sentry.util.HintUtils.getSentrySdkHint(hint) as? DiskFlushNotification)?.markFlushed()
-            } catch (_:Throwable) {
-                // Deliberate drop: crash reporting must never crash or block the
-                // app, and a failed exchange never marks the crash latch.
-            } finally {
-                cancel.cancel(false)
-                try { connection?.disconnect() } catch (_:Throwable) {}
-                SendBudget.release()
             }
+        } catch (_:RejectedExecutionException) {
+            // Worker gone (process shutting down): release the budget and drop.
+            SendBudget.release()
         }
     }
 
-    override fun flush(timeoutMillis:Long) {
-        try { worker.submit {}.get(timeoutMillis,TimeUnit.MILLISECONDS) } catch (_:Throwable) {}
-    }
     override fun isHealthy():Boolean=true
+    // Rate limiting is enforced in SendBudget (minimum interval, per-process
+    // cap and the server backoff window), so no SDK RateLimiter is exposed.
     override fun getRateLimiter():RateLimiter?=null
-    override fun close() { shutdown() }
-    override fun close(isRestarting:Boolean) { shutdown() }
-    private fun shutdown() {
-        worker.shutdown()
-        watchdog.shutdown()
-    }
+    /** Waits, up to [timeoutMillis], for any in-flight exchange to finish. */
+    override fun flush(timeoutMillis:Long) { SendBudget.waitForIdle(timeoutMillis) }
+    override fun close() { SendBudget.waitForIdle(IDLE_WAIT_TIMEOUT_MS) }
+    override fun close(isRestarting:Boolean) { SendBudget.waitForIdle(IDLE_WAIT_TIMEOUT_MS) }
+
     companion object {
         internal const val RESULT_HINT_KEY="scrobblix.wireAttemptResult"
-        internal var TOTAL_TIMEOUT_MS=15_000L
+        private const val IDLE_WAIT_TIMEOUT_MS=10_000L
+        private const val MAX_BACKOFF_SECONDS=3_600L
+        private const val MAX_DRAIN_BYTES=8_192
+        // One daemon worker for the process lifetime: the transport is
+        // stateless per call, and permanently shutting a static executor would
+        // kill later init/send cycles (close() drains only).
+        private val worker=Executors.newSingleThreadExecutor { r ->
+            Thread(r,"scrobblix-crash-sender").apply { isDaemon=true }
+        }
+
+        /**
+         * Blocking POST of the final envelope bytes to the exact DSN endpoint:
+         * HTTPS only (plain HTTP solely for loopback test endpoints, which
+         * never leave the device), host/port taken verbatim from the DSN,
+         * redirects disabled, connect/read deadlines, the endpoint path built
+         * from the DSN and a code-owned auth header (SDK request headers are
+         * not reused). The connect/read timeouts bound those phases only: DNS
+         * resolution and the request write use the JVM/socket defaults, and
+         * there is no single whole-request deadline. Runs only on the worker
+         * thread. Returns true only on a 2xx response (accepted at the HTTP
+         * layer).
+         */
+        internal fun defaultPost(options:SentryOptions,dsn:String,bytes:ByteArray):Boolean {
+            var conn:HttpURLConnection?=null
+            try {
+                val uri=URI(dsn)
+                val host=uri.host ?: return false
+                val key=uri.userInfo ?: return false
+                val loopback=host=="127.0.0.1" || host=="::1" || host=="localhost"
+                if (uri.scheme!="https" && !(loopback && uri.scheme=="http")) return false
+                val port=if (uri.port>0) ":${uri.port}" else ""
+                val endpoint="${uri.scheme}://$host$port/api${uri.path}/envelope/"
+                conn=URI(endpoint).toURL().openConnection() as HttpURLConnection
+                conn.instanceFollowRedirects=false
+                conn.connectTimeout=options.connectionTimeoutMillis
+                conn.readTimeout=options.readTimeoutMillis
+                conn.requestMethod="POST"
+                conn.doOutput=true
+                conn.setRequestProperty("Content-Type","application/x-sentry-envelope")
+                conn.setRequestProperty(
+                    "X-Sentry-Auth",
+                    "Sentry sentry_version=7, sentry_client=scrobblix-boundary/1, sentry_key=$key"
+                )
+                conn.outputStream.use { it.write(bytes) }
+                val code=conn.responseCode
+                // Honor every rate-limit signal present on the response (max
+                // wins, one-hour truncate, 429 floor), before touching the body.
+                val backoffSeconds=computeBackoffSeconds(
+                    conn.getHeaderField("X-Sentry-Rate-Limits"),
+                    conn.getHeaderField("X-Sentry-Rate-Limit"),
+                    conn.getHeaderField("Retry-After"),
+                    System.currentTimeMillis()/1000L
+                )
+                when {
+                    backoffSeconds!=null -> SendBudget.noteBackoffSeconds(backoffSeconds)
+                    code==429 -> SendBudget.noteBackoffSeconds(SendBudget.rateLimitCooldownMs/1000L)
+                }
+                // Bounded drain: at most MAX_DRAIN_BYTES are read (bounded
+                // memory and a bounded read count; each read is individually
+                // bounded by the read timeout, so a slow trickle delays at most
+                // reads x timeout - there is no whole-request deadline), then
+                // the rest is cancelled via disconnect().
+                val stream=runCatching { conn.inputStream }.getOrNull() ?: conn.errorStream
+                stream?.let { discardBounded(it) }
+                return code in 200..299
+            } catch (_:Throwable) {
+                // Reporting must never crash the app or retry: drop.
+                return false
+            } finally {
+                try { conn?.disconnect() } catch (_:Throwable) {}
+            }
+        }
+
+        /**
+         * Longest server rate-limit window across every present signal:
+         * X-Sentry-Rate-Limits entries (plural, comma-separated),
+         * X-Sentry-Rate-Limit (legacy singular) and Retry-After (delta-seconds,
+         * fractional or HTTP-date). Max wins, truncated at one hour BEFORE the
+         * milliseconds conversion (no overflow). Fractional seconds round up.
+         * Pure and test-visible.
+         */
+        internal fun computeBackoffSeconds(
+            rateLimits:String?,
+            rateLimit:String?,
+            retryAfter:String?,
+            nowEpochSeconds:Long
+        ):Long? {
+            val candidates=mutableListOf<Long>()
+            rateLimits
+                ?.split(',')
+                ?.mapNotNull { parseSeconds(it.trim().substringBefore(':')) }
+                ?.let { candidates.addAll(it) }
+            rateLimit
+                ?.let { parseSeconds(it.substringBefore(':').trim()) }
+                ?.let { candidates.add(it) }
+            retryAfter
+                ?.let { header ->
+                    parseSeconds(header.trim())
+                        ?: runCatching {
+                            ZonedDateTime.parse(header,DateTimeFormatter.RFC_1123_DATE_TIME).toEpochSecond()-nowEpochSeconds
+                        }.getOrNull()
+                }
+                ?.let { candidates.add(it) }
+            return candidates
+                .filter { it>0L }
+                .maxOrNull()
+                ?.let { minOf(it,MAX_BACKOFF_SECONDS) }
+        }
+
+        private fun parseSeconds(raw:String):Long? =
+            raw.toDoubleOrNull()?.takeIf { it>0.0 }?.let { kotlin.math.ceil(it).toLong() }
+
+        private fun discardBounded(stream:InputStream) {
+            runCatching {
+                stream.use { s ->
+                    val buffer=ByteArray(4096)
+                    var remaining=MAX_DRAIN_BYTES
+                    while (remaining>0) {
+                        val n=s.read(buffer,0,minOf(buffer.size,remaining))
+                        if (n<=0) break
+                        remaining-=n
+                    }
+                }
+            }
+        }
     }
 }

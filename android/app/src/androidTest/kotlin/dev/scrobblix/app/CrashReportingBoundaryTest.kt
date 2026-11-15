@@ -16,8 +16,6 @@ import io.sentry.protocol.SentryException
 import io.sentry.protocol.SentryStackFrame
 import io.sentry.protocol.SentryStackTrace
 import io.sentry.protocol.User
-import io.sentry.transport.ITransport
-import io.sentry.transport.RateLimiter
 import io.sentry.SentryEnvelopeHeader
 import io.sentry.SentryEnvelopeItem
 import io.sentry.JsonObjectReader
@@ -95,21 +93,17 @@ class CrashReportingBoundaryTest {
     @Test fun fullPipelineEnvelopeCarriesOnlyTrustedContent() {
         // Direct bypass attempt: hostile data injected through the scope (user, tags,
         // breadcrumbs, attachment) and the event, run through a real SentryClient with
-        // the production filter, captured at the transport boundary. The envelope that
-        // would go to the wire must be a generic constants-only event.
-        val sent=CopyOnWriteArrayList<SentryEnvelope>()
-        val transport=object:ITransport {
-            override fun send(envelope:SentryEnvelope,hint:Hint) { sent.add(envelope) }
-            override fun flush(timeoutMillis:Long) {}
-            override fun getRateLimiter():RateLimiter? = null
-            override fun close() {}
-            override fun close(isRestarting:Boolean) {}
-        }
+        // the production filter, captured at the transport boundary. The bytes the
+        // poster would put on the wire must be a generic constants-only event.
+        SendBudget.resetForTesting()
+        val sentBytes=CopyOnWriteArrayList<String>()
         val options=SentryOptions().apply {
             dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1"
             // Exercise the production gate: the capture path ends at the real
-            // FilteringEnvelopeTransport wrapping the recorder.
-            setTransportFactory { _, _ -> FilteringEnvelopeTransport(transport,"scrobblix-android@test","android") }
+            // FilteringEnvelopeTransport with an injected poster.
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android", poster={ b -> sentBytes.add(String(b,Charsets.UTF_8)); true })
+            }
             setBeforeSend(CrashEventFilter)
         }
         val client=SentryClient(options)
@@ -120,17 +114,12 @@ class CrashReportingBoundaryTest {
         scope.addAttachment(Attachment(hostileMessage.toByteArray(),"history.json"))
         val hostile=hostileEvent()
         client.captureEvent(hostile,scope,Hint())
-        val eventEnvelope=sent.firstOrNull { envelope -> envelope.items.any { it.header.type==SentryItemType.Event } }
-        assertTrue("pipeline produced an event envelope",eventEnvelope!=null)
-        assertTrue(
-            "captured envelopes carry no attachment items",
-            sent.all { envelope -> envelope.items.all { it.header.type==SentryItemType.Event } }
-        )
-        val provenEnvelope=eventEnvelope!!
-        assertNull("gate drops the trace header",provenEnvelope.header.traceContext)
-        assertTrue("gate issues a fresh event id",provenEnvelope.header.eventId!=hostile.eventId)
-        val payload=String(provenEnvelope.items.first { it.header.type==SentryItemType.Event }.getData())
+        SendBudget.waitForIdle(5_000)
+        assertTrue("pipeline produced exactly one outbound wire body",sentBytes.size==1)
+        val payload=sentBytes[0]
         assertTrue("outbound event is the generic constants-only report",payload.contains(EnvelopeGate.GENERIC_TYPE))
+        assertTrue("gate issues a fresh event id, not the captured one",!payload.contains(hostile.eventId.toString()))
+        assertFalse("no trace context crosses the boundary",payload.contains("trace"))
         assertFalse("input exception type is input-derived and dropped",payload.contains("InvalidOperationException"))
         assertFalse("no stack frames cross the boundary",payload.contains("stacktrace") || payload.contains("frames"))
         assertNoHostileStrings(payload)
@@ -163,21 +152,21 @@ class CrashReportingBoundaryTest {
         assertFalse(bytes.contains("custom"))
         assertFalse(bytes.contains("ArtistX"))
         assertFalse(bytes.contains("InvalidOperationException"))
-        // The real wrapper drops non-event envelopes and forwards rebuilt ones.
-        val recorded=mutableListOf<SentryEnvelope>()
-        val recorder=object:ITransport {
-            override fun send(envelope:SentryEnvelope,hint:Hint) { recorded.add(envelope) }
-            override fun flush(timeoutMillis:Long) {}
-            override fun getRateLimiter():RateLimiter? = null
-            override fun close() {}
-            override fun close(isRestarting:Boolean) {}
-        }
-        val gate=FilteringEnvelopeTransport(recorder,"scrobblix-android@test","android")
+        // The real transport drops non-event envelopes and forwards rebuilt bytes.
+        SendBudget.resetForTesting()
+        val recorded=mutableListOf<String>()
+        val gate=FilteringEnvelopeTransport(
+            SentryOptions().apply { dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1" },
+            "scrobblix-android@test","android",
+            poster={ b -> recorded.add(String(b,Charsets.UTF_8)); true }
+        )
         gate.send(SentryEnvelope(hostileHeader,listOf(attachmentItem)),Hint())
         gate.send(hostileEnvelope,Hint())
+        SendBudget.waitForIdle(5_000)
         assertEquals(1,recorded.size)
-        assertTrue(recorded[0].items.all { it.header.type==SentryItemType.Event })
-        assertNull(recorded[0].header.traceContext)
+        assertTrue(recorded[0].contains(EnvelopeGate.GENERIC_TYPE))
+        assertFalse(recorded[0].contains("trace"))
+        assertNoHostileStrings(recorded[0])
     }
 
     private fun startLoopbackServer(receivedBody:java.util.concurrent.atomic.AtomicReference<ByteArray?>):Pair<java.net.ServerSocket,Thread> {
@@ -251,8 +240,8 @@ class CrashReportingBoundaryTest {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
             isSendClientReports=false
             envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
-            setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
             var dropNext=true
             setBeforeSend { event, _ -> if (dropNext) { dropNext=false; null } else event }
@@ -265,17 +254,20 @@ class CrashReportingBoundaryTest {
         reader.join(15_000)
         val body=receivedBody.get()
         assertTrue("loopback server received the wire body",body!=null)
-        val text=String(java.util.zip.GZIPInputStream(java.io.ByteArrayInputStream(body)).readBytes())
+        val text=String(body!!,Charsets.UTF_8)
         assertTrue("wire body is the generic constants-only event",text.contains(EnvelopeGate.GENERIC_TYPE))
         assertFalse("no client_report on the actual downstream wire after a discarded event",text.contains("client_report"))
         assertFalse("input exception type is input-derived and dropped",text.contains("InvalidOperationException"))
         assertNoHostileStrings(text)
     }
 
-    @Test fun neverCompletingDownstreamTimesOutAndReleasesBudget() {
-        // A downstream that never responds: the exchange times out, the latch is
-        // never marked, and the budget is released (not held forever by the hung
-        // attempt), so a later attempt past the interval can proceed.
+    @Test fun neverCompletingDownstreamNeverMarksLatchAndStaysBusy() {
+        // A downstream that accepts but never responds: the latch is never
+        // marked, the in-flight slot stays busy while the exchange is stuck (a
+        // concurrent attempt drops instead of queueing), and once the read
+        // timeout ends the exchange the worker returns and a later attempt can
+        // proceed. There is no whole-request cancellation by design; the read
+        // timeout is what bounds this exchange.
         SendBudget.resetForTesting()
         SendBudget.minIntervalMs=0
         val blackhole=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
@@ -287,8 +279,8 @@ class CrashReportingBoundaryTest {
             isSendClientReports=false
             connectionTimeoutMillis=2_000
             readTimeout=2_000
-            setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
         }
         val client=SentryClient(options)
@@ -296,16 +288,21 @@ class CrashReportingBoundaryTest {
         client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
         assertFalse("a downstream that never completes never marks the crash latch",latch.waitFlush())
         assertTrue("the attempt was counted",SendBudget.attemptsSoFar==1)
-        // Wait out the exchange total bound so in-flight ownership is released
-        // before proving a later attempt proceeds.
+        // The exchange is still stuck inside its read timeout: a concurrent
+        // attempt drops instead of queueing (busy is held until the worker
+        // actually returns).
+        client.captureEvent(hostileEvent())
+        assertTrue("busy drops, never queues, while the stuck exchange holds the slot",SendBudget.attemptsSoFar==1)
+        // Wait out the read timeout so in-flight ownership is released before
+        // proving a later attempt proceeds.
         Thread.sleep(4_000)
         val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
         val (server,reader)=startLoopbackServer(receivedBody)
         val options2=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
             isSendClientReports=false
-            setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
         }
         SentryClient(options2).captureEvent(hostileEvent())
@@ -323,8 +320,8 @@ class CrashReportingBoundaryTest {
             isSendClientReports=false
             connectionTimeoutMillis=500
             readTimeout=500
-            setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            setTransportFactory { opts, _ ->
+                FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }
         }
         val client=SentryClient(options)
