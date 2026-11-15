@@ -5,33 +5,46 @@ name: DISPOSABLE ingest synthetic prep
 # variable, no secret, no committed value. Artifacts upload with 1-day
 # retention and are never a release.
 #
-# Default mode (send_remote=false, also every push-triggered run): emulator
-# egress is blocked (iptables), the Windows dump process is firewalled to
-# loopback, and both wire dumps are loopback-only. NO remote event.
+# STAGE A (default; send_remote=false, also every push-triggered run):
+# builds the DSN-baked candidate artifacts and proves them WITHOUT any remote
+# event: emulator egress blocked (iptables), the Windows dump process
+# firewalled to loopback, both wire dumps loopback-only. The DSN-baked
+# desktop executable is built, hashed and uploaded but never run; on Android
+# the app cannot egress before the iptables guard is installed. Output:
+# artifact zips + sha256 manifests for custody/hash/config readback review.
 #
-# Gated send mode (send_remote=true, manual dispatch only, after reviewer
-# artifact clearance and project-owner readiness): exactly ONE real synthetic
-# crash event per platform (two total) to the baked DSN's ingest endpoint,
-# through the same production boundary; no retry - a non-delivered exchange
+# STAGE B (send_remote=true + qualified_run_id, manual dispatch only, after
+# reviewer artifact clearance and project-owner readiness): downloads the
+# EXACT artifact bytes from the named qualified stage-A run (hash-verified
+# against its manifests, no rebuild) and sends exactly ONE real synthetic
+# crash event per platform (two total) to the baked DSN's ingest endpoint
+# through the same production boundary. No retry - a non-delivered exchange
 # is a finding. The FINAL wire event id and timestamp are teed to the job log
-# for the project owner's exact receipt lookup.
+# (and, on Android, a pulled file) for the project owner's exact receipt
+# lookup. Stage B must run within the stage-A artifact retention (1 day).
 on:
   workflow_dispatch:
     inputs:
       dsn:
-        description: 'Public Sentry ingest DSN for this disposable test build only'
+        description: 'Stage A: public Sentry ingest DSN for this disposable test build only'
         type: string
         required: false
         default: ''
       send_remote:
-        description: 'GATED: one real synthetic send per platform (requires artifact clearance + project owner ready)'
+        description: 'STAGE B (GATED): send from qualified artifacts (requires artifact clearance + project owner ready)'
         type: boolean
         required: false
         default: false
+      qualified_run_id:
+        description: 'Stage B: run id of the qualified stage-A build whose exact artifacts are sent'
+        type: string
+        required: false
+        default: ''
   push:
     branches: [test/ingest-synthetic-prep-20261116]
 permissions:
   contents: read
+  actions: read  # stage B downloads the qualified stage-A artifacts via the API
 concurrency:
   group: ingest-synthetic-prep-${{ github.run_id }}
 jobs:
@@ -42,18 +55,19 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build debug APKs with ephemeral DSN
+      - name: STAGE A - build debug APKs with ephemeral DSN
+        if: ${{ !inputs.send_remote }}
         shell: bash
         env:
           SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
         run: |
           set -euo pipefail
-          if [ "${{ inputs.send_remote }}" = 'true' ] && [ -z "$SCROBBLIX_SENTRY_DSN" ]; then echo 'send_remote requires a DSN'; exit 1; fi
           if [ -n "$SCROBBLIX_SENTRY_DSN" ]; then echo "dsn-sha256: $(printf '%s' "$SCROBBLIX_SENTRY_DSN" | sha256sum | cut -d' ' -f1)"; else echo 'no DSN supplied: local-only bake (loopback dump unaffected)'; fi
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
-      - name: Hash artifacts and export merged manifest
+      - name: STAGE A - hash artifacts and export merged manifest
+        if: ${{ !inputs.send_remote }}
         shell: bash
         run: |
           set -euo pipefail
@@ -63,8 +77,39 @@ jobs:
           manifest=$(find android/app/build/intermediates/merged_manifest -name 'AndroidManifest.xml' | head -1)
           cp "$manifest" merged-AndroidManifest.xml
           grep -n 'usesCleartextTraffic\|networkSecurityConfig' merged-AndroidManifest.xml || true
-      - name: API36 emulator, loopback wire dump (egress blocked)
+      - name: STAGE B - download the qualified stage-A artifacts (exact bytes, no rebuild)
+        if: ${{ inputs.send_remote }}
         shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUALIFIED_RUN_ID: ${{ inputs.qualified_run_id }}
+        run: |
+          set -euo pipefail
+          test -n "$QUALIFIED_RUN_ID" || { echo 'send_remote requires qualified_run_id'; exit 1; }
+          api="https://api.github.com/repos/${{ github.repository }}"
+          art=$(curl -sf -H "Authorization: Bearer $GH_TOKEN" "$api/actions/runs/$QUALIFIED_RUN_ID/artifacts?per_page=100")
+          id=$(printf '%s' "$art" | jq -r '[.artifacts[] | select(.name=="ingest-prep-android-debug-DISPOSABLE" and (.expired|not)) | .id] | max // empty')
+          test -n "$id" || { echo 'qualified android artifact not found or expired'; exit 1; }
+          curl -sfL -H "Authorization: Bearer $GH_TOKEN" "$api/actions/artifacts/$id/zip" -o qualified-android.zip
+          mkdir -p qualified-android && unzip -o qualified-android.zip -d qualified-android >/dev/null
+          find qualified-android -type f | sort
+      - name: STAGE B - verify exact qualified bytes against the stage-A sha256 manifest
+        if: ${{ inputs.send_remote }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd qualified-android
+          while read -r hash path; do
+            f=$(find . -name "$(basename "$path")" | head -1)
+            test -n "$f" || { echo "MISSING from artifact: $path"; exit 1; }
+            actual=$(sha256sum "$f" | cut -d' ' -f1)
+            [ "$actual" = "$hash" ] || { echo "SHA MISMATCH: $path"; exit 1; }
+            echo "verified exact bytes: $(basename "$path") $hash"
+          done < android-artifact-sha256.txt
+      - name: Emulator run (stage A loopback dump, egress blocked / stage B gated single send)
+        shell: bash
+        env:
+          SCROBBLIX_SEND_REMOTE: ${{ inputs.send_remote }}
         run: |
           set -euo pipefail
           export JAVA_HOME="$JAVA_HOME_17_X64"
@@ -88,7 +133,6 @@ jobs:
             sleep 2
           done
           if [ "$booted" != true ]; then tail -80 /tmp/scrobblix-dump-emulator.log; exit 1; fi
-          # No remote egress from the emulator: the dump is loopback-only.
           # adb root races adbd startup on fresh boots ('unable to connect for
           # root: closed'); retry until adbd comes back as root.
           adb_root_ok=false
@@ -105,24 +149,27 @@ jobs:
             sleep 2
           done
           if [ "$booted" != true ]; then echo 'boot lost after adb root'; exit 1; fi
-          # No remote egress from the emulator in the default dump lane; the
-          # gated send mode (send_remote=true) skips this block so the ONE
-          # synthetic event can reach the baked DSN's ingest endpoint.
-          if [ "${{ inputs.send_remote }}" != 'true' ]; then
-            adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
-            adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
-          fi
-          adb install -r android/app/build/outputs/apk/debug/app-debug.apk >/dev/null
-          adb install -r android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk >/dev/null
-          if [ "${{ inputs.send_remote }}" = 'true' ]; then
+          if [ "$SCROBBLIX_SEND_REMOTE" = 'true' ]; then
+            # STAGE B: install the EXACT qualified stage-A bytes. No iptables
+            # block: the ONE synthetic event must reach the baked endpoint.
+            apk=$(find qualified-android -name 'app-debug.apk' | head -1)
+            testapk=$(find qualified-android -name 'app-debug-androidTest.apk' | head -1)
             testclass="dev.scrobblix.app.RemoteSendTest"
           else
+            # STAGE A: no remote egress from the emulator - the dump is
+            # loopback-only, and the baked app cannot reach any external path.
+            adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+            adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
+            apk=$(ls android/app/build/outputs/apk/debug/*.apk)
+            testapk=$(ls android/app/build/outputs/apk/androidTest/debug/*.apk)
             testclass="dev.scrobblix.app.WireDumpTest"
           fi
+          adb install -r "$apk" >/dev/null
+          adb install -r "$testapk" >/dev/null
           result=$(adb shell am instrument -w -r -e class "$testclass" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
           printf '%s\n' "$result"
           printf '%s\n' "$result" | grep -F 'OK (1 test)'
-          if [ "${{ inputs.send_remote }}" = 'true' ]; then
+          if [ "$SCROBBLIX_SEND_REMOTE" = 'true' ]; then
             adb shell run-as com.frpboy.scrobblix cat files/scrobblix-remotesend-android.txt | tee scrobblix-remotesend-android.txt
             test -s scrobblix-remotesend-android.txt
           else
@@ -130,6 +177,7 @@ jobs:
             test -s wiredump-android.txt
           fi
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !inputs.send_remote }}
         with:
           if-no-files-found: error
           retention-days: 1
@@ -140,7 +188,6 @@ jobs:
             android-artifact-sha256.txt
             merged-AndroidManifest.xml
             wiredump-android.txt
-            scrobblix-remotesend-android.txt
   windows-debug-build:
     runs-on: windows-latest
     timeout-minutes: 30
@@ -151,14 +198,15 @@ jobs:
       - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
         with:
           dotnet-version: 10.0.x
-      - name: Restore
+      - name: STAGE A - restore
+        if: ${{ !inputs.send_remote }}
         run: dotnet restore Scrobblix.slnx
-      - name: Build Desktop debug with ephemeral DSN
+      - name: STAGE A - build Desktop debug with ephemeral DSN
+        if: ${{ !inputs.send_remote }}
         shell: pwsh
         env:
           SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
         run: |
-          if ("${{ inputs.send_remote }}" -eq 'true' -and -not $env:SCROBBLIX_SENTRY_DSN) { throw 'send_remote requires a DSN' }
           if ($env:SCROBBLIX_SENTRY_DSN) {
             "dsn-sha256: " + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
           } else { 'no DSN supplied: local-only bake (in-memory dump unaffected)' }
@@ -173,7 +221,8 @@ jobs:
             if ((Select-String -Path $generated.FullName -Pattern 'sentry.io' -Quiet)) { throw 'Unexpected DSN value baked into generated source' }
             'generated DSN source is empty as expected'
           }
-      - name: Run loopback wire dump (process firewalled to loopback only)
+      - name: STAGE A - loopback wire dump (process firewalled to loopback only)
+        if: ${{ !inputs.send_remote }}
         shell: pwsh
         run: |
           dotnet build tests/Scrobblix.WireDump/Scrobblix.WireDump.csproj --configuration Debug
@@ -225,30 +274,77 @@ jobs:
           & $exe.FullName --probe-external open
           if ($LASTEXITCODE -ne 0) { throw 'Post-removal external control failed - the under-guard failure cannot be attributed to the rules' }
           if (-not (Test-Path wire-dump-windows.txt)) { throw 'Dump file missing' }
-      - name: GATED single remote send (dispatch send_remote=true only)
-        if: ${{ inputs.send_remote }}
-        shell: pwsh
-        run: |
-          # Exactly ONE real synthetic event to the baked DSN's endpoint via
-          # the production boundary. No retry: a failure here is a finding.
-          $exe = Get-ChildItem -Recurse tests/Scrobblix.WireDump/bin/Debug -Filter Scrobblix.WireDump.exe | Select-Object -First 1
-          & $exe.FullName --send-remote
-          if ($LASTEXITCODE -ne 0) { throw "Remote send did not complete (exit $LASTEXITCODE) - finding, no retry" }
-      - name: Hash artifacts and resolve dependency manifest
+      - name: STAGE A - hash artifacts and resolve dependency manifests
+        if: ${{ !inputs.send_remote }}
         shell: pwsh
         run: |
           $out = 'src/Scrobblix.Desktop/bin/Debug'
           $exe = Get-ChildItem -Recurse $out -Filter *.exe | Select-Object -First 1
-          "resolved executable: " + $exe.FullName
+          "resolved executable: " + $exe.FullName + ' (built, hashed, never run in stage A)'
           Get-ChildItem -Recurse $out -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath((Resolve-Path $out).Path, $_.FullName) } | Tee-Object windows-deps-manifest-sha256.txt
+          $wd = 'tests/Scrobblix.WireDump/bin/Debug'
+          Get-ChildItem -Recurse $wd -File | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + [IO.Path]::GetRelativePath((Resolve-Path $wd).Path, $_.FullName) } | Tee-Object windows-wiredump-manifest-sha256.txt
+      - name: STAGE B - download the qualified stage-A artifacts (exact bytes, no rebuild)
+        if: ${{ inputs.send_remote }}
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          QUALIFIED_RUN_ID: ${{ inputs.qualified_run_id }}
+        run: |
+          if (-not $env:QUALIFIED_RUN_ID) { throw 'send_remote requires qualified_run_id' }
+          $api = "https://api.github.com/repos/${{ github.repository }}"
+          $art = Invoke-RestMethod -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/runs/$env:QUALIFIED_RUN_ID/artifacts?per_page=100"
+          $id = ($art.artifacts | Where-Object { $_.name -eq 'ingest-prep-windows-debug-DISPOSABLE' -and -not $_.expired } | Select-Object -First 1).id
+          if (-not $id) { throw 'qualified windows artifact not found or expired' }
+          Invoke-WebRequest -Headers @{ Authorization = "Bearer $env:GH_TOKEN" } "$api/actions/artifacts/$id/zip" -OutFile qualified-windows.zip
+          Expand-Archive qualified-windows.zip -DestinationPath qualified-windows -Force
+          Get-ChildItem -Recurse qualified-windows -File | ForEach-Object { $_.FullName }
+      - name: STAGE B - verify exact qualified bytes against the stage-A sha256 manifests
+        if: ${{ inputs.send_remote }}
+        shell: pwsh
+        run: |
+          $failed = $false
+          foreach ($manifest in @('windows-deps-manifest-sha256.txt', 'windows-wiredump-manifest-sha256.txt')) {
+            $m = Get-ChildItem -Recurse qualified-windows -Filter $manifest | Select-Object -First 1
+            if (-not $m) { throw "manifest missing from artifact: $manifest" }
+            foreach ($line in Get-Content $m.FullName) {
+              if (-not $line.Trim()) { continue }
+              $hash, $rel = $line -split '\s+', 2
+              # The Desktop and WireDump bin trees share dependency names; a
+              # manifest line passes when ANY downloaded file of that name
+              # carries the exact stage-A bytes. Any unmatched line refuses
+              # the send (fails closed).
+              $ok = $false
+              foreach ($c in (Get-ChildItem -Recurse qualified-windows -Filter (Split-Path $rel -Leaf))) {
+                if ((Get-FileHash $c.FullName -Algorithm SHA256).Hash -eq $hash) { $ok = $true; break }
+              }
+              if ($ok) { "verified exact bytes: $rel $hash" } else { "MISSING or MISMATCHED: $rel"; $failed = $true }
+            }
+          }
+          if ($failed) { throw 'qualified byte verification failed - refusing to send' }
+      - name: STAGE B - GATED single remote send from the verified qualified bytes
+        if: ${{ inputs.send_remote }}
+        shell: pwsh
+        run: |
+          # Exactly ONE real synthetic event to the baked DSN's endpoint via
+          # the production boundary, from the EXACT qualified stage-A bytes.
+          # No retry: a failure here is a finding.
+          $exe = Get-ChildItem -Recurse qualified-windows -Filter Scrobblix.WireDump.exe | Select-Object -First 1
+          if (-not $exe) { throw 'qualified WireDump exe missing' }
+          & $exe.FullName --send-remote
+          if ($LASTEXITCODE -ne 0) { throw "Remote send did not complete (exit $LASTEXITCODE) - finding, no retry" }
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: ${{ !inputs.send_remote }}
         with:
           if-no-files-found: error
           retention-days: 1
           name: ingest-prep-windows-debug-DISPOSABLE
           path: |
             src/Scrobblix.Desktop/bin/Debug/**
+            tests/Scrobblix.WireDump/bin/Debug/**
             windows-deps-manifest-sha256.txt
+            windows-wiredump-manifest-sha256.txt
             wire-dump-windows.txt
-    # The gated send tees its FINAL wire event line to the windows job log
-    # (step above); no extra file artifact is needed on this platform.
+    # Stage B tees its FINAL wire event line to the windows job log; Android's
+    # stage-B readback file is teed to the android job log (1-day artifacts are
+    # stage-A custody objects, so stage B uploads nothing).
