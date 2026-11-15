@@ -44,6 +44,7 @@ public sealed partial class MainWindow
         }
         await Task.Delay(500);
         await QualifyHistoryRefreshAsync(output, Capture);
+        await QualifyUpdateCheckAsync(output, Capture);
         var valid = Path.Combine(fixtures, "valid-1x1.png");
         var invalid = Path.Combine(fixtures, "oversize-dimensions.png");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, valid);
@@ -131,6 +132,18 @@ public sealed partial class MainWindow
         // Persist completed assertions/captures first; process exit is checked by the runner.
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI states and captures; close requested during pending load");
         Close();
+    }
+    private async Task QualifyUpdateCheckAsync(string output, Func<string, Task> capture)
+    {
+        ShowDestination("about");
+        await Task.Delay(400);
+        if (CheckUpdatesButton is null || UpdateCheckStatusText is null)
+            throw new InvalidOperationException("Update check UI missing from About");
+        if (UpdateCheckStatusText.Text != "No update check has been run this session.")
+            throw new InvalidOperationException("Unexpected initial update status");
+        if (!CheckUpdatesButton.IsEnabled) throw new InvalidOperationException("Update check button not actionable");
+        await capture("update-check-about");
+        ShowDestination("home");
     }
     private async Task QualifyHistoryRefreshAsync(string output, Func<string, Task> capture)
     {
