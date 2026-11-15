@@ -20,6 +20,10 @@ class OnboardingRuntimeTest {
             .executeShellCommand("screencap -p /sdcard/Download/scrobblix-$name.png").use {
             android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes() }
     }
+    private fun tap(label:String) {
+        ui.onNodeWithText(label).performScrollTo().performClick()
+        ui.waitForIdle()
+    }
     @Test fun guidedFirstRunCompletesAndIsSkippedAfterwards() {
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         val store=(context.applicationContext as ScrobblixApp).store
@@ -33,23 +37,23 @@ class OnboardingRuntimeTest {
             ui.onNodeWithText("Step 1 of 4: Welcome").assertIsDisplayed()
             ui.onNodeWithText("Screenshots and recent-app previews are enabled.",substring=true).assertIsDisplayed()
             capture("onboarding-welcome")
-            ui.onNodeWithText("Next").performClick()
+            tap("Next")
             ui.onNodeWithText("Step 2 of 4: Media access").assertIsDisplayed()
             ui.onNodeWithText("Open media access settings").assertIsDisplayed()
             capture("onboarding-media-access")
-            ui.onNodeWithText("Back").performClick()
+            tap("Back")
             ui.onNodeWithText("Step 1 of 4: Welcome").assertIsDisplayed()
-            ui.onNodeWithText("Next").performClick()
-            ui.onNodeWithText("Next").performClick()
+            tap("Next")
+            tap("Next")
             ui.onNodeWithText("Step 3 of 4: Connect").assertIsDisplayed()
             ui.onNodeWithText("your password stays on Last.fm",substring=true).assertIsDisplayed()
             capture("onboarding-connect")
-            ui.onNodeWithText("Next").performClick()
+            tap("Next")
             ui.onNodeWithText("Step 4 of 4: Finish").assertIsDisplayed()
             ui.onNodeWithText("Tracking starts paused.",substring=true).assertIsDisplayed()
             capture("onboarding-finish")
             assertFalse(prefs.getBoolean(OnboardingState.DONE_KEY,false))
-            ui.onNodeWithText("Start using Scrobblix").performClick()
+            tap("Start using Scrobblix")
             ui.waitForIdle()
             assertEquals("Listen",destination)
             assertTrue(prefs.getBoolean(OnboardingState.DONE_KEY,false))
@@ -65,9 +69,9 @@ class OnboardingRuntimeTest {
         try {
             var destination:String?=null
             ui.setContent { MaterialTheme { OnboardingFlow(store) { destination=it } } }
-            ui.onNodeWithText("Next").performClick()
-            ui.onNodeWithText("Next").performClick()
-            ui.onNodeWithText("Connect in Settings").performClick()
+            tap("Next")
+            tap("Next")
+            tap("Connect in Settings")
             ui.waitForIdle()
             assertEquals("Settings",destination)
             assertTrue(store.preferences.getBoolean(OnboardingState.DONE_KEY,false))

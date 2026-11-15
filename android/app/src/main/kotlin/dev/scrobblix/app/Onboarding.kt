@@ -23,11 +23,14 @@ object OnboardingState {
 fun OnboardingFlow(store:AppStore,onFinished:(String)->Unit) {
     var step by remember { mutableStateOf(0) }
     val stepNames=listOf("Welcome","Media access","Connect","Finish")
+    val scroll=rememberScrollState()
+    // Return to the top on every step change so the step header is always visible.
+    LaunchedEffect(step) { scroll.scrollTo(0) }
     fun finish(destination:String) {
         store.preferences.edit().putBoolean(OnboardingState.DONE_KEY,true).commit()
         onFinished(destination)
     }
-    Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(rememberScrollState()),
+    Column(Modifier.safeDrawingPadding().padding(horizontal=20.dp).verticalScroll(scroll),
         verticalArrangement=Arrangement.spacedBy(16.dp)) {
         Spacer(Modifier.height(8.dp))
         Text("Scrobblix",style=MaterialTheme.typography.headlineLarge)

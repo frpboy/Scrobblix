@@ -46,7 +46,7 @@ class UpdateVerificationTest {
         AppUpdater(context,fetcher,downloader)
 
     @Test
-    fun downloadVerifiesRealHashAndSucceedsOnMatch()=kotlinx.coroutines.runBlocking {
+    fun downloadVerifiesRealHashAndSucceedsOnMatch():Unit=kotlinx.coroutines.runBlocking {
         val content="scrobblix-apk-bytes".toByteArray()
         val sha=java.security.MessageDigest.getInstance("SHA-256").digest(content).joinToString(""){"%02x".format(it)}
         val u=updater(
@@ -58,7 +58,7 @@ class UpdateVerificationTest {
     }
 
     @Test
-    fun downloadRejectsHashMismatchAndDeletesFile()=kotlinx.coroutines.runBlocking {
+    fun downloadRejectsHashMismatchAndDeletesFile():Unit=kotlinx.coroutines.runBlocking {
         val content="tampered".toByteArray()
         val wrong="00".repeat(32)
         val u=updater(
@@ -72,7 +72,7 @@ class UpdateVerificationTest {
     }
 
     @Test
-    fun downloadRejectsMissingChecksumEntry()=kotlinx.coroutines.runBlocking {
+    fun downloadRejectsMissingChecksumEntry():Unit=kotlinx.coroutines.runBlocking {
         val u=updater(
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"abcd  Some-Other-App.apk\n".toByteArray()) },
             downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
@@ -82,7 +82,7 @@ class UpdateVerificationTest {
     }
 
     @Test
-    fun downloadRejectsUnsafeAssetName()=kotlinx.coroutines.runBlocking {
+    fun downloadRejectsUnsafeAssetName():Unit=kotlinx.coroutines.runBlocking {
         val bad=update().copy(apk=ReleaseAsset("../evil.apk","https://github.com/frpboy/Scrobblix/releases/download/x/app.apk",100))
         val u=updater(fetcher={ _,_ -> AppUpdater.FetchResult(200,ByteArray(0)) },downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
         var threw=false
