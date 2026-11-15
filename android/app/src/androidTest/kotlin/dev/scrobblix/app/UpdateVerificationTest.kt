@@ -52,7 +52,7 @@ class UpdateVerificationTest {
         val u=updater(
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"$sha  Scrobblix-Android-universal.apk\n".toByteArray()) },
             downloader={ _,out,_,_ -> out.writeBytes(content) })
-        val file=u.download(update(sha)){}
+        val file=u.download(update(sha)){ _, _ -> }
         assertTrue(file.readBytes().contentEquals(content))
         file.delete()
     }
@@ -65,7 +65,7 @@ class UpdateVerificationTest {
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"$wrong  Scrobblix-Android-universal.apk\n".toByteArray()) },
             downloader={ _,out,_,_ -> out.writeBytes(content) })
         var threw=false
-        try { u.download(update(wrong)){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
+        try { u.download(update(wrong)){ _, _ -> } } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
         val dir=File(context.cacheDir,"updates")
         assertTrue(dir.listFiles()?.none { it.name=="Scrobblix-Android-universal.apk" } ?: true)
@@ -77,7 +77,7 @@ class UpdateVerificationTest {
             fetcher={ _,_ -> AppUpdater.FetchResult(200,"abcd  Some-Other-App.apk\n".toByteArray()) },
             downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
         var threw=false
-        try { u.download(update("abcd")){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
+        try { u.download(update("abcd")){ _, _ -> } } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
     }
 
@@ -86,7 +86,7 @@ class UpdateVerificationTest {
         val bad=update().copy(apk=ReleaseAsset("../evil.apk","https://github.com/frpboy/Scrobblix/releases/download/x/app.apk",100))
         val u=updater(fetcher={ _,_ -> AppUpdater.FetchResult(200,ByteArray(0)) },downloader={ _,out,_,_ -> out.writeBytes("x".toByteArray()) })
         var threw=false
-        try { u.download(bad){} } catch(e:AppUpdater.UpdateFailure) { threw=true }
+        try { u.download(bad){ _, _ -> } } catch(e:AppUpdater.UpdateFailure) { threw=true }
         assertTrue(threw)
     }
 
