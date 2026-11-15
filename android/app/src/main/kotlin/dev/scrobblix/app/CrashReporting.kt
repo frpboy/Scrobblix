@@ -95,16 +95,20 @@ object CrashReporting {
     fun captureDiagnosticTestReport():String {
         if (!BuildConfig.DEBUG) return "Test reports are only available in debug builds."
         if (!enabled) return "Crash reporting is not active in this build."
-        FilteringEnvelopeTransport.clearWireEventId()
-        val worker=kotlin.concurrent.thread {
-            io.sentry.Sentry.captureException(ScrobblixDiagnosticsTestException())
-        }
-        worker.join(30_000)
-        val wireId=FilteringEnvelopeTransport.lastWireEventId
+        // Attempt-specific correlation carried on the hint: the result and the
+        // crash latch belong to THIS attempt only. Call off the UI thread: the
+        // wait is bounded by the latch timeout.
+        val result=WireAttemptResult()
+        val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(20_000,io.sentry.NoOpLogger.getInstance())
+        val hint=io.sentry.util.HintUtils.createWithTypeCheckHint(latch)
+        hint.set(FilteringEnvelopeTransport.RESULT_HINT_KEY,result)
+        io.sentry.Sentry.captureException(ScrobblixDiagnosticsTestException(),hint)
+        latch.waitFlush()
+        val wireId=result.eventId
         // Deliberately "attempted", never "sent": only a remote receipt matching
         // this exact wire event id counts as received.
-        return if (wireId!=null) "Attempted; count as received only when remote receipt matches event id $wireId. Carries no listening data, account names or device content."
-        else "Attempted; no wire event id recorded (send budget or downstream drop). Nothing was persisted."
+        return if (result.exchangeCompleted && wireId!=null) "Attempted; count as received only when remote receipt matches event id $wireId. Carries no listening data, account names or device content."
+        else "Attempted; no completed exchange (send budget, rate limit or downstream drop). Nothing was persisted."
     }
 }
 

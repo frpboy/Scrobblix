@@ -343,7 +343,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                 if(BuildConfig.DEBUG) {
                     Text("Diagnostics (debug builds only)",style=MaterialTheme.typography.titleSmall)
                     Text("Sends one synthetic crash report through the crash-reporting boundary. The outbound event is rebuilt from fixed placeholders before anything leaves the device: no listening data, account names, exception content or device details.")
-                    Button(onClick={message=CrashReporting.captureDiagnosticTestReport()}) { Text("Send synthetic test crash report") }
+                    Button(onClick={scope.launch(kotlinx.coroutines.Dispatchers.IO) { message=CrashReporting.captureDiagnosticTestReport() }}) { Text("Send synthetic test crash report") }
                 }
             }
         }

@@ -90,14 +90,16 @@ public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
             var processedEnvelope = ProcessEnvelope(rebuilt);
             if (processedEnvelope.Items.Count > 0)
             {
-                // Only an envelope that survived rate limiting and is about to hit
-                // the wire earns the per-attempt correlation id.
-                LastWireEventId = rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null;
                 try
                 {
                     using var request = CreateRequest(processedEnvelope);
                     using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
                     await HandleResponseAsync(response, processedEnvelope, cancellationToken).ConfigureAwait(false);
+                    // Only a completed exchange earns the per-attempt correlation
+                    // id; a dropped or failed attempt leaves it cleared.
+                    LastWireEventId = response.IsSuccessStatusCode
+                        ? (rebuilt.Header.TryGetValue("event_id", out var id) ? id?.ToString() : null)
+                        : null;
                 }
                 catch (Exception)
                 {

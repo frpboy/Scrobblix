@@ -295,7 +295,10 @@ class CrashReportingBoundaryTest {
         val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(1_000,io.sentry.NoOpLogger.getInstance())
         client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
         assertFalse("a downstream that never completes never marks the crash latch",latch.waitFlush())
-        assertTrue("budget released after the timed-out exchange",SendBudget.attemptsSoFar==1)
+        assertTrue("the attempt was counted",SendBudget.attemptsSoFar==1)
+        // Wait out the exchange total bound so in-flight ownership is released
+        // before proving a later attempt proceeds.
+        Thread.sleep(4_000)
         val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
         val (server,reader)=startLoopbackServer(receivedBody)
         val options2=SentryOptions().apply {
@@ -318,14 +321,16 @@ class CrashReportingBoundaryTest {
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:1/1"
             isSendClientReports=false
-            connectionTimeoutMillis=1_000
-            readTimeout=1_000
+            connectionTimeoutMillis=500
+            readTimeout=500
             setTransportFactory { opts, requestDetails ->
                 FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
             }
         }
         val client=SentryClient(options)
-        repeat(5) { client.captureEvent(hostileEvent()) }
+        // Fast-failing loopback target: each attempt completes quickly, so five
+        // captures produce exactly the capped number of attempts.
+        repeat(5) { client.captureEvent(hostileEvent()); Thread.sleep(400) }
         assertEquals("per-process attempt cap holds",3,SendBudget.attemptsSoFar)
         SendBudget.resetForTesting()
         client.captureEvent(hostileEvent())
@@ -337,9 +342,16 @@ class CrashReportingBoundaryTest {
         // The real Android init path with the exact production configuration
         // helper: after a capture and a wait, the dedicated no-op cache must
         // survive AndroidOptionsInitializer and nothing may be persisted.
+        // Recursive snapshot (path+size+hash) catches nested writes.
+        SendBudget.resetForTesting()
+        fun snapshot(dir:java.io.File):Map<String,String> =
+            if (!dir.exists()) emptyMap()
+            else dir.walkTopDown().filter { it.isFile }.associate { f ->
+                f.relativeTo(dir).path to (f.length().toString()+":"+java.security.MessageDigest.getInstance("SHA-256").digest(f.readBytes()).joinToString("") { "%02x".format(it) })
+            }
         val context=androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
         val sentryDir=java.io.File(context.cacheDir,"sentry")
-        val before=sentryDir.listFiles()?.toList() ?: emptyList()
+        val before=snapshot(sentryDir)
         var used:io.sentry.android.core.SentryAndroidOptions?=null
         io.sentry.android.core.SentryAndroid.init(context) { options ->
             CrashReporting.applyHardening(options,"http://00000000000000000000000000000000@127.0.0.1:1/1")
@@ -350,8 +362,8 @@ class CrashReportingBoundaryTest {
         io.sentry.Sentry.flush(2_000)
         assertTrue("dedicated no-op cache survives Android init", used!!.envelopeDiskCache is ScrobblixNoOpEnvelopeCache)
         assertTrue("cache reports nothing persisted", used!!.envelopeDiskCache.iterator().hasNext()==false)
-        val after=sentryDir.listFiles()?.toList() ?: emptyList()
-        assertTrue("no cache or outbox writes after capture", after.size==before.size)
+        assertTrue("budget was not suppressed (the probe really attempted a send)", SendBudget.attemptsSoFar>=1)
+        assertEquals("no cache or outbox writes after capture", before, snapshot(sentryDir))
         io.sentry.Sentry.close()
     }
 }

@@ -111,7 +111,10 @@ jobs:
           # proves ScrobblixSentryDsn.Value carries the value, not just some string.
           $asm = [Reflection.Assembly]::LoadFrom($assembly.FullName)
           $dsnType = $asm.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
-          $actual = $dsnType.GetField("Value", [Reflection.BindingFlags]"NonPublic,Static").GetRawConstantValue()
+          if (-not $dsnType) { throw "Generated DSN type missing from the compiled assembly" }
+          $dsnField = $dsnType.GetField("Value", [Reflection.BindingFlags]"Public,Static")
+          if (-not $dsnField) { throw "Generated DSN constant field missing" }
+          $actual = $dsnField.GetRawConstantValue()
           if ($actual -ne $env:SCROBBLIX_SENTRY_DSN) { throw "Compiled DSN constant mismatch" }
 
       - name: Validate empty DSN build stays empty (isolated outputs)
@@ -129,7 +132,10 @@ jobs:
           if (-not $assembly) { throw "Empty build produced no Scrobblix.Windows.dll" }
           $asm = [Reflection.Assembly]::LoadFrom($assembly.FullName)
           $dsnType = $asm.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
-          $actual = $dsnType.GetField("Value", [Reflection.BindingFlags]"NonPublic,Static").GetRawConstantValue()
+          if (-not $dsnType) { throw "Generated DSN type missing from the compiled assembly" }
+          $dsnField = $dsnType.GetField("Value", [Reflection.BindingFlags]"Public,Static")
+          if (-not $dsnField) { throw "Generated DSN constant field missing" }
+          $actual = $dsnField.GetRawConstantValue()
           if ($actual -ne "") { throw "Empty build compiled a nonempty DSN constant" }
 
       - name: Validate native broker client contracts (synthetic only)
