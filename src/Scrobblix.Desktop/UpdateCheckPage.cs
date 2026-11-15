@@ -28,6 +28,14 @@ public sealed partial class MainWindow : IDisposable
         GC.SuppressFinalize(this);
     }
 
+    /// <summary>Status updates are dropped once the window is closed or the update chain is disposed,
+    /// so cancelled continuations never touch dead UI or surface shutdown noise.</summary>
+    private void SetUpdateStatus(string message)
+    {
+        if (_isClosed || _updateCheckDisposed) return;
+        UpdateCheckStatusText.Text = message;
+    }
+
     private static string? BuildSourceRevision()
     {
         var information = typeof(MainWindow).Assembly.GetCustomAttribute<AssemblyInformationalVersionAttribute>()?.InformationalVersion;
@@ -39,19 +47,19 @@ public sealed partial class MainWindow : IDisposable
         if (_updateCheckInFlight) return;
         _updateCheckInFlight = true;
         CheckUpdatesButton.IsEnabled = false;
-        UpdateCheckStatusText.Text = "Checking the official release channel…";
+        SetUpdateStatus("Checking the official release channel…");
         try
         {
             var latest = await _updateCheck.FindLatestAsync(_updateCheckCancellation.Token);
             if (latest is null)
             {
-                UpdateCheckStatusText.Text = "No published Windows release was found. Your build is unchanged.";
+                SetUpdateStatus("No published Windows release was found. Your build is unchanged.");
                 return;
             }
             var revision = BuildSourceRevision();
             if (revision is null)
             {
-                UpdateCheckStatusText.Text = $"Latest published preview: {latest.Tag}. This build does not record its source revision, so it cannot tell whether it is current.";
+                SetUpdateStatus($"Latest published preview: {latest.Tag}. This build does not record its source revision, so it cannot tell whether it is current.");
                 await ShowUpdateDialogAsync(latest,
                     "This build does not record its source revision, so Scrobblix cannot confirm whether you already have this preview. Review the notes and download only if you want it.");
                 return;
@@ -60,35 +68,39 @@ public sealed partial class MainWindow : IDisposable
             switch (state)
             {
                 case WindowsUpdateState.UpToDate:
-                    UpdateCheckStatusText.Text = $"Scrobblix is up to date ({latest.Tag}).";
+                    SetUpdateStatus($"Scrobblix is up to date ({latest.Tag}).");
                     return;
                 case WindowsUpdateState.NewerThanRelease:
-                    UpdateCheckStatusText.Text = $"This build is newer than the latest published preview ({latest.Tag}). Nothing to do.";
+                    SetUpdateStatus($"This build is newer than the latest published preview ({latest.Tag}). Nothing to do.");
                     return;
                 case WindowsUpdateState.Unknown:
-                    UpdateCheckStatusText.Text = $"Latest published preview: {latest.Tag}. Scrobblix could not determine how it compares to your build.";
+                    SetUpdateStatus($"Latest published preview: {latest.Tag}. Scrobblix could not determine how it compares to your build.");
                     await ShowUpdateDialogAsync(latest,
                         "Scrobblix could not determine whether this preview is newer than your build. Review the notes and download only if you want it.");
                     return;
                 default:
-                    UpdateCheckStatusText.Text = $"Update available: {latest.Tag}.";
+                    SetUpdateStatus($"Update available: {latest.Tag}.");
                     await ShowUpdateDialogAsync(latest,
                         "A newer preview is available. Review the notes, then download and verify it. Nothing installs by itself.");
                     return;
             }
         }
+        catch (OperationCanceledException)
+        {
+            // Window closing: the cancellation was requested by Dispose. No UI, no error text.
+        }
         catch (UpdateCheckService.UpdateCheckException failure)
         {
-            UpdateCheckStatusText.Text = failure.Message + " Your installed version is unchanged.";
+            SetUpdateStatus(failure.Message + " Your installed version is unchanged.");
         }
         catch
         {
-            UpdateCheckStatusText.Text = "The update check failed before a usable response. Your installed version is unchanged.";
+            SetUpdateStatus("The update check failed before a usable response. Your installed version is unchanged.");
         }
         finally
         {
-            CheckUpdatesButton.IsEnabled = true;
             _updateCheckInFlight = false;
+            if (!_isClosed && !_updateCheckDisposed) CheckUpdatesButton.IsEnabled = true;
         }
     }
 
@@ -160,6 +172,7 @@ public sealed partial class MainWindow : IDisposable
             CloseButtonText = "Not now",
             DefaultButton = ContentDialogButton.Close,
         };
+        if (_isClosed || _updateCheckDisposed) return;
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Secondary)
         {
@@ -170,7 +183,7 @@ public sealed partial class MainWindow : IDisposable
             }
             catch
             {
-                UpdateCheckStatusText.Text = "The releases page could not be opened in the browser.";
+                SetUpdateStatus("The releases page could not be opened in the browser.");
             }
             return;
         }
@@ -187,9 +200,9 @@ public sealed partial class MainWindow : IDisposable
                 : $"Downloading… {value.Done / 1048576} MB");
         try
         {
-            UpdateCheckStatusText.Text = "Downloading the installer…";
+            SetUpdateStatus("Downloading the installer…");
             var download = await _updateCheck.DownloadInstallerAsync(release, progress, _updateCheckCancellation.Token);
-            UpdateCheckStatusText.Text = $"Downloaded and verified {download.Installer.Name}.";
+            SetUpdateStatus($"Downloaded and verified {download.Installer.Name}.");
             var confirm = new ContentDialog
             {
                 XamlRoot = Content.XamlRoot,
@@ -201,22 +214,27 @@ public sealed partial class MainWindow : IDisposable
                 CloseButtonText = "Later",
                 DefaultButton = ContentDialogButton.Close,
             };
+            if (_isClosed || _updateCheckDisposed) return;
             if (await confirm.ShowAsync() != ContentDialogResult.Primary) return;
             UpdateCheckStatusText.Text = _updateCheck.OpenInstallerVerified(download.StagedPath, download.Sha256)
                 ? "The installer was opened. Finish the steps in Windows; Scrobblix keeps running until you close it."
                 : "The installer could not be opened, or its file changed after verification." + (download.DownloadsPath is null ? "" : " A verified copy is in your Downloads folder.");
         }
+        catch (OperationCanceledException)
+        {
+            // Window closing: cancelled by Dispose. Nothing was installed.
+        }
         catch (UpdateCheckService.UpdateCheckException failure)
         {
-            UpdateCheckStatusText.Text = failure.Message + " Nothing was installed.";
+            SetUpdateStatus(failure.Message + " Nothing was installed.");
         }
         catch
         {
-            UpdateCheckStatusText.Text = "The download could not be completed. Nothing was installed.";
+            SetUpdateStatus("The download could not be completed. Nothing was installed.");
         }
         finally
         {
-            CheckUpdatesButton.IsEnabled = true;
+            if (!_isClosed && !_updateCheckDisposed) CheckUpdatesButton.IsEnabled = true;
         }
     }
 }
