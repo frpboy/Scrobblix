@@ -106,7 +106,7 @@ public sealed partial class MainWindow : IDisposable
 
     /// <summary>The changelog dialog content as an overlay element (used by UI qualification; popups cannot be pixel-captured).
     /// Layout/text evidence only: this is a separate disabled overlay tree, not proof of actual dialog buttons, focus or input.</summary>
-    internal UIElement BuildUpdateChangelogOverlay(WindowsRelease release, string lead)
+    internal static UIElement BuildUpdateChangelogOverlay(WindowsRelease release, string lead)
     {
         var notes = release.Notes.Trim();
         if (notes.Length > 4000) notes = notes[..4000] + "…";
@@ -117,13 +117,13 @@ public sealed partial class MainWindow : IDisposable
 
     /// <summary>The verified-download confirmation content as an overlay element (UI qualification only).
     /// Layout/text evidence only, not actual dialog behavior proof.</summary>
-    internal UIElement BuildInstallerVerifiedOverlay(string installerName) =>
+    internal static UIElement BuildInstallerVerifiedOverlay(string installerName) =>
         DialogOverlay("Installer downloaded and verified",
             installerName + " passed integrity verification against the published SHA-256 checksum. A verified copy is in your Downloads folder."
             + "\n\nThe installer is unsigned, so Windows will show a SmartScreen warning. Opening it starts the usual installer; Scrobblix stays running until you close it.",
             "Open installer", null, "Later");
 
-    private static UIElement DialogOverlay(string title, string body, string primary, string? secondary, string close)
+    private static Border DialogOverlay(string title, string body, string primary, string? secondary, string close)
     {
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, Spacing = 8, HorizontalAlignment = HorizontalAlignment.Right };
         buttons.Children.Add(new Button { Content = primary, Style = (Style)Microsoft.UI.Xaml.Application.Current.Resources["AccentButtonStyle"], IsEnabled = false });

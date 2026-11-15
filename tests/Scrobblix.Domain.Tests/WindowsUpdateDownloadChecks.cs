@@ -102,7 +102,7 @@ internal static class WindowsUpdateDownloadChecks
             try { await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, null, null, CancellationToken.None); }
             catch (WindowsUpdateDownload.UpdateDownloadException) { threw = true; }
             Assert(threw, "hash mismatch rejected");
-            Assert(!Directory.Exists(staging) || !Directory.GetFiles(staging, "*", SearchOption.AllDirectories).Any(), "mismatch leaves no files");
+            Assert(!Directory.Exists(staging) || Directory.GetFiles(staging, "*", SearchOption.AllDirectories).Length == 0, "mismatch leaves no files");
         }
 
         // Redirect policy: allowed host followed, foreign host blocked.
