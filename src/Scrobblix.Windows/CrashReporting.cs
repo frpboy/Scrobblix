@@ -50,6 +50,8 @@ public static class CrashReporting
         _enabled = true;
     }
 
+    private static readonly HashSet<string> AllowedContexts = new(StringComparer.Ordinal) { "os", "device", "app", "runtime" };
+
     /// <summary>The privacy boundary every outbound event passes through.</summary>
     public static SentryEvent ApplyPrivacyBoundary(SentryEvent sentryEvent)
     {
@@ -57,12 +59,25 @@ public static class CrashReporting
         sentryEvent.User = null;
         sentryEvent.ClearBreadcrumbs();
         sentryEvent.Message = null;
+        sentryEvent.Tags.Clear();
+        sentryEvent.SetExtras(Array.Empty<KeyValuePair<string, object?>>());
         if (sentryEvent.SentryExceptions is not null)
         {
             foreach (var exception in sentryEvent.SentryExceptions)
             {
                 exception.Value = exception.Type ?? "Error";
+                if (exception.Stacktrace?.Frames is not null)
+                {
+                    foreach (var frame in exception.Stacktrace.Frames)
+                    {
+                        frame.AbsolutePath = null;
+                    }
+                }
             }
+        }
+        foreach (var key in sentryEvent.Contexts.Keys.ToList())
+        {
+            if (!AllowedContexts.Contains(key)) sentryEvent.Contexts.Remove(key);
         }
         return sentryEvent;
     }

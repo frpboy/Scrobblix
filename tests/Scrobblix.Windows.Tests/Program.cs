@@ -95,10 +95,24 @@ sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOf
     hostile.User = new Sentry.SentryUser { Username = "rahul" };
     hostile.AddBreadcrumb("ui.click play");
     hostile.Message = new Sentry.SentryMessage { Message = "track ArtistX" };
+    hostile.SetTag("account", "rahul-lastfm");
+    hostile.SetExtra("now_playing", "ArtistX - TrackY");
+    hostile.Contexts["response"] = new { body = "ArtistX scrobble payload" };
     var filtered = CrashReporting.ApplyPrivacyBoundary(hostile);
     Assert(filtered.Request is null, "Crash boundary drops request URLs");
     Assert(filtered.User is null, "Crash boundary drops user identity");
     Assert(!(filtered.Breadcrumbs?.Any() ?? false), "Crash boundary drops breadcrumbs");
     Assert(filtered.Message is null, "Crash boundary drops event message");
     Assert(filtered.SentryExceptions!.All(e => e.Value == e.Type), "Crash boundary replaces exception messages with types");
+    Assert(filtered.Tags.Count == 0, "Crash boundary drops tags");
+    Assert(!filtered.Contexts.ContainsKey("response"), "Crash boundary drops non-allowlist contexts");
+    // Actual SDK event serialization: no hostile string may survive into the JSON the SDK emits.
+    using var stream = new MemoryStream();
+    using (var jsonWriter = new System.Text.Json.Utf8JsonWriter(stream))
+    {
+        filtered.WriteTo(jsonWriter, null);
+    }
+    var serialized = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing" })
+        Assert(!serialized.Contains(hostileString), "Serialized SDK event carries no " + hostileString);
 }

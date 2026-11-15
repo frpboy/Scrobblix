@@ -23,6 +23,9 @@ class CrashReportingBoundaryTest {
         event.user=User().apply { username="rahul" }
         event.addBreadcrumb(Breadcrumb.info("ui.click play"))
         event.message=Message().apply { message="track ArtistX" }
+        event.setTag("account","rahul-lastfm")
+        event.setExtra("now_playing","ArtistX - TrackY")
+        event.contexts["response"]=mapOf("body" to "ArtistX scrobble payload")
         val filtered=CrashEventFilter.execute(event,Hint())
         assertNull(filtered.request)
         assertNull(filtered.user)
@@ -37,5 +40,7 @@ class CrashReportingBoundaryTest {
         assertFalse(envelope.contains("abcd1234efgh5678"))
         assertFalse(envelope.contains("rahul"))
         assertFalse(envelope.contains("open.spotify.com"))
+        assertFalse(envelope.contains("now_playing"))
+        assertFalse(envelope.contains("rahul-lastfm"))
     }
 }
