@@ -359,7 +359,7 @@ class CrashReportingBoundaryTest {
                         // connection inside the remaining window.
                     } catch (e:Exception) { serverError.compareAndSet(null,e.toString()) } finally { try { conn.close() } catch (_:Exception) {} }
                 }
-            } catch (_:Exception) {} finally { readerFinished.set(true); try { server.close() } catch (_:Exception) {} }
+            } catch (e:Exception) { serverError.compareAndSet(null,e.toString()) } finally { readerFinished.set(true); try { server.close() } catch (_:Exception) {} }
         }
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
