@@ -139,14 +139,27 @@ jobs:
           keytool -genkeypair -keystore /tmp/wrong-signer.jks -storepass synthetic -keypass synthetic -alias wrong -keyalg RSA -keysize 2048 -validity 30 -dname "CN=Synthetic Wrong Signer"
           build_tools="$ANDROID_HOME/build-tools/$(ls "$ANDROID_HOME/build-tools" | sort -V | tail -1)"
           "$build_tools/apksigner" sign --ks /tmp/wrong-signer.jks --ks-pass pass:synthetic --out /tmp/fixture-wrong.apk android/updatefixture/build/outputs/apk/release/updatefixture-release-unsigned.apk
-          fixtures=/sdcard/Android/data/com.frpboy.scrobblix.test/files
-          adb push android/updatefixture/build/outputs/apk/debug/updatefixture-debug.apk "$fixtures/fixture-same.apk"
-          adb push /tmp/fixture-wrong.apk "$fixtures/fixture-wrong.apk"
-          adb shell ls "$fixtures/fixture-same.apk" "$fixtures/fixture-wrong.apk"
-          result=$(adb shell am instrument -w -r -e fixtureSameSigner "$fixtures/fixture-same.apk" -e fixtureWrongSigner "$fixtures/fixture-wrong.apk" -e class "dev.scrobblix.app.UpdateVerificationTest#signedFixturesQualifySignerBranch" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
+          # Provision into the app-owned internal cache: push to the shell-visible temp
+          # first, then copy as the app uid via run-as (debug build), so the file is
+          # genuinely readable by the app process. No scoped-storage path guessing.
+          adb push android/updatefixture/build/outputs/apk/debug/updatefixture-debug.apk /data/local/tmp/fixture-same.apk
+          adb push /tmp/fixture-wrong.apk /data/local/tmp/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix cp /data/local/tmp/fixture-same.apk cache/fixture-same.apk
+          adb shell run-as com.frpboy.scrobblix cp /data/local/tmp/fixture-wrong.apk cache/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix ls -l cache/fixture-same.apk cache/fixture-wrong.apk
+          adb shell run-as com.frpboy.scrobblix rm -f files/signed-fixture-qualification.txt
+          fixtures=/data/data/com.frpboy.scrobblix/cache
+          result=$(adb shell am instrument -w -r -e requireSignedFixtures true -e fixtureSameSigner "$fixtures/fixture-same.apk" -e fixtureWrongSigner "$fixtures/fixture-wrong.apk" -e class "dev.scrobblix.app.UpdateVerificationTest#signedFixturesQualifySignerBranch" com.frpboy.scrobblix.test/androidx.test.runner.AndroidJUnitRunner)
           printf '%s\n' "$result"
           printf '%s\n' "$result" | grep -F 'OK (1 test)'
           if printf '%s\n' "$result" | grep -E 'FAILURES|INSTRUMENTATION_FAILED|Process crashed'; then exit 1; fi
+          # Per-test success marker: the test writes this file only after every fixture
+          # qualification and signer-branch assertion passed. An assumption-skipped,
+          # unprovisioned or malformed-fixture run leaves no marker, so it cannot
+          # read as green on 'OK (1 test)' alone.
+          marker=$(adb shell run-as com.frpboy.scrobblix cat files/signed-fixture-qualification.txt)
+          printf '%s\n' "$marker"
+          printf '%s\n' "$marker" | grep -F 'SIGNED_FIXTURE_QUALIFICATION_PASS'
           export PATH="$ANDROID_HOME/platform-tools:$PATH"
           mkdir -p android-evidence
           for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/; done

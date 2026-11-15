@@ -115,17 +115,69 @@ class UpdateVerificationTest {
         assertFalse(u.verifyDownload(testApk,update("ab")))
     }
 
+    private fun installedSigners():Set<String> {
+        val pm=context.packageManager
+        val info=if (android.os.Build.VERSION.SDK_INT>=28)
+            pm.getPackageInfo(context.packageName,android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+        else @Suppress("DEPRECATION") pm.getPackageInfo(context.packageName,android.content.pm.PackageManager.GET_SIGNATURES)
+        val sigs=if (android.os.Build.VERSION.SDK_INT>=28) info.signingInfo?.apkContentsSigners
+        else @Suppress("DEPRECATION") info.signatures
+        return (sigs ?: emptyArray()).map { it.toCharsString() }.toSet()
+    }
+
+    /** package, versionCode, versionName, signer set of a well-formed archive; fails (not skips) otherwise. */
+    private fun archiveIdentity(apk:File):Array<Any> {
+        val pm=context.packageManager
+        val info=if (android.os.Build.VERSION.SDK_INT>=28)
+            pm.getPackageArchiveInfo(apk.absolutePath,android.content.pm.PackageManager.GET_SIGNING_CERTIFICATES)
+        else @Suppress("DEPRECATION") pm.getPackageArchiveInfo(apk.absolutePath,android.content.pm.PackageManager.GET_SIGNATURES)
+        requireNotNull(info) { "fixture is not a parseable APK: ${apk.absolutePath}" }
+        val sigs=if (android.os.Build.VERSION.SDK_INT>=28) info.signingInfo?.apkContentsSigners
+        else @Suppress("DEPRECATION") info.signatures
+        require(sigs!=null && sigs.isNotEmpty()) { "fixture carries no signatures: ${apk.absolutePath}" }
+        val vc=if (android.os.Build.VERSION.SDK_INT>=28) info.longVersionCode else @Suppress("DEPRECATION") info.versionCode.toLong()
+        return arrayOf(info.packageName,vc,info.versionName ?: "",sigs.map { it.toCharsString() }.toSet())
+    }
+
     @Test
     fun signedFixturesQualifySignerBranch() {
         val args=InstrumentationRegistry.getArguments()
-        val same=args.getString("fixtureSameSigner")?.let(::File)?.takeIf { it.exists() }
-        val wrong=args.getString("fixtureWrongSigner")?.let(::File)?.takeIf { it.exists() }
-        org.junit.Assume.assumeTrue("signed fixtures not provisioned (CI-only)",same!=null && wrong!=null)
+        val required=args.getString("requireSignedFixtures")=="true"
+        val same=args.getString("fixtureSameSigner")?.let(::File)
+        val wrong=args.getString("fixtureWrongSigner")?.let(::File)
+        if (!required) {
+            // Local convenience only: without the CI flag the test still skips when unprovisioned.
+            org.junit.Assume.assumeTrue("signed fixtures not provisioned (CI-only)",
+                same?.canRead()==true && wrong?.canRead()==true)
+        }
+        assertTrue("requireSignedFixtures=true: fixtureSameSigner missing or unreadable at ${same?.absolutePath}",
+            same?.canRead()==true)
+        assertTrue("requireSignedFixtures=true: fixtureWrongSigner missing or unreadable at ${wrong?.absolutePath}",
+            wrong?.canRead()==true)
+        // Archive qualification before any verdict: both fixtures must be well-formed APKs of
+        // this exact package at the expected higher versionCode/versionName with the intended
+        // signer relationship. Without this the wrong-signer negative could be a malformed
+        // archive failing closed rather than a genuine signer rejection.
+        val appSigners=installedSigners()
+        assertTrue("app signer set must be readable",appSigners.isNotEmpty())
+        val sameId=archiveIdentity(same!!)
+        val wrongId=archiveIdentity(wrong!!)
+        assertEquals("same-signer fixture package",context.packageName,sameId[0])
+        assertEquals("wrong-signer fixture package",context.packageName,wrongId[0])
+        assertEquals("same-signer fixture versionCode",8L,sameId[1])
+        assertEquals("wrong-signer fixture versionCode",8L,wrongId[1])
+        assertEquals("same-signer fixture versionName","0.1.0-alpha.3",sameId[2])
+        assertEquals("wrong-signer fixture versionName","0.1.0-alpha.3",wrongId[2])
+        assertEquals("same-signer fixture must carry the app signer set",appSigners,sameId[3])
+        assertFalse("wrong-signer fixture must carry a different signer set",appSigners==wrongId[3])
         val u=AppUpdater(context)
-        // Fixture versionName is 0.1.0-alpha.3 and versionCode 8, strictly above the installed app.
         val next=update().copy(version=ReleaseVersion(0,1,0,"alpha",3))
-        assertTrue("same-package same-signer higher-version fixture must pass",u.verifyDownload(same!!,next))
-        assertFalse("same-package wrong-signer fixture must fail",u.verifyDownload(wrong!!,next))
+        assertTrue("same-package same-signer higher-version fixture must pass",u.verifyDownload(same,next))
+        assertFalse("same-package wrong-signer fixture must fail",u.verifyDownload(wrong,next))
+        // Success marker, written only after every assertion above passed. CI requires this
+        // exact content so an assumption-skipped or unprovisioned run cannot read as green.
+        File(context.filesDir,"signed-fixture-qualification.txt").writeText(
+            "SIGNED_FIXTURE_QUALIFICATION_PASS package=${context.packageName} versionCode=8 signers-qualified\n")
     }
 
     @Test
