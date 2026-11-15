@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Monochrome silhouette of the brand waveform for themed icons: the system tints this
+     layer, so the brand shape (six bars + center ring) survives Material You theming. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#FFFFFFFF" android:pathData="M23.6,46.8m-3,0a3,3 0,1 1,6 0v14.4a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M33.7,36m-3,0a3,3 0,1 1,6 0v36a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M43.8,25.9m-3,0a3,3 0,1 1,6 0v56.2a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M53.9,40.3m-3,0a3,3 0,1 1,6 0v27.4a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M64,31.7m-3,0a3,3 0,1 1,6 0v44.6a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:pathData="M74,44.65m-3,0a3,3 0,1 1,6 0v18.7a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFFFFFFF" android:fillType="evenOdd"
+        android:pathData="M54,44a10,10 0,1 1,0 20a10,10 0,1 1,0 -20zM54,50.4a3.6,3.6 0,1 0,0 7.2a3.6,3.6 0,1 0,0 -7.2z"/>
+</vector>
