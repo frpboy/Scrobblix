@@ -22,23 +22,25 @@ import java.net.URL
 import java.security.MessageDigest
 import javax.net.ssl.HttpsURLConnection
 
+/** Update probe contract: implemented by AppUpdater and by test fakes. */
+interface UpdateProbe {
+    suspend fun check():AppUpdater.CheckOutcome
+    suspend fun download(update:AvailableUpdate,onProgress:(Long,Long?)->Unit):File
+    fun verifyDownload(apk:File,update:AvailableUpdate):Boolean
+    fun canInstall():Boolean
+    /** true when the installer was actually handed to the system; false means nothing launched. */
+    fun launchInstall(apk:File):Boolean
+    /** true when the permission screen actually opened; false means it could not be shown. */
+    fun openInstallPermission():Boolean
+}
+
 /** Direct-channel (GitHub Releases) update probe and install handoff.
  * Never auto-installs, never contacts Last.fm, fixed diagnostics only, HTTPS only. */
 class AppUpdater(private val context:Context,
     private val fetcher:(String,Int)->FetchResult = Companion::httpGet,
     private val streamDownloader:(String,File,Long,(Long,Long?)->Unit)->Unit = Companion::httpDownload,
-    private val packageName:String=context.packageName):Probe {
+    private val packageName:String=context.packageName):UpdateProbe {
 
-    interface Probe {
-        suspend fun check():CheckOutcome
-        suspend fun download(update:AvailableUpdate,onProgress:(Long,Long?)->Unit):File
-        fun verifyDownload(apk:File,update:AvailableUpdate):Boolean
-        fun canInstall():Boolean
-        /** true when the installer was actually handed to the system; false means nothing launched. */
-        fun launchInstall(apk:File):Boolean
-        /** true when the permission screen actually opened; false means it could not be shown. */
-        fun openInstallPermission():Boolean
-    }
     sealed interface CheckOutcome {
         data class Available(val update:AvailableUpdate):CheckOutcome
         data object Current:CheckOutcome

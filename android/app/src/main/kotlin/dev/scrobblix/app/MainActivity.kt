@@ -45,7 +45,7 @@ class MainActivity:ComponentActivity() {
         } } }
     }
 }
-internal fun defaultUpdateProbe(store:AppStore):AppUpdater.Probe?=
+internal fun defaultUpdateProbe(store:AppStore):UpdateProbe?=
     if(BuildConfig.DISTRIBUTION_CHANNEL=="github") AppUpdater(store.context) else null
 @Composable
 fun AppScreen(store:AppStore,api:LastFmApi?=null,
@@ -55,7 +55,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     historyReader:suspend ()->AppStore.RecentDiagnostics={withContext(Dispatchers.IO){store.recentDiagnostics()}},
     queueReader:suspend (Boolean)->List<Map<String,String?>> = {_ ->withContext(Dispatchers.IO){store.states()}},
     initialTab:String="Listen",
-    updateProbe:AppUpdater.Probe?=null) {
+    updateProbe:UpdateProbe?=null) {
     val context=store.context
     var tab by remember { mutableStateOf(initialTab) }
     var tracking by remember { mutableStateOf(store.tracking()) }

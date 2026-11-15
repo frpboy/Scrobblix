@@ -26,7 +26,7 @@ class UpdateRuntimeTest {
         "Synthetic changelog: fixes and improvements for testing only.",
         ReleaseAsset("Scrobblix-Android-v9.9.9-alpha.9.apk","https://invalid.invalid/synthetic.apk",1234567),
         ReleaseAsset("SHA256SUMS.txt","https://invalid.invalid/sums",100))
-    private open class FakeProbe(val context:android.content.Context,val update:AvailableUpdate?):AppUpdater.Probe {
+    private open class FakeProbe(val context:android.content.Context,val update:AvailableUpdate?):UpdateProbe {
         var installs=0
         override suspend fun check():AppUpdater.CheckOutcome =
             if(update==null)AppUpdater.CheckOutcome.Current else AppUpdater.CheckOutcome.Available(update)
