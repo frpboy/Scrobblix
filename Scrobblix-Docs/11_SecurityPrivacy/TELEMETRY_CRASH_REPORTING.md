@@ -8,7 +8,7 @@
 
 ## Current default behavior
 
-Scrobblix uses a local-first design. No shipped Scrobblix release (through Android 0.1.0-alpha.2 and the current Windows previews) establishes a Scrobblix-operated telemetry endpoint, remote usage analytics dashboard, automatic crash-report upload, or third-party crash SDK. The current source on main adds an optional build-time crash-reporting candidate (see below) that no shipped release contains and that current builds do not activate: every regular build bakes an empty DSN and keeps the local-only baseline. A source-level capability is not a shipped behavior. Listening data and logs remain local unless a user chooses to share an exported support bundle or files through another channel.
+Scrobblix uses a local-first design. No shipped Scrobblix release (through Android 0.1.0-alpha.2 and the current Windows previews) establishes a Scrobblix-operated telemetry endpoint, remote usage analytics dashboard, automatic crash-report upload, or third-party crash SDK. The current source on main adds an optional build-time crash-reporting candidate (see below) that no shipped release contains and that current builds do not activate: every regular build bakes an empty DSN and keeps the local-only baseline. A source-level capability is not a shipped behavior. Local diagnostic logs and support exports are not automatically uploaded. Listening metadata used for Last.fm authorisation, Now Playing and scrobbling follows the platform-specific network behavior described in the privacy policy.
 
 Do not describe a telemetry toggle or automatic crash-reporting preference as a shipped UI control unless the exact release contains it.
 

@@ -1,0 +1,90 @@
+name: DISPOSABLE ingest synthetic prep
+# Test-only lane for the held isolated synthetic ingest test. Never runs on
+# push/PR. The DSN arrives as a dispatch input (public write-only ingest id),
+# is baked into DEBUG test artifacts only, and is persisted nowhere: no repo
+# variable, no secret, no committed value. Artifacts upload with 1-day
+# retention and are never a release. The actual send stays separately gated.
+on:
+  workflow_dispatch:
+    inputs:
+      dsn:
+        description: 'Public Sentry ingest DSN for this disposable test build only'
+        type: string
+        required: true
+permissions:
+  contents: read
+concurrency:
+  group: ingest-synthetic-prep-${{ github.run_id }}
+jobs:
+  android-debug-apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Build debug APK with ephemeral DSN
+        shell: bash
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
+        run: |
+          set -euo pipefail
+          test -n "$SCROBBLIX_SENTRY_DSN"
+          echo "dsn-sha256: $(printf '%s' "$SCROBBLIX_SENTRY_DSN" | sha256sum | cut -d' ' -f1)"
+          export JAVA_HOME="$JAVA_HOME_17_X64"
+          export PATH="$JAVA_HOME/bin:$PATH"
+          android/gradlew -p android :app:assembleDebug --no-daemon
+      - name: Hash artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          apk=$(ls android/app/build/outputs/apk/debug/*.apk)
+          echo "artifact: $apk"
+          sha256sum "$apk" | tee android-artifact-sha256.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          retention-days: 1
+          name: ingest-prep-android-debug-DISPOSABLE
+          path: |
+            android/app/build/outputs/apk/debug/*.apk
+            android-artifact-sha256.txt
+  windows-debug-build:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore
+        run: dotnet restore Scrobblix.slnx
+      - name: Build Desktop debug with ephemeral DSN
+        shell: pwsh
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
+        run: |
+          if (-not $env:SCROBBLIX_SENTRY_DSN) { throw 'DSN env missing' }
+          "dsn-sha256: " + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
+          dotnet build src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Debug --no-restore
+          if ($LASTEXITCODE -ne 0) { throw 'Debug build failed' }
+          $generated = Get-ChildItem -Recurse src/Scrobblix.Windows/obj -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
+          if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern '09034d8c28716f3d06cdd57fe02eb47d' -SimpleMatch -Quiet)) { throw 'DSN did not reach generated source' }
+          'generated DSN source carries the dispatch value'
+      - name: Hash artifacts
+        shell: pwsh
+        run: |
+          $out = 'src/Scrobblix.Desktop/bin/Debug'
+          $files = Get-ChildItem -Recurse $out -Filter *.exe | Select-Object -First 5
+          $files += Get-ChildItem -Recurse $out -Filter Scrobblix.Windows.dll | Select-Object -First 1
+          $files | ForEach-Object { (Get-FileHash $_.FullName -Algorithm SHA256).Hash + '  ' + $_.FullName } | Tee-Object windows-artifact-sha256.txt
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          if-no-files-found: error
+          retention-days: 1
+          name: ingest-prep-windows-debug-DISPOSABLE
+          path: |
+            src/Scrobblix.Desktop/bin/Debug/**
+            windows-artifact-sha256.txt
