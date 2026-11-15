@@ -322,19 +322,21 @@ class CrashReportingBoundaryTest {
         SendBudget.minIntervalMs=0
         val server=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
         val requestCount=java.util.concurrent.atomic.AtomicInteger(0)
+        val serverError=java.util.concurrent.atomic.AtomicReference<String?>(null)
+        val readerFinished=java.util.concurrent.atomic.AtomicBoolean(false)
         val reader=kotlin.concurrent.thread {
             try {
-                server.soTimeout=2_000
+                server.soTimeout=1_000
                 val deadline=System.currentTimeMillis()+8_000
                 while (System.currentTimeMillis()<deadline) {
-                    val conn=try { server.accept() } catch (_:java.net.SocketTimeoutException) { break }
+                    val conn=try { server.accept() } catch (_:java.net.SocketTimeoutException) { continue }
                     requestCount.incrementAndGet()
                     try {
                         conn.soTimeout=2_000
                         val input=conn.getInputStream()
                         val acc=java.io.ByteArrayOutputStream()
                         val tmp=ByteArray(8192)
-                        fun readSome():Boolean { val n=input.read(tmp); if (n<0) return false; acc.write(tmp,0,n); return true }
+                        fun readSome() { val n=input.read(tmp); if (n<0) throw java.io.EOFException("unexpected EOF"); acc.write(tmp,0,n) }
                         fun headerEnd(bytes:ByteArray):Int {
                             outer@ for (i in 0..bytes.size-4) {
                                 for (j in 0..3) { if (bytes[i+j]!="\r\n\r\n"[j].code.toByte()) continue@outer }
@@ -342,20 +344,22 @@ class CrashReportingBoundaryTest {
                             }
                             return -1
                         }
-                        if (!readSome()) break
-                        while (headerEnd(acc.toByteArray())<0) { if (!readSome()) break }
+                        readSome()
+                        while (headerEnd(acc.toByteArray())<0) readSome()
                         var buffered=acc.toByteArray()
                         val end=headerEnd(buffered)
-                        if (end>=0) {
-                            val headers=String(buffered,0,end,Charsets.ISO_8859_1)
-                            val pos=end+4
-                            val length=Regex("(?i)Content-Length: (\\d+)").find(headers)?.groupValues?.get(1)?.toInt() ?: 0
-                            while (buffered.size-pos<length) { if (!readSome()) break; buffered=acc.toByteArray() }
-                        }
-                        // Close WITHOUT any response: a replay would connect again.
-                    } catch (_:Exception) {} finally { try { conn.close() } catch (_:Exception) {} }
+                        val headers=String(buffered,0,end,Charsets.ISO_8859_1)
+                        val pos=end+4
+                        val length=Regex("(?i)Content-Length: (\\d+)").find(headers)?.groupValues?.get(1)?.toInt()
+                            ?: throw IllegalStateException("missing Content-Length header")
+                        if (length<=0) throw IllegalStateException("non-positive Content-Length")
+                        while (buffered.size-pos<length) { readSome(); buffered=acc.toByteArray() }
+                        // Full fixed-length body consumed; close WITHOUT any
+                        // response. A replay would surface as another accepted
+                        // connection inside the remaining window.
+                    } catch (e:Exception) { serverError.compareAndSet(null,e.toString()) } finally { try { conn.close() } catch (_:Exception) {} }
                 }
-            } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
+            } catch (_:Exception) {} finally { readerFinished.set(true); try { server.close() } catch (_:Exception) {} }
         }
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
@@ -372,8 +376,10 @@ class CrashReportingBoundaryTest {
         assertFalse("a broken exchange never marks the crash latch",latch.waitFlush())
         reader.join(15_000)
         SendBudget.waitForIdle(5_000)
+        assertTrue("reader terminated within its bounded window",readerFinished.get())
+        assertNull("server observed a complete fixed-length request: ${serverError.get()}",serverError.get())
         assertTrue("exactly one poster attempt counted",SendBudget.attemptsSoFar==1)
-        assertEquals("exactly one request reached the wire (no HTTP-level replay)",1,requestCount.get())
+        assertEquals("exactly one full-body request reached the wire (no HTTP-level replay)",1,requestCount.get())
     }
 
     @Test fun sendBudgetCapsAttemptsPerProcess() {
