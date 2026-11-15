@@ -62,6 +62,7 @@ var raw = receiveTask.GetAwaiter().GetResult();
 Console.WriteLine("release on wire: " + release);
 File.WriteAllBytes(args.Length > 0 ? args[0] : "wire-dump-windows.txt", raw);
 Console.WriteLine("wire dump written: " + raw.Length + " raw bytes captured");
+return 0;
 
 static int GuardProbe()
 {
