@@ -16,6 +16,11 @@ using Scrobblix.Windows;
 // EXECUTABLE (the identity the process-scoped firewall rules cover): a
 // loopback connection must succeed and an external connection must not.
 if (args.Length > 0 && args[0] == "--guard-probe") return GuardProbe();
+// --probe-external <open|blocked>: single bare-TCP external probe with the
+// real socket error detail, for the pre-guard baseline and the post-removal
+// control (expect 'open') and inside GuardProbe (expect 'blocked'). Literal
+// IPv4, no DNS, no TLS, no application data.
+if (args.Length == 2 && args[0] == "--probe-external") return ProbeExternal(args[1] == "open");
 
 var listener = new TcpListener(IPAddress.Loopback, 0);
 listener.Start();
@@ -89,25 +94,39 @@ static int GuardProbe()
         return 2;
     }
     Console.WriteLine("loopback probe: OK");
-    // Negative: external egress must NOT succeed from this process. Literal
-    // IPv4 (no DNS); success OR an unexpected quick failure both reported.
+    // Negative: external egress must NOT succeed from this process, and the
+    // real socket error must be visible (no AggregateException flattening).
+    if (ProbeExternal(false) != 0) return 3;
+    Console.WriteLine("guard probe OK: loopback reachable, external egress blocked");
+    return 0;
+}
+
+// Bare-TCP probe of a literal-IP external endpoint with full socket error
+// detail. expectOpen=true: exit 0 on connect, 4 otherwise (baseline/control
+// inconclusive). expectOpen=false: exit 0 on failure, 3 on connect (guard
+// breached).
+static int ProbeExternal(bool expectOpen)
+{
+    var connected = false;
+    string detail;
     try
     {
         using var ext = new TcpClient();
         var connect = ext.ConnectAsync(IPAddress.Parse("1.1.1.1"), 443);
-        if (connect.Wait(TimeSpan.FromSeconds(8)) && ext.Connected)
-        {
-            Console.WriteLine("GUARD PROBE FAIL: external egress to 1.1.1.1:443 SUCCEEDED under the guard");
-            return 3;
-        }
-        Console.WriteLine("external probe: no connection within 8s (egress blocked)");
+        if (connect.Wait(TimeSpan.FromSeconds(8)) && ext.Connected) connected = true;
+        detail = connected ? "connected" : "no connection within 8s";
+    }
+    catch (AggregateException ae) when (ae.InnerException is SocketException se)
+    {
+        detail = $"SocketError={se.SocketErrorCode} Native={se.NativeErrorCode} ({se.Message})";
     }
     catch (Exception e)
     {
-        Console.WriteLine("external probe: refused (" + e.GetType().Name + ")");
+        detail = e.GetType().Name + ": " + e.Message;
     }
-    Console.WriteLine("guard probe OK: loopback reachable, external egress blocked");
-    return 0;
+    Console.WriteLine($"external probe 1.1.1.1:443: {(connected ? "SUCCESS" : "FAIL")} - {detail}");
+    if (expectOpen) return connected ? 0 : 4;
+    return connected ? 3 : 0;
 }
 
 static byte[] CaptureOneRequest(TcpListener listener)

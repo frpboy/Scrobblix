@@ -149,6 +149,12 @@ jobs:
           $exe = Get-ChildItem -Recurse tests/Scrobblix.WireDump/bin/Debug -Filter Scrobblix.WireDump.exe | Select-Object -First 1
           if (-not $exe) { throw 'WireDump exe missing' }
           "resolved dump executable: " + $exe.FullName
+          # Guard causality, phase 1 - BASELINE before any rule: the SAME exe
+          # MUST reach the external endpoint. A failed baseline makes the whole
+          # guard proof inconclusive, so the job stops here with that verdict.
+          '=== guard phase 1: pre-rule baseline (expect external SUCCESS) ==='
+          & $exe.FullName --probe-external open
+          if ($LASTEXITCODE -ne 0) { throw 'Baseline external connect failed WITHOUT any guard - under-guard failure would be inconclusive (endpoint or runner network unreachable), not guard proof' }
           # Egress guard: this process may reach loopback ONLY. Allow rules take
           # precedence over block rules in Windows Firewall, so the loopback
           # exception survives the block-all for this one executable.
@@ -170,8 +176,9 @@ jobs:
                 RemoteAddress = ($addr.RemoteAddress -join ',')
               } | Format-List | Out-Host
             }
-            # Guard proof FROM THE SAME EXECUTABLE: loopback must connect,
-            # external egress must not. Empirical, not rule-name inference.
+            # Guard causality, phase 2 - UNDER GUARD: loopback must connect,
+            # external egress must fail with the real socket error detail.
+            '=== guard phase 2: under guard (expect loopback OK, external FAIL) ==='
             & $exe.FullName --guard-probe
             if ($LASTEXITCODE -ne 0) { throw 'Guard probe failed: external egress not blocked or loopback broken' }
             & $exe.FullName wire-dump-windows.txt
@@ -180,6 +187,11 @@ jobs:
             netsh advfirewall firewall delete rule name="scrobblix-wiredump-block-out" | Out-Null
             netsh advfirewall firewall delete rule name="scrobblix-wiredump-allow-loop" | Out-Null
           }
+          # Guard causality, phase 3 - POST-REMOVAL control: external must
+          # succeed again, proving the under-guard failure was the rules.
+          '=== guard phase 3: post-removal control (expect external SUCCESS) ==='
+          & $exe.FullName --probe-external open
+          if ($LASTEXITCODE -ne 0) { throw 'Post-removal external control failed - the under-guard failure cannot be attributed to the rules' }
           if (-not (Test-Path wire-dump-windows.txt)) { throw 'Dump file missing' }
       - name: Hash artifacts and resolve dependency manifest
         shell: pwsh
