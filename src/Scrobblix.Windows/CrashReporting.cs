@@ -55,11 +55,16 @@ public static class CrashReporting
     /// <summary>The privacy boundary every outbound event passes through.</summary>
     public static SentryEvent ApplyPrivacyBoundary(SentryEvent sentryEvent)
     {
-        sentryEvent.Request = null;
-        sentryEvent.User = null;
-        sentryEvent.ClearBreadcrumbs();
+        // Sentry 7.0.0: Request/User setters are non-nullable, but the backing fields
+        // are nullable and serialization skips them when null.
+        sentryEvent.Request = null!;
+        sentryEvent.User = null!;
+        // Sentry 7.0.0 exposes Breadcrumbs/Tags as read-only views over the backing
+        // List/Dictionary with no public clear API; the cast is stable for this pinned
+        // SDK version and empties the carrier the serializer would otherwise write.
+        ((List<Breadcrumb>)sentryEvent.Breadcrumbs).Clear();
         sentryEvent.Message = null;
-        sentryEvent.Tags.Clear();
+        ((Dictionary<string, string>)sentryEvent.Tags).Clear();
         sentryEvent.SetExtras(Array.Empty<KeyValuePair<string, object?>>());
         if (sentryEvent.SentryExceptions is not null)
         {

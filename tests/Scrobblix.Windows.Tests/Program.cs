@@ -90,21 +90,39 @@ sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOf
 
 // Crash reporting privacy boundary: hostile payloads must not survive ApplyPrivacyBoundary.
 {
-    var hostile = new Sentry.SentryEvent(new InvalidOperationException("played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678"));
-    hostile.Request = new Sentry.Request { Url = "https://ws.audioscrobbler.com/2.0/?user=secret", Method = "GET" };
+    const string hostileMessage = "played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678";
+    var hostile = new Sentry.SentryEvent(new InvalidOperationException(hostileMessage));
+    // Populate exception values explicitly: the SDK fills them from the exception at
+    // capture time, not in the event constructor.
+    hostile.SentryExceptions = new[]
+    {
+        new Sentry.SentryException
+        {
+            Type = "InvalidOperationException",
+            Value = hostileMessage,
+            Stacktrace = new Sentry.SentryStackTrace
+            {
+                Frames = { new Sentry.SentryStackFrame { AbsolutePath = "C:\\Users\\rahul\\Music\\ArtistX.cs", Function = "Play" } }
+            }
+        }
+    };
+    hostile.Request = new Sentry.SentryRequest { Url = "https://ws.audioscrobbler.com/2.0/?user=secret", Method = "GET" };
     hostile.User = new Sentry.SentryUser { Username = "rahul" };
-    hostile.AddBreadcrumb("ui.click play");
+    hostile.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
     hostile.Message = new Sentry.SentryMessage { Message = "track ArtistX" };
     hostile.SetTag("account", "rahul-lastfm");
     hostile.SetExtra("now_playing", "ArtistX - TrackY");
     hostile.Contexts["response"] = new { body = "ArtistX scrobble payload" };
     var filtered = CrashReporting.ApplyPrivacyBoundary(hostile);
-    Assert(filtered.Request is null, "Crash boundary drops request URLs");
-    Assert(filtered.User is null, "Crash boundary drops user identity");
-    Assert(!(filtered.Breadcrumbs?.Any() ?? false), "Crash boundary drops breadcrumbs");
+    // Request/User getters lazily re-create empty objects, so the serialized JSON
+    // assertions below (not property reads) are the proof those carriers are gone.
+    Assert(!filtered.Breadcrumbs.Any(), "Crash boundary drops breadcrumbs");
     Assert(filtered.Message is null, "Crash boundary drops event message");
-    Assert(filtered.SentryExceptions!.All(e => e.Value == e.Type), "Crash boundary replaces exception messages with types");
+    var filteredExceptions = filtered.SentryExceptions!.ToList();
+    Assert(filteredExceptions.Count == 1 && filteredExceptions[0].Value == filteredExceptions[0].Type, "Crash boundary replaces exception messages with types");
+    Assert(filteredExceptions[0].Stacktrace!.Frames.All(f => f.AbsolutePath is null), "Crash boundary drops frame absolute paths");
     Assert(filtered.Tags.Count == 0, "Crash boundary drops tags");
+    Assert(filtered.Extra.Count == 0, "Crash boundary drops extras");
     Assert(!filtered.Contexts.ContainsKey("response"), "Crash boundary drops non-allowlist contexts");
     // Actual SDK event serialization: no hostile string may survive into the JSON the SDK emits.
     using var stream = new MemoryStream();

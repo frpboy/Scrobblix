@@ -22,15 +22,16 @@ object CrashEventFilter:SentryOptions.BeforeSendCallback {
         event.user=null
         event.breadcrumbs=null
         event.message=null
-        event.tags?.clear()
-        event.extra?.clear()
+        event.tags=null
+        event.extras=null
         event.exceptions?.forEach { exception ->
             exception.value=exception.type ?: "Error"
-            exception.stacktrace?.frames?.forEach { it.absolutePath=null }
+            exception.stacktrace?.frames?.forEach { it.absPath=null }
         }
         val contexts=event.contexts
-        if (contexts!=null) {
-            for (key in contexts.keys.toList()) if (key !in allowedContexts) contexts.remove(key)
+        // Contexts is not a Map: keys() returns an Enumeration over internal storage.
+        for (key in java.util.Collections.list(contexts.keys())) {
+            if (key !in allowedContexts) contexts.remove(key)
         }
         return event
     }
