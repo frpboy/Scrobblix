@@ -209,29 +209,44 @@ Console.WriteLine("Windows native integration checks complete (artwork metadata,
     Assert(!rebuiltText.Contains("hostile-trace") && !rebuiltText.Contains("hostile-header"), "Hostile header payloads never reach the bytes");
 }
 
-// Bounded send budget: a burst of crash envelopes collapses to one send per
-// interval; nothing retries, nothing queues beyond the single allowed attempt.
+// Bounded send budget: deterministic injection (reset + bounds), first request
+// leaves, a burst inside the interval collapses, the per-process cap holds, and
+// an in-flight send holds the budget until actual completion.
 {
-    var bodies = new List<byte[]>();
+    Sentry.Protocol.Envelopes.Envelope FreshEnvelope() => FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(
+            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
+            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
+        "scrobblix-windows@test", "windows")!;
     var options = new Sentry.SentryOptions
     {
         Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
         SendClientReports = false
     };
+    // Interval: first request 1, immediate second still 1.
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    var bodies = new List<byte[]>();
     var transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
-    var first = FilteringEnvelopeTransport.RebuildToGenericEvent(
-        new Sentry.Protocol.Envelopes.Envelope(
-            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
-            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
-        "scrobblix-windows@test", "windows")!;
-    transport.SendEnvelopeAsync(first).GetAwaiter().GetResult();
-    var second = FilteringEnvelopeTransport.RebuildToGenericEvent(
-        new Sentry.Protocol.Envelopes.Envelope(
-            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
-            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
-        "scrobblix-windows@test", "windows")!;
-    transport.SendEnvelopeAsync(second).GetAwaiter().GetResult();
-    Assert(bodies.Count <= 1, "Send budget drops bursts instead of looping");
+    transport.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(bodies.Count == 1, "First send reaches the wire");
+    transport.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(bodies.Count == 1, "Minimum interval collapses bursts");
+    // Cap: three attempts allowed, further sends dropped.
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    FilteringEnvelopeTransport.MinAttemptInterval = TimeSpan.Zero;
+    FilteringEnvelopeTransport.MaxAttemptsPerProcess = 3;
+    var cappedBodies = new List<byte[]>();
+    var capped = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(cappedBodies)), "scrobblix-windows@test", "windows");
+    for (var i = 0; i < 5; i++) capped.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(cappedBodies.Count == 3, "Per-process attempt cap holds");
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    // In-flight ownership: a concurrent second send is dropped until completion.
+    var slowBodies = new List<byte[]>();
+    var slow = new FilteringEnvelopeTransport(options, new HttpClient(new SlowRecordingHandler(slowBodies, 2_000)), "scrobblix-windows@test", "windows");
+    var first = slow.SendEnvelopeAsync(FreshEnvelope());
+    var second = slow.SendEnvelopeAsync(FreshEnvelope());
+    Task.WhenAll(first, second).GetAwaiter().GetResult();
+    Assert(slowBodies.Count == 1, "A send in flight holds the budget until completion");
 }
 
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
@@ -253,6 +268,17 @@ sealed class RecordingHandler(List<byte[]> bodies) : HttpMessageHandler
 {
     protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
     {
+        var bytes = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+        lock (bodies) bodies.Add(bytes);
+        return new HttpResponseMessage(HttpStatusCode.OK);
+    }
+}
+
+sealed class SlowRecordingHandler(List<byte[]> bodies, int delayMs) : HttpMessageHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        await Task.Delay(delayMs, cancellationToken);
         var bytes = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
         lock (bodies) bodies.Add(bytes);
         return new HttpResponseMessage(HttpStatusCode.OK);

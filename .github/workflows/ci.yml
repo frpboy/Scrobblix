@@ -96,29 +96,41 @@ jobs:
       - name: Validate nonempty synthetic DSN substitution (synthetic only)
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
         env:
-          SCROBBLIX_SENTRY_DSN: "https://examplePublicKey@o0.ingest.us.sentry.io/0"
+          SCROBBLIX_SENTRY_DSN: "https://0123456789abcdef0123456789abcdef@o0.ingest.us.sentry.io/0"
         shell: pwsh
         run: |
-          dotnet build src/Scrobblix.Windows/Scrobblix.Windows.csproj --configuration Release -p:BaseIntermediateOutputPath="$env:RUNNER_TEMP\sentry-synthetic-obj\" -p:OutDir="$env:RUNNER_TEMP\sentry-synthetic-bin\" -p:RestorePackagesPath="$env:NUGET_PACKAGES"
+          # Isolated artifacts layout: per-project obj/bin under one root, so no
+          # project-reference intermediate collisions and no reuse of the real build.
+          dotnet build src/Scrobblix.Windows/Scrobblix.Windows.csproj --configuration Release -p:UseArtifactsOutput=true -p:ArtifactsPath="$env:RUNNER_TEMP\sentry-synthetic-artifacts"
           if ($LASTEXITCODE -ne 0) { throw "Synthetic DSN build failed" }
-          $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
-          if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern "examplePublicKey" -SimpleMatch -Quiet)) { throw "Synthetic DSN did not reach the generated source" }
-          $assembly = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-bin" -Filter Scrobblix.Windows.dll | Select-Object -First 1
+          $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-artifacts\obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
+          if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern "0123456789abcdef0123456789abcdef" -SimpleMatch -Quiet)) { throw "Synthetic DSN did not reach the generated source" }
+          $assembly = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-synthetic-artifacts\bin" -Filter Scrobblix.Windows.dll | Select-Object -First 1
           if (-not $assembly) { throw "Synthetic build produced no Scrobblix.Windows.dll" }
-          # .NET user strings live in the UTF-16 (#US) heap; an ASCII byte scan is unreliable.
-          $assemblyText = [Text.Encoding]::Unicode.GetString([IO.File]::ReadAllBytes($assembly.FullName))
-          if (-not $assemblyText.Contains("examplePublicKey")) { throw "Synthetic DSN did not reach the compiled assembly string table" }
+          # Read the compiled constant exactly (metadata only, no Sentry init):
+          # proves ScrobblixSentryDsn.Value carries the value, not just some string.
+          $asm = [Reflection.Assembly]::LoadFrom($assembly.FullName)
+          $dsnType = $asm.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
+          $actual = $dsnType.GetField("Value", [Reflection.BindingFlags]"NonPublic,Static").GetRawConstantValue()
+          if ($actual -ne $env:SCROBBLIX_SENTRY_DSN) { throw "Compiled DSN constant mismatch" }
 
       - name: Validate empty DSN build stays empty (isolated outputs)
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}
+        env:
+          SCROBBLIX_SENTRY_DSN: ""
         shell: pwsh
         run: |
-          dotnet build src/Scrobblix.Windows/Scrobblix.Windows.csproj --configuration Release -p:BaseIntermediateOutputPath="$env:RUNNER_TEMP\sentry-empty-obj\" -p:OutDir="$env:RUNNER_TEMP\sentry-empty-bin\" -p:RestorePackagesPath="$env:NUGET_PACKAGES"
+          dotnet build src/Scrobblix.Windows/Scrobblix.Windows.csproj --configuration Release -p:UseArtifactsOutput=true -p:ArtifactsPath="$env:RUNNER_TEMP\sentry-empty-artifacts"
           if ($LASTEXITCODE -ne 0) { throw "Empty DSN build failed" }
-          $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-empty-obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
+          $generated = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-empty-artifacts\obj" -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
           if (-not $generated) { throw "Empty build produced no generated DSN source" }
-          if (Select-String -Path $generated.FullName -Pattern "examplePublicKey" -SimpleMatch -Quiet) { throw "Empty build reused the synthetic DSN" }
-          if (-not (Select-String -Path $generated.FullName -Pattern 'Value = "";' -SimpleMatch -Quiet)) { throw "Empty build generated source does not carry an empty DSN" }
+          if (Select-String -Path $generated.FullName -Pattern "0123456789abcdef" -SimpleMatch -Quiet) { throw "Empty build reused the synthetic DSN" }
+          $assembly = Get-ChildItem -Recurse "$env:RUNNER_TEMP\sentry-empty-artifacts\bin" -Filter Scrobblix.Windows.dll | Select-Object -First 1
+          if (-not $assembly) { throw "Empty build produced no Scrobblix.Windows.dll" }
+          $asm = [Reflection.Assembly]::LoadFrom($assembly.FullName)
+          $dsnType = $asm.GetType("Scrobblix.Windows.ScrobblixSentryDsn")
+          $actual = $dsnType.GetField("Value", [Reflection.BindingFlags]"NonPublic,Static").GetRawConstantValue()
+          if ($actual -ne "") { throw "Empty build compiled a nonempty DSN constant" }
 
       - name: Validate native broker client contracts (synthetic only)
         if: ${{ needs.classify-changes.result == 'success' && needs.classify-changes.outputs.docs_only != 'true' }}

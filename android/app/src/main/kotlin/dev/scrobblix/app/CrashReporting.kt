@@ -2,6 +2,7 @@ package dev.scrobblix.app
 
 import android.content.Context
 import io.sentry.android.core.SentryAndroid
+import io.sentry.android.core.SentryAndroidOptions
 
 /**
  * Optional automatic crash reporting. Disabled unless a DSN was baked in at build
@@ -18,79 +19,92 @@ import io.sentry.android.core.SentryAndroid
  * - the final transport boundary rebuilds every envelope from code-owned
  *   constants, so no exception, frame, thread or context content can leave the
  *   device regardless of what any producer attached;
- * - delivery is best-effort and bounded: no disk persistence, queue depth one,
+ * - client reports are off (init flag, and the SDK async transport that would
+ *   attach them is not in the send path);
+ * - delivery is best-effort and process-locally bounded: no disk persistence,
  *   at most one send in flight, a minimum attempt interval and a per-process
- *   attempt cap; failures and budget excess drop. Crash reporting never blocks,
- *   retries indefinitely or crashes the app;
- * - client reports are off (init flag + fresh downstream hint).
+ *   attempt cap; failures and budget excess drop. Crash reporting never blocks
+ *   the crash path beyond the actual exchange and never crashes the app.
  */
 object CrashReporting {
     private const val ENVIRONMENT="android"
     private const val RELEASE_PREFIX="scrobblix-android@"
     @Volatile private var enabled=false
+
     fun initialize(context:Context) {
         val dsn=BuildConfig.SCROBBLIX_SENTRY_DSN
-        if (dsn.isEmpty()) return
-        SentryAndroid.init(context) { options ->
-            options.dsn=dsn
-            options.isSendDefaultPii=false
-            options.tracesSampleRate=0.0
-            // Carriers that are off, explicitly: the SDK defaults several of these
-            // to true, including NDK capture and scope sync.
-            options.isEnableNdk=false
-            options.isEnableScopeSync=false
-            options.isAnrEnabled=false
-            options.isEnableAutoSessionTracking=false
-            options.isEnableUserInteractionBreadcrumbs=false
-            options.isEnableActivityLifecycleBreadcrumbs=false
-            options.isEnableNetworkEventBreadcrumbs=false
-            options.isEnableAppLifecycleBreadcrumbs=false
-            options.isEnableSystemEventBreadcrumbs=false
-            options.isEnableAppComponentBreadcrumbs=false
-            options.isAttachScreenshot=false
-            options.isAttachViewHierarchy=false
-            // Client reports off at init as well; the transport's fresh downstream
-            // hint is the authoritative boundary (the SDK only attaches them to
-            // uncaught-hint envelopes).
-            options.isSendClientReports=false
-            // Bounded, non-persistent delivery: a dedicated no-op envelope cache
-            // (NOT the SDK sentinel, which the Android initializer would replace
-            // with the on-disk AndroidEnvelopeCache), no cache directory, and the
-            // smallest send queue, so reports never pile up or survive the process.
-            options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
-            options.cacheDirPath=null
-            options.maxQueueSize=1
-            options.environment=ENVIRONMENT
-            options.release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
-            options.beforeSend=CrashEventFilter
-            // Final gate at the transport boundary: whatever reaches this point is
-            // rebuilt from code-owned constants under a fresh constant header.
-            val release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
-            options.setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(io.sentry.AsyncHttpTransportFactory().create(opts, requestDetails),release,ENVIRONMENT)
-            }
-        }
+        if (dsn.isEmpty() || enabled) return
+        SentryAndroid.init(context) { options -> applyHardening(options,dsn) }
         enabled=true
     }
+
+    /**
+     * The complete production crash-reporting configuration, exactly as init
+     * applies it. The persistence test drives the SDK init with this helper and
+     * proves no cache or outbox writes happen after capture.
+     */
+    fun applyHardening(options:SentryAndroidOptions,dsn:String) {
+        options.dsn=dsn
+        options.isSendDefaultPii=false
+        options.tracesSampleRate=0.0
+        // Carriers that are off, explicitly: the SDK defaults several of these
+        // to true, including NDK capture and scope sync.
+        options.isEnableNdk=false
+        options.isEnableScopeSync=false
+        options.isAnrEnabled=false
+        options.isEnableAutoSessionTracking=false
+        options.isEnableUserInteractionBreadcrumbs=false
+        options.isEnableActivityLifecycleBreadcrumbs=false
+        options.isEnableNetworkEventBreadcrumbs=false
+        options.isEnableAppLifecycleBreadcrumbs=false
+        options.isEnableSystemEventBreadcrumbs=false
+        options.isEnableAppComponentBreadcrumbs=false
+        options.isAttachScreenshot=false
+        options.isAttachViewHierarchy=false
+        // Client reports off at init as well; the direct synchronous transport
+        // is the authoritative boundary (the SDK async transport is the only
+        // attach point and it is not in the path).
+        options.isSendClientReports=false
+        // Non-persistent delivery: a dedicated no-op envelope cache (NOT the SDK
+        // sentinel, which the Android initializer would replace with the on-disk
+        // AndroidEnvelopeCache) and no cache directory, so reports never pile up
+        // or survive the process.
+        options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+        options.cacheDirPath=null
+        options.environment=ENVIRONMENT
+        options.release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
+        options.beforeSend=CrashEventFilter
+        // Final gate at the transport boundary: whatever reaches this point is
+        // rebuilt from code-owned constants and posted synchronously.
+        options.setTransportFactory { opts, requestDetails ->
+            FilteringEnvelopeTransport(opts,requestDetails,RELEASE_PREFIX+BuildConfig.VERSION_NAME,ENVIRONMENT)
+        }
+    }
+
     fun capture(error:Throwable) { if (enabled) io.sentry.Sentry.captureException(error) }
 
     /**
      * Debug-only diagnostics affordance for ingest verification. Queues one
-     * synthetic exception through the normal capture path; the transport gate
-     * reduces it to the same generic constants-only event as a real crash, so
-     * receipt is verified by timestamp correlation, never by echoed content.
+     * synthetic exception through the normal capture path on a background
+     * thread (the synchronous transport performs the real exchange inline, so
+     * the debug UI thread must not call this directly on the main thread for a
+     * responsive app - the join is bounded); the transport gate reduces it to
+     * the same generic constants-only event as a real crash. Receipt is
+     * verified remotely by the exact wire event id, never by echoed content.
      */
     fun captureDiagnosticTestReport():String {
         if (!BuildConfig.DEBUG) return "Test reports are only available in debug builds."
         if (!enabled) return "Crash reporting is not active in this build."
-        capture(ScrobblixDiagnosticsTestException())
-        io.sentry.Sentry.flush(3_000)
+        FilteringEnvelopeTransport.clearWireEventId()
+        val worker=kotlin.concurrent.thread {
+            io.sentry.Sentry.captureException(ScrobblixDiagnosticsTestException())
+        }
+        worker.join(30_000)
         val wireId=FilteringEnvelopeTransport.lastWireEventId
-        // Deliberately "attempted", never "sent": local flush proves nothing about
-        // remote receipt. Count it received only when the remote project shows this
-        // exact wire event id.
+        // Deliberately "attempted", never "sent": only a remote receipt matching
+        // this exact wire event id counts as received.
         return if (wireId!=null) "Attempted; count as received only when remote receipt matches event id $wireId. Carries no listening data, account names or device content."
-        else "Attempted; no wire event id recorded (send budget or queue). Nothing was persisted."
+        else "Attempted; no wire event id recorded (send budget or downstream drop). Nothing was persisted."
     }
 }
 

@@ -12,10 +12,11 @@
        SCROBBLIX_SENTRY_DSN environment variable is baked into generated source.
        An empty value keeps diagnostics local-only, matching the documented baseline. -->
   <Target Name="ScrobblixGenerateSentryDsn" BeforeTargets="CoreCompile">
-    <!-- Strict validation instead of C# escaping: only URL-safe characters may
-         be baked in, so the generated const needs no escaping at all. -->
-    <Error Condition="'$(SCROBBLIX_SENTRY_DSN)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SCROBBLIX_SENTRY_DSN)', '^[A-Za-z0-9:/.@_-]+$'))"
-           Text="SCROBBLIX_SENTRY_DSN contains characters outside the URL-safe set; refusing to bake it into generated source." />
+    <!-- Strict validation instead of C# escaping: the value must be a Sentry
+         HTTPS ingest DSN shape, so the generated const needs no escaping and a
+         malformed string cannot fail SDK startup. -->
+    <Error Condition="'$(SCROBBLIX_SENTRY_DSN)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SCROBBLIX_SENTRY_DSN)', '^https://[0-9a-f]{32}@o[0-9]+\.ingest\.[a-z]+\.sentry\.io/[0-9]+$'))"
+           Text="SCROBBLIX_SENTRY_DSN is not a Sentry HTTPS ingest DSN (https://<32hex>@o<org>.ingest.<region>.sentry.io/<project>); refusing to bake it into generated source." />
     <!-- Semicolons are MSBuild item separators in task attributes: %3B escapes them. -->
     <WriteLinesToFile File="$(IntermediateOutputPath)ScrobblixSentryDsn.g.cs"
                       Lines="namespace Scrobblix.Windows%3B internal static class ScrobblixSentryDsn { public const string Value = &quot;$(SCROBBLIX_SENTRY_DSN)&quot;%3B }"

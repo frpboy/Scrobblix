@@ -24,8 +24,9 @@ namespace Scrobblix.Windows;
 ///   credentials are never attached to events;
 /// - capture is the SDK default chain (AppDomain unhandled exceptions and
 ///   unobserved task exceptions); client reports are off; delivery is
-///   best-effort, bounded (queue depth one, one send in flight, minimum
-///   attempt interval, per-process attempt cap) and never persisted to disk.
+///   best-effort, process-locally bounded (queue depth one, one send in
+///   flight, minimum attempt interval, per-process attempt cap; bounds reset
+///   on restart) and never persisted to disk.
 /// </summary>
 public static class CrashReporting
 {
@@ -135,8 +136,9 @@ public static class CrashReporting
         if (!_enabled) return "disabled (no DSN configured in this build)";
         try
         {
+            FilteringEnvelopeTransport.ResetLastWireEventId();
             SentrySdk.CaptureException(new ScrobblixDiagnosticsTestException());
-            SentrySdk.Flush(TimeSpan.FromSeconds(2));
+            SentrySdk.Flush(TimeSpan.FromSeconds(5));
             // Deliberately "attempted", never "sent": a local flush proves nothing
             // about remote receipt. Count it received only when the remote project
             // shows this exact wire event id.

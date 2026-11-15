@@ -180,15 +180,9 @@ class CrashReportingBoundaryTest {
         assertNull(recorded[0].header.traceContext)
     }
 
-    @Test fun downstreamWireAfterDiscardedEventCarriesNoClientReport() {
-        // Actual downstream wire through the REAL AsyncHttpTransport on loopback:
-        // one capture is dropped at the hook (exactly what a client report would
-        // record), then a crash-path capture (uncaught-hint marker - the only
-        // path where the SDK attaches a client report, right before the
-        // connection) goes through the production transport wrapper. The received
-        // request body must be the generic event only.
-        SendBudget.resetForTesting()
-        val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
+    private fun startLoopbackServer(receivedBody:java.util.concurrent.atomic.AtomicReference<ByteArray?>):Pair<java.net.ServerSocket,Thread> {
+        // One-connection loopback: reads the full HTTP request (headers plus
+        // chunked or fixed body), records the body and answers 200.
         val server=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
         val reader=kotlin.concurrent.thread {
             try {
@@ -212,8 +206,8 @@ class CrashReportingBoundaryTest {
                 val headers=String(buffered,0,end,Charsets.ISO_8859_1)
                 var pos=end+4
                 val body=java.io.ByteArrayOutputStream()
-                var done=false
                 if (headers.contains("chunked",ignoreCase=true)) {
+                    var done=false
                     while (!done) {
                         var lineEnd=-1
                         var i=pos
@@ -240,23 +234,34 @@ class CrashReportingBoundaryTest {
                 conn.close()
             } catch (_:Exception) {} finally { try { server.close() } catch (_:Exception) {} }
         }
+        return Pair(server,reader)
+    }
+
+    @Test fun downstreamWireAfterDiscardedEventCarriesNoClientReport() {
+        // Actual downstream wire through the production transport on loopback:
+        // one capture is dropped at the hook (exactly what a client report would
+        // record), then a crash-path capture (uncaught-hint marker - the only
+        // path where the SDK would attach a client report) goes out. The received
+        // request body must be the generic event only, and the ORIGINAL crash
+        // latch must complete only after the real exchange.
+        SendBudget.resetForTesting()
+        val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
+        val (server,reader)=startLoopbackServer(receivedBody)
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
             isSendClientReports=false
             envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
-            maxQueueSize=1
             setTransportFactory { opts, requestDetails ->
-                FilteringEnvelopeTransport(io.sentry.AsyncHttpTransportFactory().create(opts,requestDetails),"scrobblix-android@test","android")
+                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
             }
             var dropNext=true
             setBeforeSend { event, _ -> if (dropNext) { dropNext=false; null } else event }
         }
         val client=SentryClient(options)
         client.captureEvent(hostileEvent())
-        val uncaught=io.sentry.util.HintUtils.createWithTypeCheckHint(
-            io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(5_000,io.sentry.NoOpLogger.getInstance()))
-        client.captureEvent(hostileEvent(),uncaught)
-        client.flush(10_000)
+        val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(15_000,io.sentry.NoOpLogger.getInstance())
+        client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
+        assertTrue("original crash latch completes after the real exchange",latch.waitFlush())
         reader.join(15_000)
         val body=receivedBody.get()
         assertTrue("loopback server received the wire body",body!=null)
@@ -267,24 +272,86 @@ class CrashReportingBoundaryTest {
         assertNoHostileStrings(text)
     }
 
+    @Test fun neverCompletingDownstreamTimesOutAndReleasesBudget() {
+        // A downstream that never responds: the exchange times out, the latch is
+        // never marked, and the budget is released (not held forever by the hung
+        // attempt), so a later attempt past the interval can proceed.
+        SendBudget.resetForTesting()
+        SendBudget.minIntervalMs=0
+        val blackhole=java.net.ServerSocket(0,50,java.net.InetAddress.getByName("127.0.0.1"))
+        val blackholeReader=kotlin.concurrent.thread {
+            try { val c=blackhole.accept(); Thread.sleep(6_000); c.close() } catch (_:Exception) {} finally { try { blackhole.close() } catch (_:Exception) {} }
+        }
+        val options=SentryOptions().apply {
+            dsn="http://00000000000000000000000000000000@127.0.0.1:${blackhole.localPort}/1"
+            isSendClientReports=false
+            connectionTimeoutMillis=2_000
+            readTimeout=2_000
+            setTransportFactory { opts, requestDetails ->
+                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            }
+        }
+        val client=SentryClient(options)
+        val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(1_000,io.sentry.NoOpLogger.getInstance())
+        client.captureEvent(hostileEvent(),io.sentry.util.HintUtils.createWithTypeCheckHint(latch))
+        assertFalse("a downstream that never completes never marks the crash latch",latch.waitFlush())
+        assertTrue("budget released after the timed-out exchange",SendBudget.attemptsSoFar==1)
+        val receivedBody=java.util.concurrent.atomic.AtomicReference<ByteArray?>(null)
+        val (server,reader)=startLoopbackServer(receivedBody)
+        val options2=SentryOptions().apply {
+            dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
+            isSendClientReports=false
+            setTransportFactory { opts, requestDetails ->
+                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            }
+        }
+        SentryClient(options2).captureEvent(hostileEvent())
+        reader.join(15_000)
+        blackholeReader.join(10_000)
+        assertTrue("a later attempt proceeds after the hung one",receivedBody.get()!=null)
+    }
+
+    @Test fun sendBudgetCapsAttemptsPerProcess() {
+        SendBudget.resetForTesting()
+        SendBudget.minIntervalMs=0
+        SendBudget.maxAttemptsPerProcess=3
+        val options=SentryOptions().apply {
+            dsn="http://00000000000000000000000000000000@127.0.0.1:1/1"
+            isSendClientReports=false
+            connectionTimeoutMillis=1_000
+            readTimeout=1_000
+            setTransportFactory { opts, requestDetails ->
+                FilteringEnvelopeTransport(opts,requestDetails,"scrobblix-android@test","android")
+            }
+        }
+        val client=SentryClient(options)
+        repeat(5) { client.captureEvent(hostileEvent()) }
+        assertEquals("per-process attempt cap holds",3,SendBudget.attemptsSoFar)
+        SendBudget.resetForTesting()
+        client.captureEvent(hostileEvent())
+        client.captureEvent(hostileEvent())
+        assertEquals("minimum interval collapses bursts",1,SendBudget.attemptsSoFar)
+    }
+
     @Test fun productionInitKeepsNoopCacheAndWritesNothing() {
-        // The real Android init path with the production hardening flags: the
-        // dedicated no-op cache must survive AndroidOptionsInitializer (which
-        // replaces the SDK sentinel with the on-disk AndroidEnvelopeCache), and
-        // nothing may be persisted.
+        // The real Android init path with the exact production configuration
+        // helper: after a capture and a wait, the dedicated no-op cache must
+        // survive AndroidOptionsInitializer and nothing may be persisted.
         val context=androidx.test.core.app.ApplicationProvider.getApplicationContext<android.content.Context>()
+        val sentryDir=java.io.File(context.cacheDir,"sentry")
+        val before=sentryDir.listFiles()?.toList() ?: emptyList()
         var used:io.sentry.android.core.SentryAndroidOptions?=null
         io.sentry.android.core.SentryAndroid.init(context) { options ->
-            options.dsn="http://00000000000000000000000000000000@127.0.0.1:1/1"
-            options.isSendClientReports=false
-            options.cacheDirPath=null
-            options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
-            options.maxQueueSize=1
+            CrashReporting.applyHardening(options,"http://00000000000000000000000000000000@127.0.0.1:1/1")
             used=options
         }
+        io.sentry.Sentry.captureException(RuntimeException("cache-path probe"))
+        Thread.sleep(2_000)
+        io.sentry.Sentry.flush(2_000)
         assertTrue("dedicated no-op cache survives Android init", used!!.envelopeDiskCache is ScrobblixNoOpEnvelopeCache)
-        val sentryDir=java.io.File(context.cacheDir,"sentry")
-        assertTrue("no sentry cache files are persisted", !sentryDir.exists() || sentryDir.listFiles()!!.isEmpty())
+        assertTrue("cache reports nothing persisted", used!!.envelopeDiskCache.iterator().hasNext()==false)
+        val after=sentryDir.listFiles()?.toList() ?: emptyList()
+        assertTrue("no cache or outbox writes after capture", after.size==before.size)
         io.sentry.Sentry.close()
     }
 }
