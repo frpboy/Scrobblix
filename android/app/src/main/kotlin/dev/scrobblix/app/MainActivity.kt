@@ -340,6 +340,11 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                     }
                 }
                 Text("Privacy: app backup is disabled. Uninstalling removes this device's history and queued work. Disconnect does not delete history or revoke the remote session.")
+                if(BuildConfig.DEBUG) {
+                    Text("Diagnostics (debug builds only)",style=MaterialTheme.typography.titleSmall)
+                    Text("Sends one synthetic crash report through the crash-reporting boundary. The outbound event is rebuilt from fixed placeholders before anything leaves the device: no listening data, account names, exception content or device details.")
+                    Button(onClick={scope.launch(kotlinx.coroutines.Dispatchers.IO) { message=CrashReporting.captureDiagnosticTestReport() }}) { Text("Send synthetic test crash report") }
+                }
             }
         }
         if(message.isNotBlank() && !(tab=="Settings" && browserStatus==message)) Text(message)

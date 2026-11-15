@@ -5,4 +5,24 @@
   <ItemGroup>
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
   </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Sentry" Version="7.0.0" />
+  </ItemGroup>
+  <!-- Optional automatic crash reporting (public ingest DSN, not a secret): the
+       SCROBBLIX_SENTRY_DSN environment variable is baked into generated source.
+       An empty value keeps diagnostics local-only, matching the documented baseline. -->
+  <Target Name="ScrobblixGenerateSentryDsn" BeforeTargets="CoreCompile">
+    <!-- Strict validation instead of C# escaping: the value must be a Sentry
+         HTTPS ingest DSN shape, so the generated const needs no escaping and a
+         malformed string cannot fail SDK startup. -->
+    <Error Condition="'$(SCROBBLIX_SENTRY_DSN)' != '' And !$([System.Text.RegularExpressions.Regex]::IsMatch('$(SCROBBLIX_SENTRY_DSN)', '^https://[0-9a-f]{32}@o[0-9]+\.ingest\.[a-z]+\.sentry\.io/[0-9]+$'))"
+           Text="SCROBBLIX_SENTRY_DSN is not a Sentry HTTPS ingest DSN (https://&lt;32hex&gt;@o&lt;org&gt;.ingest.&lt;region&gt;.sentry.io/&lt;project&gt;); refusing to bake it into generated source." />
+    <!-- Semicolons are MSBuild item separators in task attributes: %3B escapes them. -->
+    <WriteLinesToFile File="$(IntermediateOutputPath)ScrobblixSentryDsn.g.cs"
+                      Lines="namespace Scrobblix.Windows%3B internal static class ScrobblixSentryDsn { public const string Value = &quot;$(SCROBBLIX_SENTRY_DSN)&quot;%3B }"
+                      Overwrite="true" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)ScrobblixSentryDsn.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>

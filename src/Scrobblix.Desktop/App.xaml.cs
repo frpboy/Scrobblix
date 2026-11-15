@@ -74,6 +74,8 @@ public partial class App : Microsoft.UI.Xaml.Application, IDisposable
         }
 #endif
         _startupMilestones.Add(("startup.launch_entered", _startupClock.ElapsedMilliseconds));
+        CrashReporting.Initialize();
+        UnhandledException += (_, eventArgs) => CrashReporting.Capture(eventArgs.Exception);
         if (!TryAcquireSingleInstance())
         {
             Exit();

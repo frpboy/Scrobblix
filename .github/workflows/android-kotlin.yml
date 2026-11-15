@@ -31,6 +31,8 @@ jobs:
           persist-credentials: false
       - name: Test shared behavior and compile platform and installable preview app
         shell: bash
+        env:
+          SCROBBLIX_SENTRY_DSN: ${{ vars.SCROBBLIX_SENTRY_DSN }}
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"

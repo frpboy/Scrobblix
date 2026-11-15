@@ -266,6 +266,12 @@
                         <TextBlock Text="Export a small ZIP with version details and operational event timestamps/categories. Free-form log messages, track history, artwork, full URLs and credentials are not included. Nothing is uploaded automatically." TextWrapping="Wrap" />
                         <Button x:Name="ExportSupportBundleButton" Content="Export support bundle…" Click="ExportSupportBundleButton_Click" HorizontalAlignment="Left" />
                         <TextBlock x:Name="SupportBundleStatusText" Text="No support bundle has been created this session." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        <StackPanel x:Name="CrashReportingDiagnosticsPanel" Spacing="8" Visibility="Collapsed">
+                            <TextBlock Text="Crash reporting diagnostics (debug builds only)" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
+                            <TextBlock Text="Sends one synthetic crash report through the crash-reporting boundary. The outbound event is rebuilt from fixed placeholders before anything leaves this device: no listening data, account names, exception content or device details." TextWrapping="Wrap" />
+                            <Button Content="Send synthetic test crash report" Click="SendTestCrashReportButton_Click" HorizontalAlignment="Left" />
+                            <TextBlock x:Name="CrashReportingTestStatusText" Text="" TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
+                        </StackPanel>
                         <TextBlock Text="Recommendation" Style="{StaticResource SubtitleTextBlockStyle}" Margin="0,12,0,0" />
                         <TextBlock Text="Start a track in a Windows media-control-enabled app. If metadata stays incomplete, install the optional Browser Companion for that supported site." TextWrapping="Wrap" />
                     </StackPanel>

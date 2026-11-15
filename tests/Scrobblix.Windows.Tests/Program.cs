@@ -73,6 +73,182 @@ await CredentialCanaryChecks.RunAsync();
 await MediaSessionChecks.RunAsync();
 Console.WriteLine("Windows native integration checks complete (artwork metadata, pipe authorization, credential canaries). No WinUI pixel, decoder memory-bound, or cryptographic caller-authentication claim.");
 
+
+// Crash reporting privacy boundary: hostile payloads must not survive ApplyPrivacyBoundary.
+{
+    const string hostileMessage = "played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678";
+    var hostile = new Sentry.SentryEvent(new InvalidOperationException(hostileMessage));
+    // Populate exception values explicitly: the SDK fills them from the exception at
+    // capture time, not in the event constructor.
+    hostile.SentryExceptions = new[]
+    {
+        new Sentry.Protocol.SentryException
+        {
+            Type = "InvalidOperationException",
+            Value = hostileMessage,
+            Stacktrace = new Sentry.SentryStackTrace
+            {
+                Frames = { new Sentry.SentryStackFrame { AbsolutePath = "C:\\Users\\rahul\\Music\\ArtistX.cs", Function = "Play" } }
+            }
+        }
+    };
+    hostile.Request = new Sentry.SentryRequest { Url = "https://ws.audioscrobbler.com/2.0/?user=secret", Method = "GET" };
+    hostile.User = new Sentry.SentryUser { Username = "rahul" };
+    hostile.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
+    hostile.Message = new Sentry.SentryMessage { Message = "track ArtistX" };
+    hostile.SetTag("account", "rahul-lastfm");
+    hostile.SetExtra("now_playing", "ArtistX - TrackY");
+    hostile.Contexts["response"] = new { body = "ArtistX scrobble payload" };
+    // Attachments bypass event field mutation: they travel on the hint.
+    var hostileHint = Sentry.SentryHint.WithAttachments(
+        new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
+    var filtered = CrashReporting.ApplyPrivacyBoundary(hostile, hostileHint);
+    Assert(hostileHint.Attachments.Count == 0, "Crash boundary drops hint attachments");
+    // Request/User getters lazily re-create empty objects, so the serialized JSON
+    // assertions below (not property reads) are the proof those carriers are gone.
+    Assert(filtered.Breadcrumbs.Count == 0, "Crash boundary drops breadcrumbs");
+    Assert(filtered.Message is null, "Crash boundary drops event message");
+    var filteredExceptions = filtered.SentryExceptions!.ToList();
+    Assert(filteredExceptions.Count == 1 && filteredExceptions[0].Value == FilteringEnvelopeTransport.GenericType && filteredExceptions[0].Type == FilteringEnvelopeTransport.GenericType, "Crash boundary replaces exception types and messages with the generic constant");
+    Assert(filteredExceptions[0].Stacktrace!.Frames.All(f => f.AbsolutePath is null), "Crash boundary drops frame absolute paths");
+    Assert(filtered.Tags.Count == 0, "Crash boundary drops tags");
+    Assert(filtered.Extra.Count == 0, "Crash boundary drops extras");
+    Assert(filtered.Contexts.Count == 0, "Crash boundary drops all contexts");
+    // Actual SDK event serialization: no hostile string may survive into the JSON the SDK emits.
+    using var stream = new MemoryStream();
+    using (var jsonWriter = new System.Text.Json.Utf8JsonWriter(stream))
+    {
+        filtered.WriteTo(jsonWriter, null);
+    }
+    var serialized = System.Text.Encoding.UTF8.GetString(stream.ToArray());
+    foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing" })
+        Assert(!serialized.Contains(hostileString), "Serialized SDK event carries no " + hostileString);
+}
+
+// Transport-level proof: scope-injected payloads and scope attachments never reach
+// the wire. The production FilteringEnvelopeTransport is driven against a recording
+// HTTP handler, so the asserted content is the actual HTTP request body bytes.
+{
+    const string hostileMessage = "played ArtistX - TrackY from https://open.spotify.com/track/z token=abcd1234efgh5678";
+    var bodies = new List<byte[]>();
+    var options = new Sentry.SentryOptions
+    {
+        Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
+        AutoSessionTracking = false,
+        SendClientReports = false,
+        MaxQueueItems = 1
+    };
+    // First capture is dropped at the hook: a discarded event is exactly what a
+    // client report would carry. The wire must still contain no client_report.
+    var dropNext = true;
+    options.SetBeforeSend((e, h) =>
+    {
+        if (dropNext)
+        {
+            dropNext = false;
+            return null;
+        }
+        return CrashReporting.ApplyPrivacyBoundary(e, h);
+    });
+    options.Transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
+    using (Sentry.SentrySdk.Init(options))
+    {
+        Sentry.SentrySdk.ConfigureScope(scope =>
+        {
+            scope.User = new Sentry.SentryUser { Username = "rahul" };
+            scope.SetTag("account", "rahul-lastfm");
+            scope.AddBreadcrumb(new Sentry.Breadcrumb("ui.click play", "user"));
+            scope.AddAttachment(new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+                new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes(hostileMessage)), "history.json", "application/json"));
+        });
+        Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage + " dropped"));
+        Sentry.SentrySdk.CaptureException(new InvalidOperationException(hostileMessage));
+        Sentry.SentrySdk.FlushAsync(TimeSpan.FromSeconds(10)).GetAwaiter().GetResult();
+    }
+    Assert(bodies.Count == 1, "Exactly one HTTP request left the transport (hook-dropped capture stays local)");
+    var wire = Encoding.UTF8.GetString(bodies[0]);
+    Assert(wire.Contains("\"event\""), "Wire envelope carries an event item");
+    Assert(!wire.Contains("\"attachment\""), "Wire envelope carries no attachment items");
+    Assert(!wire.Contains("\"trace\""), "Wire header carries no trace context");
+    Assert(wire.Contains(FilteringEnvelopeTransport.GenericType), "Wire event is the generic constants-only report");
+    Assert(!wire.Contains("client_report"), "Wire carries no client report after a discarded event");
+    Assert(!wire.Contains("InvalidOperationException"), "Input exception type is input-derived and dropped");
+    Assert(!wire.Contains("stacktrace"), "No stack frames cross the boundary");
+    Assert(!wire.Contains("\"contexts\""), "No SDK or device contexts cross the boundary");
+    foreach (var hostileString in new[] { "ArtistX", "audioscrobbler", "abcd1234efgh5678", "rahul", "open.spotify.com", "now_playing", "history.json" })
+        Assert(!wire.Contains(hostileString), "Wire bytes carry no " + hostileString);
+}
+
+// Direct custom-envelope bypass: a hand-built envelope, no hooks involved. The gate
+// must drop non-event envelopes, strip attachment items and rebuild the header.
+{
+    var eventItem = Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent());
+    var attachmentItem = Sentry.Protocol.Envelopes.EnvelopeItem.FromAttachment(
+        new Sentry.SentryAttachment(Sentry.AttachmentType.Default,
+            new Sentry.ByteAttachmentContent(Encoding.UTF8.GetBytes("history")), "history.json", "application/json"));
+    var hostileHeader = new Dictionary<string, object?>
+    {
+        ["event_id"] = Guid.NewGuid().ToString("N"),
+        ["trace"] = new { trace_id = "4bf92f3577b34da6a3ce929d0e0e4736", release = "hostile-trace" },
+        ["custom"] = "hostile-header"
+    };
+    var hostileEnvelope = new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem, eventItem });
+    Assert(FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(hostileHeader, new[] { attachmentItem }), "scrobblix-windows@test", "windows") is null,
+        "Gate drops non-event envelopes entirely");
+    var rebuilt = FilteringEnvelopeTransport.RebuildToGenericEvent(hostileEnvelope, "scrobblix-windows@test", "windows");
+    Assert(rebuilt is not null, "Gate rebuilds an event envelope");
+    Assert(rebuilt!.Items.Count == 1 && rebuilt.Items.All(i => i.TryGetType() == "event"), "Gate emits exactly one generic event item");
+    Assert(rebuilt.Header.Keys.All(k => k == "event_id"), "Gate rebuilds a constant header");
+    Assert(!Equals(rebuilt.Header["event_id"], hostileHeader["event_id"]), "Gate issues a fresh event id, not the hostile one");
+    using var rebuiltBytes = new MemoryStream();
+    rebuilt.Serialize(rebuiltBytes, null);
+    var rebuiltText = Encoding.UTF8.GetString(rebuiltBytes.ToArray());
+    Assert(rebuiltText.Contains(FilteringEnvelopeTransport.GenericType), "Rebuilt envelope carries the generic constant");
+    Assert(!rebuiltText.Contains("hostile-trace") && !rebuiltText.Contains("hostile-header"), "Hostile header payloads never reach the bytes");
+}
+
+// Bounded send budget: deterministic injection (reset + bounds), first request
+// leaves, a burst inside the interval collapses, the per-process cap holds, and
+// an in-flight send holds the budget until actual completion.
+{
+    Sentry.Protocol.Envelopes.Envelope FreshEnvelope() => FilteringEnvelopeTransport.RebuildToGenericEvent(
+        new Sentry.Protocol.Envelopes.Envelope(
+            new Dictionary<string, object?> { ["event_id"] = Guid.NewGuid().ToString("N") },
+            new[] { Sentry.Protocol.Envelopes.EnvelopeItem.FromEvent(new Sentry.SentryEvent()) }),
+        "scrobblix-windows@test", "windows")!;
+    var options = new Sentry.SentryOptions
+    {
+        Dsn = "https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1",
+        SendClientReports = false
+    };
+    // Interval: first request 1, immediate second still 1.
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    var bodies = new List<byte[]>();
+    var transport = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(bodies)), "scrobblix-windows@test", "windows");
+    transport.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(bodies.Count == 1, "First send reaches the wire");
+    transport.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(bodies.Count == 1, "Minimum interval collapses bursts");
+    // Cap: three attempts allowed, further sends dropped.
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    FilteringEnvelopeTransport.MinAttemptInterval = TimeSpan.Zero;
+    FilteringEnvelopeTransport.MaxAttemptsPerProcess = 3;
+    var cappedBodies = new List<byte[]>();
+    var capped = new FilteringEnvelopeTransport(options, new HttpClient(new RecordingHandler(cappedBodies)), "scrobblix-windows@test", "windows");
+    for (var i = 0; i < 5; i++) capped.SendEnvelopeAsync(FreshEnvelope()).GetAwaiter().GetResult();
+    Assert(cappedBodies.Count == 3, "Per-process attempt cap holds");
+    FilteringEnvelopeTransport.ResetBudgetForTesting();
+    // In-flight ownership: a concurrent second send is dropped until completion.
+    var slowBodies = new List<byte[]>();
+    var slow = new FilteringEnvelopeTransport(options, new HttpClient(new SlowRecordingHandler(slowBodies, 2_000)), "scrobblix-windows@test", "windows");
+    var first = slow.SendEnvelopeAsync(FreshEnvelope());
+    var second = slow.SendEnvelopeAsync(FreshEnvelope());
+    Task.WhenAll(first, second).GetAwaiter().GetResult();
+    Assert(slowBodies.Count == 1, "A send in flight holds the budget until completion");
+}
+
 sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
 {
     public byte[] Content { get; set; } = initial;
@@ -87,3 +263,24 @@ sealed class ArtworkHandler(byte[] initial) : HttpMessageHandler
 }
 
 sealed class TestClock : IWallClock { public DateTimeOffset UtcNow => DateTimeOffset.UtcNow; }
+
+sealed class RecordingHandler(List<byte[]> bodies) : HttpMessageHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        var bytes = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+        lock (bodies) bodies.Add(bytes);
+        return new HttpResponseMessage(HttpStatusCode.OK);
+    }
+}
+
+sealed class SlowRecordingHandler(List<byte[]> bodies, int delayMs) : HttpMessageHandler
+{
+    protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+    {
+        await Task.Delay(delayMs, cancellationToken);
+        var bytes = request.Content is null ? Array.Empty<byte>() : await request.Content.ReadAsByteArrayAsync(cancellationToken);
+        lock (bodies) bodies.Add(bytes);
+        return new HttpResponseMessage(HttpStatusCode.OK);
+    }
+}

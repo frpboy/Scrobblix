@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Debug builds only: the crash-transport instrumentation tests run a
+     plain-HTTP ServerSocket on device loopback to observe the exact bytes on
+     the wire. targetSdk 36 otherwise refuses cleartext before any byte is
+     sent, so the tests would see nothing. Cleartext is permitted ONLY to
+     127.0.0.1/localhost here; the release manifest keeps
+     usesCleartextTraffic=false with no network security config, and the
+     transport itself still requires https for every non-loopback DSN. -->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+    <domain-config cleartextTrafficPermitted="true">
+        <domain includeSubdomains="false">127.0.0.1</domain>
+        <domain includeSubdomains="false">localhost</domain>
+    </domain-config>
+</network-security-config>
