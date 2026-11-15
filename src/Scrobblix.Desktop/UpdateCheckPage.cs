@@ -78,7 +78,8 @@ public sealed partial class MainWindow
         }
     }
 
-    /// <summary>The changelog dialog content as an overlay element (used by UI qualification; popups cannot be pixel-captured).</summary>
+    /// <summary>The changelog dialog content as an overlay element (used by UI qualification; popups cannot be pixel-captured).
+    /// Layout/text evidence only: this is a separate disabled overlay tree, not proof of actual dialog buttons, focus or input.</summary>
     internal UIElement BuildUpdateChangelogOverlay(WindowsRelease release, string lead)
     {
         var notes = release.Notes.Trim();
@@ -88,7 +89,8 @@ public sealed partial class MainWindow
             "Download update", "View on GitHub", "Not now");
     }
 
-    /// <summary>The verified-download confirmation content as an overlay element (UI qualification only).</summary>
+    /// <summary>The verified-download confirmation content as an overlay element (UI qualification only).
+    /// Layout/text evidence only, not actual dialog behavior proof.</summary>
     internal UIElement BuildInstallerVerifiedOverlay(string installerName) =>
         DialogOverlay("Installer downloaded and verified",
             installerName + " passed integrity verification against the published SHA-256 checksum. A verified copy is in your Downloads folder."

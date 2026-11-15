@@ -105,11 +105,7 @@ public sealed class WindowsUpdateDownload
     {
         var checksumsAsset = release.Assets.FirstOrDefault(asset => asset.Name == WindowsUpdateCatalog.ChecksumsName)
             ?? throw new UpdateDownloadException("This release does not publish integrity information; the download was not attempted.");
-        using var response = await SendFollowingRedirectsAsync(checksumsAsset.DownloadUrl, cancellation);
-        if (!response.IsSuccessStatusCode)
-            throw new UpdateDownloadException("Integrity information for the update could not be retrieved.");
-        var bytes = await response.Content.ReadAsByteArrayAsync(cancellation);
-        if (bytes.Length > MaxChecksumsBytes) throw new UpdateDownloadException("Integrity information was larger than expected.");
+        var bytes = await GetBytesAsync(checksumsAsset.DownloadUrl, MaxChecksumsBytes, cancellation);
         return WindowsUpdateCatalog.ChecksumFor(System.Text.Encoding.UTF8.GetString(bytes), WindowsUpdateCatalog.InstallerName)
             ?? throw new UpdateDownloadException("Integrity information for this exact installer is missing; the download was not attempted.");
     }
@@ -164,8 +160,15 @@ public sealed class WindowsUpdateDownload
                 if (!WindowsUpdateCatalog.SafeAssetName(installer.Name))
                     throw new UpdateDownloadException("The installer name is not safe to store.");
                 Directory.CreateDirectory(downloadsDirectory);
-                downloadsPath = UniqueDestination(downloadsDirectory, installer.Name);
-                File.Copy(stagedPath, downloadsPath);
+                // Atomic CreateNew: a name that appears between the check and the copy can never
+                // make us overwrite or later delete another file; only our own stream is tracked.
+                var (path, destination) = CreateUnique(downloadsDirectory, installer.Name);
+                await using (destination)
+                {
+                    downloadsPath = path;
+                    await using var source = new FileStream(stagedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+                    await source.CopyToAsync(destination, cancellation);
+                }
             }
             return new Result(installer, stagedPath, downloadsPath, expected);
         }
@@ -179,25 +182,34 @@ public sealed class WindowsUpdateDownload
         }
     }
 
-    private static string UniqueDestination(string directory, string name)
+    private static (string Path, FileStream Stream) CreateUnique(string directory, string name)
     {
         var stem = Path.GetFileNameWithoutExtension(name);
         var extension = Path.GetExtension(name);
         for (var attempt = 0; ; attempt++)
         {
             var candidate = Path.Combine(directory, attempt == 0 ? name : $"{stem} ({attempt}){extension}");
-            if (!File.Exists(candidate)) return candidate;
-            if (attempt > 100) throw new UpdateDownloadException("Could not find a free file name in the Downloads folder.");
+            try
+            {
+                return (candidate, new FileStream(candidate, FileMode.CreateNew, FileAccess.Write, FileShare.None));
+            }
+            catch (IOException)
+            {
+                if (attempt > 100) throw new UpdateDownloadException("Could not find a free file name in the Downloads folder.");
+            }
         }
     }
 
-    /// <summary>Launch only after re-hashing the staged copy immediately before handoff.
-    /// A file that changed since verification is refused.</summary>
+    /// <summary>Launch only after re-hashing the staged copy immediately before handoff, holding a
+    /// read-share handle through the launcher call so the file cannot be rewritten or deleted
+    /// between the hash and the handoff. This narrows the tamper window; it does not claim to
+    /// eliminate every race (the OS may copy the image at exec time). A changed file is refused.</summary>
     public bool OpenInstallerVerified(string stagedPath, string expectedSha256)
     {
         try
         {
-            if (HashFile(stagedPath) != expectedSha256) return false;
+            using var handle = new FileStream(stagedPath, FileMode.Open, FileAccess.Read, FileShare.Read);
+            if (Convert.ToHexString(SHA256.HashData(handle)).ToLowerInvariant() != expectedSha256) return false;
             return _launcher(stagedPath);
         }
         catch

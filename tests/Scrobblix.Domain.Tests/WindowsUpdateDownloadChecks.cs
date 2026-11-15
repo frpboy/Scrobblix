@@ -80,6 +80,15 @@ internal static class WindowsUpdateDownloadChecks
             var result = await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl), staging, downloads, null, CancellationToken.None);
             Assert(result.DownloadsPath != preexisting, "unique destination chosen over the pre-existing file");
             Assert((await File.ReadAllBytesAsync(preexisting)).SequenceEqual(new byte[] { 1, 2, 3 }), "pre-existing user file untouched");
+
+            // Name collision chain: with base and " (1)" both present, the copy lands in " (2)" and both stay intact.
+            var firstCopy = Path.Combine(downloads, Path.GetFileNameWithoutExtension(WindowsUpdateCatalog.InstallerName) + " (1).exe");
+            await File.WriteAllBytesAsync(firstCopy, new byte[] { 4, 5, 6 });
+            var second = await download.DownloadAsync(ReleaseFor(installerBytes, installerUrl, sumsUrl),
+                Path.Combine(Path.GetTempPath(), "scrobblix-stage-" + Guid.NewGuid().ToString("N")), downloads, null, CancellationToken.None);
+            Assert(second.DownloadsPath!.EndsWith(" (2).exe", StringComparison.Ordinal), "next free destination chosen");
+            Assert((await File.ReadAllBytesAsync(firstCopy)).SequenceEqual(new byte[] { 4, 5, 6 }), "earlier copy untouched");
+            Assert((await File.ReadAllBytesAsync(preexisting)).SequenceEqual(new byte[] { 1, 2, 3 }), "original still untouched");
         }
 
         // Hash mismatch: staged file deleted, nothing left behind, no launcher.
