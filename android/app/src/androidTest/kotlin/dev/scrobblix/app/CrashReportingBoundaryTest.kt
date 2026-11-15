@@ -239,7 +239,7 @@ class CrashReportingBoundaryTest {
         val options=SentryOptions().apply {
             dsn="http://00000000000000000000000000000000@127.0.0.1:${server.localPort}/1"
             isSendClientReports=false
-            envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+            setEnvelopeDiskCache(ScrobblixNoOpEnvelopeCache())
             setTransportFactory { opts, _ ->
                 FilteringEnvelopeTransport(opts,"scrobblix-android@test","android")
             }

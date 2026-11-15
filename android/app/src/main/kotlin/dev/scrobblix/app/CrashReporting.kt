@@ -71,7 +71,7 @@ object CrashReporting {
         // sentinel, which the Android initializer would replace with the on-disk
         // AndroidEnvelopeCache) and no cache directory, so reports never pile up
         // or survive the process.
-        options.envelopeDiskCache=ScrobblixNoOpEnvelopeCache()
+        options.setEnvelopeDiskCache(ScrobblixNoOpEnvelopeCache())
         options.cacheDirPath=null
         options.environment=ENVIRONMENT
         options.release=RELEASE_PREFIX+BuildConfig.VERSION_NAME
