@@ -111,15 +111,36 @@ jobs:
           adb shell stop
           adb shell start
           adb wait-for-device
-          until [ "$(timeout 20 adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; do sleep 2; done
+          # Locally bounded boot wait (120 tries x 2s): fail this step, never hang to the
+          # outer job timeout.
+          booted=""
+          for i in $(seq 1 120); do
+            if [ "$(timeout 20 adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then booted=1; break; fi
+            sleep 2
+          done
+          test "$booted" = 1
           adb root
           adb wait-for-device
           test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
+          # Property read proof: the harness skip only counts if the property actually stuck.
+          harness="$(timeout 15 adb shell getprop persist.sys.test_harness | tr -d '\r')"
+          printf 'persist.sys.test_harness=%s\n' "$harness"
+          test "$harness" = "1"
           adb shell input keyevent 82 || true
           adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
           adb shell ip6tables -w 30 -C OUTPUT ! -o lo -j REJECT
+          # Egress proof, not just rule presence: an actual outbound attempt must fail,
+          # and an inconclusive probe (e.g. ping missing) fails this step, never green.
+          ping_out="$(adb shell ping -c 1 -W 3 1.1.1.1 2>&1)"; ping_rc=$?
+          printf '%s\n' "$ping_out"
+          if [ "$ping_rc" = 0 ]; then
+            echo "egress block ineffective: outbound ping succeeded" >&2
+            exit 1
+          fi
+          printf '%s\n' "$ping_out" | grep -qiE "100% packet loss|Operation not permitted|Network is unreachable|Destination.*unreachable|sendto|sendmsg"             || { echo "egress probe inconclusive: ping did not run or failed for an unexpected reason" >&2; exit 1; }
+          adb shell iptables -L OUTPUT -v -n | grep -c REJECT
           if ! android/gradlew -p android :platform:connectedDebugAndroidTest :app:connectedDebugAndroidTest --no-daemon; then
             # Synthetic test data only. Preserve exact test/runner failures in job logs.
             find android/platform/build/outputs/androidTest-results android/app/build/outputs/androidTest-results -type f -name '*.xml' -print -exec cat {} \; || true
