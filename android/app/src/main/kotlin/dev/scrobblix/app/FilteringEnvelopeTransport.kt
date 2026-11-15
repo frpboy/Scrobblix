@@ -261,6 +261,12 @@ class FilteringEnvelopeTransport(
                 // Fixed-length body: a buffered POST must never be transparently
                 // replayed after a connection loss (one attempt, no retry).
                 conn.setFixedLengthStreamingMode(bytes.size)
+                // Fixed generic User-Agent: without an explicit value the
+                // runtime sends its default (Dalvik version, OS release and
+                // device build fingerprint), which is device metadata this
+                // boundary must never emit. An explicit property replaces the
+                // default outright; nothing is appended.
+                conn.setRequestProperty("User-Agent","scrobblix-boundary/1")
                 conn.setRequestProperty("Content-Type","application/x-sentry-envelope")
                 conn.setRequestProperty(
                     "X-Sentry-Auth",
