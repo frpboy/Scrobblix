@@ -13,7 +13,7 @@ namespace Scrobblix.Windows;
 /// Mirrors Sentry 7.0.0's internal HttpTransport send flow over the public
 /// HttpTransportBase.
 /// </summary>
-internal sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
+public sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
 {
     private readonly HttpClient _httpClient;
 
@@ -32,7 +32,7 @@ internal sealed class FilteringEnvelopeTransport : HttpTransportBase, ITransport
         }
     }
 
-    internal static Envelope? RebuildToEventsOnly(Envelope envelope)
+    public static Envelope? RebuildToEventsOnly(Envelope envelope)
     {
         var eventItems = envelope.Items.Where(item => item.TryGetType() == "event").ToList();
         if (eventItems.Count == 0) return null;
