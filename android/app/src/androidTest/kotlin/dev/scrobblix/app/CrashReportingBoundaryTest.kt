@@ -139,7 +139,7 @@ class CrashReportingBoundaryTest {
         // Mixed envelopes become one generic constants-only event under a fresh header.
         val rebuilt=EnvelopeGate.rebuildToGenericEvent(hostileEnvelope,"scrobblix-android@test","android")!!
         assertTrue(rebuilt.items.all { it.header.type==SentryItemType.Event })
-        assertTrue(rebuilt.items.size==1)
+        assertTrue(rebuilt.items.count()==1)
         assertNull(rebuilt.header.traceContext)
         assertNull(rebuilt.header.unknown)
         assertTrue("fresh event id, not the hostile header id",rebuilt.header.eventId.toString()!="4bf92f3577b34da6a3ce929d0e0e4736")
