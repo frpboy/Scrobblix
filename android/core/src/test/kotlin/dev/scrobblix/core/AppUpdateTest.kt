@@ -46,6 +46,14 @@ class AppUpdateTest {
         assertNull(AppUpdateSelection.select(listOf(release("android-v0.1.0-alpha.3",assets=listOf(
             ReleaseAsset("app.apk","https://example.invalid/app.apk",100)))),current,listOf("arm64-v8a")))
     }
+    @Test fun abiTokensRequireBoundaries() {
+        assertTrue(AppUpdateSelection.containsAbiToken("app-x86_64.apk","x86_64"))
+        assertFalse(AppUpdateSelection.containsAbiToken("app-x86_64.apk","x86"))
+        assertTrue(AppUpdateSelection.containsAbiToken("app-x86.apk","x86"))
+        assertTrue(AppUpdateSelection.containsAbiToken("Scrobblix-Android-arm64-v8a.apk","arm64-v8a"))
+        assertFalse(AppUpdateSelection.containsAbiToken("Scrobblix-Android-arm64-v8a.apk","armeabi-v7a"))
+        assertFalse(AppUpdateSelection.containsAbiToken("app-universal.apk","x86"))
+    }
     @Test fun abiMatchPreferredWithUniversalFallback() {
         val arm=ReleaseAsset("app-arm64-v8a.apk","https://example.invalid/arm.apk",100)
         val x86=ReleaseAsset("app-x86_64.apk","https://example.invalid/x86.apk",100)
@@ -54,6 +62,9 @@ class AppUpdateTest {
         assertEquals(x86,AppUpdateSelection.pickApk(listOf(universal,x86,arm),listOf("x86_64")))
         assertEquals(universal,AppUpdateSelection.pickApk(listOf(universal,arm),listOf("x86_64")))
         assertNull(AppUpdateSelection.pickApk(listOf(arm),listOf("x86_64")))
+        val x64only=ReleaseAsset("app-x86_64.apk","https://example.invalid/x64.apk",100)
+        assertNull(AppUpdateSelection.pickApk(listOf(x64only),listOf("x86")))
+        assertEquals(x64only,AppUpdateSelection.pickApk(listOf(x64only),listOf("x86_64")))
         assertNull(AppUpdateSelection.pickApk(emptyList(),listOf("arm64-v8a")))
     }
     @Test fun checksumParsingRequiresExactAssetAndHashShape() {

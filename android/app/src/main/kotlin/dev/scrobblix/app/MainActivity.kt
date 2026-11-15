@@ -95,7 +95,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     var availableUpdate by remember { mutableStateOf<dev.scrobblix.core.AvailableUpdate?>(null) }
     var downloadProgress by remember { mutableStateOf<Pair<Long,Long?>?>(null) }
     var downloadedApk by remember { mutableStateOf<java.io.File?>(null) }
-    var updateAutoCheck by remember { mutableStateOf(store.preferences.getBoolean("update_auto_check",true)) }
+    var updateAutoCheck by remember { mutableStateOf(store.preferences.getBoolean("update_auto_check",false)) }
     LaunchedEffect(currentAuthority) {heldReview=null;reviewEpoch++}
     // One silent launch check on direct-channel builds; never in instrumentation, never auto-downloads.
     LaunchedEffect(Unit) {
@@ -429,7 +429,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
                         Button(onClick={
                             when {
                                 !probe.canInstall() -> updateError="Android needs your permission to install apps from Scrobblix. Open install permission, allow it once, return and tap Install."
-                                !probe.verifyDownload(apk) -> updateError="The downloaded package identity does not match this installation. It was not offered to the installer."
+                                !probe.verifyDownload(apk,update) -> updateError="The downloaded package identity does not match this installation. It was not offered to the installer."
                                 else -> try { probe.launchInstall(apk) }
                                     catch(_:Exception) { updateError="The Android installer could not be opened. Nothing was installed." }
                             }

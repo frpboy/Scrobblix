@@ -31,7 +31,7 @@ class AppUpdater(private val context:Context,
     interface Probe {
         suspend fun check():CheckOutcome
         suspend fun download(update:AvailableUpdate,onProgress:(Long,Long?)->Unit):File
-        fun verifyDownload(apk:File):Boolean
+        fun verifyDownload(apk:File,update:AvailableUpdate):Boolean
         fun canInstall():Boolean
         fun launchInstall(apk:File)
         fun openInstallPermission()
@@ -62,6 +62,7 @@ class AppUpdater(private val context:Context,
         val dir=File(context.cacheDir,"updates")
         dir.mkdirs()
         dir.listFiles()?.forEach { it.delete() }
+        if(!safeAssetName(update.apk.name)) throw UpdateFailure("The update package name was not a safe local file name.")
         val target=File(dir,update.apk.name)
         try {
             streamDownloader(update.apk.downloadUrl,target,200L*1024*1024,onProgress)
@@ -76,17 +77,53 @@ class AppUpdater(private val context:Context,
         catch(_:Exception) { target.delete();throw UpdateFailure("The update download could not be completed. Nothing was installed.") }
     }
 
-    /** Pre-install identity check where the platform supports archive signing inspection (API 28+).
-     * On older versions the system installer still enforces signature continuity itself. */
-    override fun verifyDownload(apk:File):Boolean {
-        if(Build.VERSION.SDK_INT<28)return true
-        val archive=context.packageManager.getPackageArchiveInfo(apk.absolutePath,PackageManager.GET_SIGNING_CERTIFICATES) ?: return false
+    /** Pre-install identity check on every supported API level: package, selected-release identity,
+     * strictly increasing versionCode, signer continuity (modern signing info on 28+, legacy
+     * signatures below), minimum SDK where declared, and native ABI coverage. Exact signer equality
+     * is deliberate: a signing-key rotation is NOT supported and must fail here, not at the installer. */
+    override fun verifyDownload(apk:File,update:AvailableUpdate):Boolean {
+        val archive=context.packageManager.getPackageArchiveInfo(apk.absolutePath,0) ?: return false
         if(archive.packageName!=packageName)return false
-        val archiveSigners=archive.signingInfo?.apkContentsSigners ?: return false
-        val installed=try { context.packageManager.getPackageInfo(packageName,PackageManager.GET_SIGNING_CERTIFICATES) } catch(_:Exception) { return false }
-        val installedSigners=installed.signingInfo?.apkContentsSigners ?: return false
-        return archiveSigners.size==installedSigners.size &&
-            archiveSigners.indices.all { archiveSigners[it].toCharsString()==installedSigners[it].toCharsString() }
+        if(archive.versionName!=update.version.toString())return false
+        val installed=try { context.packageManager.getPackageInfo(packageName,0) } catch(_:Exception) { return false }
+        val installedCode=if(Build.VERSION.SDK_INT>=28) installed.longVersionCode else installed.versionCode.toLong()
+        val archiveCode=if(Build.VERSION.SDK_INT>=28) archive.longVersionCode else archive.versionCode.toLong()
+        if(archiveCode<=installedCode)return false
+        val declaredMin=archive.applicationInfo?.minSdkVersion ?: 0
+        if(declaredMin>Build.VERSION.SDK_INT)return false
+        if(!signersMatch(apk))return false
+        return abiCovered(apk)
+    }
+    private fun signersMatch(apk:File):Boolean {
+        return if(Build.VERSION.SDK_INT>=28) {
+            val archive=context.packageManager.getPackageArchiveInfo(apk.absolutePath,PackageManager.GET_SIGNING_CERTIFICATES) ?: return false
+            val archiveSigners=archive.signingInfo?.apkContentsSigners ?: return false
+            val installed=try { context.packageManager.getPackageInfo(packageName,PackageManager.GET_SIGNING_CERTIFICATES) } catch(_:Exception) { return false }
+            val installedSigners=installed.signingInfo?.apkContentsSigners ?: return false
+            archiveSigners.size==installedSigners.size &&
+                archiveSigners.indices.all { archiveSigners[it].toCharsString()==installedSigners[it].toCharsString() }
+        } else {
+            @Suppress("DEPRECATION")
+            val archive=context.packageManager.getPackageArchiveInfo(apk.absolutePath,PackageManager.GET_SIGNATURES) ?: return false
+            @Suppress("DEPRECATION")
+            val installed=try { context.packageManager.getPackageInfo(packageName,PackageManager.GET_SIGNATURES) } catch(_:Exception) { return false }
+            @Suppress("DEPRECATION")
+            val archiveSignatures=archive.signatures ?: return false
+            @Suppress("DEPRECATION")
+            val installedSignatures=installed.signatures ?: return false
+            archiveSignatures.size==installedSignatures.size &&
+                archiveSignatures.indices.all { archiveSignatures[it].toCharsString()==installedSignatures[it].toCharsString() }
+        }
+    }
+    private fun abiCovered(apk:File):Boolean {
+        val entries=try {
+            java.util.zip.ZipFile(apk).use { zip ->
+                zip.entries().asSequence().map { it.name }.filter { it.startsWith("lib/") }.toList()
+            }
+        } catch(_:Exception) { return false }
+        if(entries.isEmpty())return true
+        val packaged=entries.mapNotNull { it.removePrefix("lib/").substringBefore('/').takeIf { abi -> abi.isNotBlank() } }.toSet()
+        return packaged.any { it in Build.SUPPORTED_ABIS }
     }
     override fun canInstall():Boolean =
         Build.VERSION.SDK_INT<26 || context.packageManager.canRequestPackageInstalls()
@@ -103,10 +140,18 @@ class AppUpdater(private val context:Context,
 
     data class FetchResult(val status:Int,val body:ByteArray)
     companion object {
+        /** Plain file names only: no separators, traversal or hidden/control tricks. */
+        fun safeAssetName(name:String):Boolean =
+            name.isNotBlank() && name.length<=200 && name==File(name).name &&
+                !name.contains("..") && !name.contains('/') && !name.contains('\\') && name.none { it.isISOControl() }
         const val DEFAULT_RELEASES_API="https://api.github.com/repos/frpboy/Scrobblix/releases?per_page=20"
+        private val ALLOWED_HOSTS=setOf("api.github.com","github.com","codeload.github.com")
+        private fun allowedHost(host:String):Boolean =
+            host in ALLOWED_HOSTS || host.endsWith(".githubusercontent.com")
         private fun httpsConnection(url:String):HttpsURLConnection {
             val uri=URI(url)
-            require(uri.scheme=="https" && uri.host!=null && uri.rawUserInfo==null) { "Update service address was not a plain secure URL." }
+            require(uri.scheme=="https" && uri.host!=null && uri.rawUserInfo==null && uri.port==-1) { "Update service address was not a plain secure URL." }
+            require(allowedHost(uri.host)) { "Update service destination was not a recognized release host." }
             return URL(url).openConnection() as HttpsURLConnection
         }
         private fun prepare(connection:HttpsURLConnection) {
@@ -116,10 +161,11 @@ class AppUpdater(private val context:Context,
             connection.setRequestProperty("User-Agent","Scrobblix-Android-UpdateCheck")
             connection.setRequestProperty("Accept","application/vnd.github+json")
         }
-        private fun redirectTarget(current:String,connection:HttpsURLConnection):String? {
+        private fun redirectTarget(current:String,connection:HttpsURLConnection):String {
             val location=connection.getHeaderField("Location") ?: throw UpdateFailure("Update service redirect was incomplete.")
             val resolved=URI(current).resolve(location)
-            require(resolved.scheme=="https" && resolved.rawUserInfo==null) { "Update service redirect was not a secure destination." }
+            require(resolved.scheme=="https" && resolved.rawUserInfo==null && resolved.host!=null && allowedHost(resolved.host)) {
+                "Update service redirect was not a recognized secure release destination." }
             return resolved.toASCIIString()
         }
         private fun readBounded(input:InputStream,maxBytes:Int):ByteArray {
@@ -195,7 +241,7 @@ class AppUpdater(private val context:Context,
                 val assetArray=item.optJSONArray("assets")
                 if(assetArray!=null)for(position in 0 until assetArray.length()) {
                     val asset=assetArray.optJSONObject(position) ?: continue
-                    val name=asset.optString("name").takeIf { it.isNotBlank() && it.length<=200 } ?: continue
+                    val name=asset.optString("name").takeIf { it.isNotBlank() && it.length<=200 && safeAssetName(it) } ?: continue
                     val url=asset.optString("browser_download_url").takeIf { it.startsWith("https://") } ?: continue
                     assets.add(ReleaseAsset(name,url,asset.optLong("size",0)))
                 }

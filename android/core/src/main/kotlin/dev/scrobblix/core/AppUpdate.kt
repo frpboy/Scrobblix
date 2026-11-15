@@ -50,8 +50,23 @@ object AppUpdateSelection {
     fun pickApk(assets:List<ReleaseAsset>,deviceAbis:List<String>):ReleaseAsset? {
         val apks=assets.filter { it.name.endsWith(".apk") }
         if(apks.isEmpty())return null
-        for(abi in deviceAbis)apks.firstOrNull { it.name.contains(abi) }?.let { return it }
-        return apks.firstOrNull { apk -> ABI_TOKENS.none { apk.name.contains(it) } }
+        for(abi in deviceAbis)apks.firstOrNull { containsAbiToken(it.name,abi) }?.let { return it }
+        return apks.firstOrNull { apk -> ABI_TOKENS.none { containsAbiToken(apk.name,it) } }
+    }
+    /** ABI match on dash-separated name tokens: "x86" never matches "x86_64"
+     * (underscore is part of the token, so "arm64-v8a" stays one token). */
+    private fun abiWord(c:Char)=c.isLetterOrDigit() || c=='_'
+    fun containsAbiToken(name:String,abi:String):Boolean {
+        var index=0
+        while(true) {
+            val found=name.indexOf(abi,index)
+            if(found<0)return false
+            val beforeOk=found==0 || !abiWord(name[found-1])
+            val afterIndex=found+abi.length
+            val afterOk=afterIndex>=name.length || !abiWord(name[afterIndex])
+            if(beforeOk && afterOk)return true
+            index=found+1
+        }
     }
     /** Exact "hash  filename" lines only; anything else is not integrity evidence. */
     fun checksumFor(content:String,assetName:String):String? {

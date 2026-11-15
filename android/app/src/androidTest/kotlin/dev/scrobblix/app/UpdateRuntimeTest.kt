@@ -36,7 +36,7 @@ class UpdateRuntimeTest {
             file.writeBytes(byteArrayOf(1,2,3))
             return file
         }
-        override fun verifyDownload(apk:java.io.File)=true
+        override fun verifyDownload(apk:java.io.File,update:AvailableUpdate)=true
         override fun canInstall()=true
         override fun launchInstall(apk:java.io.File) { installs++ }
         override fun openInstallPermission() { }
