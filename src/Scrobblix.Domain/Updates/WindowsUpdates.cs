@@ -132,9 +132,9 @@ public static class WindowsUpdateCatalog
         if (string.IsNullOrWhiteSpace(name) || name.Length > 200) return false;
         if (name != Path.GetFileName(name)) return false;
         if (name.Contains("..", StringComparison.Ordinal)) return false;
-        if (name.IndexOfAny(WindowsInvalidNameChars) >= 0) return false;
+        if (name.ContainsAny(WindowsInvalidNameChars)) return false;
         if (name.Any(char.IsControl)) return false;
-        if (name.EndsWith(".", StringComparison.Ordinal) || name.EndsWith(" ", StringComparison.Ordinal)) return false;
+        if (name.EndsWith('.') || name.EndsWith(' ')) return false;
         var stem = name.Split('.')[0];
         if (WindowsDeviceNames.Contains(stem)) return false;
         return true;
