@@ -38,15 +38,28 @@ class RemoteSendTest {
         assertEquals("baked dsn sha must equal the clearance-pinned expectation", expectedSha, dsnSha)
         assertEquals("baked endpoint host must equal the clearance-pinned expectation", expectedHost, uri.host)
         assertEquals("baked project must equal the clearance-pinned expectation", expectedProject, project)
-        // Isolated bounded test: cap the transport at exactly ONE attempt for
-        // the process before any possible capture. All other guards unchanged.
-        SendBudget.resetForTesting()
-        SendBudget.maxAttemptsPerProcess=1
-        SendBudget.minIntervalMs=0
         val context=InstrumentationRegistry.getInstrumentation().targetContext
         // Idempotent: the Application already ran this; calling it again is a no-op.
         CrashReporting.initialize(context)
         assertTrue("production crash reporting active in this build", io.sentry.Sentry.isEnabled())
+        // Isolated bounded test. The process booted DISARMED (SendBudget cap 0
+        // on this branch), so the Application's automatic init could not have
+        // sent anything. Prove it: no attempt may have happened yet, and a
+        // capture BEFORE arming must be dropped unsent (negative control).
+        assertEquals("no attempt may have happened before arming", 0, SendBudget.attemptsSoFar)
+        val negResult=WireAttemptResult()
+        val negLatch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(2_000,io.sentry.NoOpLogger.getInstance())
+        val negHint=io.sentry.util.HintUtils.createWithTypeCheckHint(negLatch)
+        negHint.set(FilteringEnvelopeTransport.RESULT_HINT_KEY,negResult)
+        io.sentry.Sentry.captureException(ScrobblixDiagnosticsTestException(),negHint)
+        negLatch.waitFlush()
+        io.sentry.Sentry.flush(5_000)
+        assertTrue("pre-arming capture must not complete an exchange", !negResult.exchangeCompleted)
+        if (negResult.eventId != null) throw AssertionError("pre-arming capture produced wire id ${negResult.eventId}")
+        assertEquals("a dropped pre-arming capture must not consume attempts", 0, SendBudget.attemptsSoFar)
+        // Arm exactly ONE attempt for the real capture. No reset: nothing may
+        // erase a prior attempt record.
+        SendBudget.maxAttemptsPerProcess=1
         val result=WireAttemptResult()
         val latch=io.sentry.UncaughtExceptionHandlerIntegration.UncaughtExceptionHint(20_000,io.sentry.NoOpLogger.getInstance())
         val hint=io.sentry.util.HintUtils.createWithTypeCheckHint(latch)

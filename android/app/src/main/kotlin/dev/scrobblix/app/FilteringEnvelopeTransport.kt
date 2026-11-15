@@ -53,7 +53,12 @@ class ScrobblixNoOpEnvelopeCache:IEnvelopeCache {
  * instead of queueing. That is the deliberate posture.
  */
 object SendBudget {
-    internal var maxAttemptsPerProcess=20
+    // DISPOSABLE branch: the process boots DISARMED (cap 0) so no capture -
+    // including an automatic startup crash capture during Application init -
+    // can reach the network before the gated test explicitly arms the budget
+    // after its endpoint assertions. Main carries 20 here; this branch never
+    // merges.
+    internal var maxAttemptsPerProcess=0
     internal var minIntervalMs=10_000L
     internal var rateLimitCooldownMs=60_000L
     private val attempts=AtomicInteger(0)
@@ -100,6 +105,9 @@ object SendBudget {
         lastAttemptAtMs.set(0)
         cooldownUntilMs.set(0)
         inFlight.set(false)
+        // NOTE: arms the budget (20) for the LOOPBACK dump lane only. The
+        // remote-send test must never reset after a possible attempt: it
+        // asserts attemptsSoFar==0 and arms explicitly instead.
         maxAttemptsPerProcess=20
         minIntervalMs=10_000L
         rateLimitCooldownMs=60_000L
