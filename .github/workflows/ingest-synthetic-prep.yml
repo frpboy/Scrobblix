@@ -12,7 +12,10 @@ on:
       dsn:
         description: 'Public Sentry ingest DSN for this disposable test build only'
         type: string
-        required: true
+        required: false
+        default: ''
+  push:
+    branches: [test/ingest-synthetic-prep-20261116]
 permissions:
   contents: read
 concurrency:
@@ -31,8 +34,7 @@ jobs:
           SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
         run: |
           set -euo pipefail
-          test -n "$SCROBBLIX_SENTRY_DSN"
-          echo "dsn-sha256: $(printf '%s' "$SCROBBLIX_SENTRY_DSN" | sha256sum | cut -d' ' -f1)"
+          if [ -n "$SCROBBLIX_SENTRY_DSN" ]; then echo "dsn-sha256: $(printf '%s' "$SCROBBLIX_SENTRY_DSN" | sha256sum | cut -d' ' -f1)"; else echo 'no DSN supplied: local-only bake (loopback dump unaffected)'; fi
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
           android/gradlew -p android :app:assembleDebug :app:assembleDebugAndroidTest --no-daemon
@@ -111,13 +113,20 @@ jobs:
         env:
           SCROBBLIX_SENTRY_DSN: ${{ inputs.dsn }}
         run: |
-          if (-not $env:SCROBBLIX_SENTRY_DSN) { throw 'DSN env missing' }
-          "dsn-sha256: " + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
+          if ($env:SCROBBLIX_SENTRY_DSN) {
+            "dsn-sha256: " + [BitConverter]::ToString([Security.Cryptography.SHA256]::Create().ComputeHash([Text.Encoding]::UTF8.GetBytes($env:SCROBBLIX_SENTRY_DSN))).Replace('-','').ToLower()
+          } else { 'no DSN supplied: local-only bake (in-memory dump unaffected)' }
           dotnet build src/Scrobblix.Desktop/Scrobblix.Desktop.csproj --configuration Debug --no-restore
           if ($LASTEXITCODE -ne 0) { throw 'Debug build failed' }
           $generated = Get-ChildItem -Recurse src/Scrobblix.Windows/obj -Filter ScrobblixSentryDsn.g.cs | Select-Object -First 1
-          if (-not $generated -or -not (Select-String -Path $generated.FullName -Pattern '09034d8c28716f3d06cdd57fe02eb47d' -SimpleMatch -Quiet)) { throw 'DSN did not reach generated source' }
-          'generated DSN source carries the dispatch value'
+          if (-not $generated) { throw 'Generated DSN source missing' }
+          if ($env:SCROBBLIX_SENTRY_DSN) {
+            if (-not (Select-String -Path $generated.FullName -Pattern '09034d8c28716f3d06cdd57fe02eb47d' -SimpleMatch -Quiet)) { throw 'DSN did not reach generated source' }
+            'generated DSN source carries the dispatch value'
+          } else {
+            if ((Select-String -Path $generated.FullName -Pattern 'sentry.io' -Quiet)) { throw 'Unexpected DSN value baked into generated source' }
+            'generated DSN source is empty as expected'
+          }
       - name: Run in-memory wire dump (no egress)
         shell: pwsh
         run: |
