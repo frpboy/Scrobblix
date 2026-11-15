@@ -1,6 +1,5 @@
 package dev.scrobblix.app
 
-import android.app.ActivityManager
 import android.app.NotificationManager
 import android.content.ComponentName
 import android.content.Intent
@@ -36,7 +35,7 @@ class MainActivity:ComponentActivity() {
                 var onboarding by remember { mutableStateOf(dev.scrobblix.core.OnboardingGate.shouldShow(
                     store.preferences.getBoolean(OnboardingState.DONE_KEY,false),
                     OnboardingState.existingInstall(store),
-                    ActivityManager.isRunningInTestHarness(),
+                    OnboardingState.harnessSkipped(store.context),
                     store.preferences.getBoolean(OnboardingState.FORCE_KEY,false))) }
                 var initialTab by remember { mutableStateOf("Listen") }
                 if(onboarding) OnboardingFlow(store) { destination -> initialTab=destination;onboarding=false }
@@ -100,7 +99,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
     // One silent launch check on direct-channel builds; never in instrumentation, never auto-downloads.
     LaunchedEffect(Unit) {
         val launchProbe=updateProbe
-        if(launchProbe!=null && !ActivityManager.isRunningInTestHarness() && updateAutoCheck) {
+        if(launchProbe!=null && !OnboardingState.harnessSkipped(store.context) && updateAutoCheck) {
             try {
                 val outcome=launchProbe.check()
                 if(outcome is AppUpdater.CheckOutcome.Available)availableUpdate=outcome.update

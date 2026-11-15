@@ -16,6 +16,15 @@ object OnboardingState {
     /** An account or any prior local choice means this install was already set up. */
     fun existingInstall(store:AppStore):Boolean =
         store.account()!=null || store.preferences.all.isNotEmpty()
+    /**
+     * Instrumented runs must never see first-run onboarding. isRunningInTestHarness() reads
+     * persist.sys.test_harness, which app uids cannot read on several API levels (SELinux
+     * property policy), so CI also sets a global setting that apps are allowed to read.
+     * Either signal suppresses onboarding; real installs have neither.
+     */
+    fun harnessSkipped(context:android.content.Context):Boolean =
+        android.app.ActivityManager.isRunningInTestHarness() ||
+        Settings.Global.getInt(context.contentResolver,"scrobblix_test_harness",0)==1
 }
 
 /** First-install-only guided setup. Shown once; upgrades and existing installs skip it. */

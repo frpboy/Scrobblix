@@ -103,30 +103,13 @@ jobs:
           adb root
           adb wait-for-device
           test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
-          # Instrumented suites rely on the documented test-harness skip for first-run
-          # onboarding. isRunningInTestHarness() only reports true when this property is
-          # set, and the property needs a reboot to take effect. Reboot BEFORE the egress
-          # block below so the iptables rules are added after the restart.
-          adb shell setprop persist.sys.test_harness 1
-          adb shell stop
-          adb shell start
-          adb wait-for-device
-          # Locally bounded boot wait (120 tries x 2s): fail this step, never hang to the
-          # outer job timeout.
-          booted=""
-          for i in $(seq 1 120); do
-            if [ "$(timeout 20 adb shell getprop sys.boot_completed | tr -d '\r')" = "1" ]; then booted=1; break; fi
-            sleep 2
-          done
-          test "$booted" = 1
-          adb root
-          adb wait-for-device
-          test "$(timeout 15 adb shell id -u | tr -d '\r')" = 0
-          # Property read proof: the harness skip only counts if the property actually stuck.
-          harness="$(timeout 15 adb shell getprop persist.sys.test_harness | tr -d '\r')"
-          printf 'persist.sys.test_harness=%s\n' "$harness"
+          # Instrumented suites rely on the onboarding harness skip. Apps cannot read
+          # persist.sys.test_harness on several API levels, so CI sets a global setting
+          # apps are allowed to read; the read-back is asserted. No framework restart.
+          adb shell settings put global scrobblix_test_harness 1
+          harness="$(timeout 15 adb shell settings get global scrobblix_test_harness | tr -d '\r')"
+          printf 'scrobblix_test_harness=%s\n' "$harness"
           test "$harness" = "1"
-          adb shell input keyevent 82 || true
           adb shell iptables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell ip6tables -w 30 -I OUTPUT 1 ! -o lo -j REJECT
           adb shell iptables -w 30 -C OUTPUT ! -o lo -j REJECT
@@ -155,6 +138,7 @@ jobs:
             adb logcat -d -b main | grep -E "SYNTHETIC_CAPTURE_HOST|System.out" | tail -200 || true
             # Pull synthetic pixels before the EXIT trap tears down the emulator.
             mkdir -p android-evidence
+            adb pull /sdcard/Download/scrobblix-private-config-prefail.txt android-evidence/ || true
             for name in listen history queue settings large-font-listen large-font-settings landscape-listen private-config-settings large-font-navigation large-font-browser-control landscape-browser-control large-font-disclosure landscape-disclosure private-config-prefail authority-unavailable authority-consent authority-setup-error authority-held-review authority-held-result authority-held-large-metadata authority-held-large-control authority-held-consent authority-held-counts-unavailable authority-held-counts-recovered onboarding-welcome onboarding-media-access onboarding-connect onboarding-finish update-available; do adb pull "/sdcard/Download/scrobblix-$name.png" android-evidence/ || true; done
             exit 1
           fi
