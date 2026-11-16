@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Brand waveform from the approved mark, scaled into the 66dp adaptive safe zone.
+     Same six-bar shape, gradient and center dot as Assets/scrobblix-mark.svg. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:pathData="M23.6,46.8m-3,0a3,3 0,1 1,6 0v14.4a3,3 0,1 1,-6 0z">
+        <aapt:attr name="android:fillColor">
+            <gradient android:type="linear" android:startX="20" android:startY="54"
+                android:endX="88" android:endY="54">
+                <item android:offset="0" android:color="#FF5DE1FF" />
+                <item android:offset="0.55" android:color="#FF7F8CFF" />
+                <item android:offset="1" android:color="#FFE879F9" />
+            </gradient>
+        </aapt:attr>
+    </path>
+    <path android:fillColor="#FF7F8CFF" android:pathData="M33.7,36m-3,0a3,3 0,1 1,6 0v36a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FF7F8CFF" android:pathData="M43.8,25.9m-3,0a3,3 0,1 1,6 0v56.2a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FF9E8CF9" android:pathData="M53.9,40.3m-3,0a3,3 0,1 1,6 0v27.4a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFC183F5" android:pathData="M64,31.7m-3,0a3,3 0,1 1,6 0v44.6a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#FFE879F9" android:pathData="M74,44.65m-3,0a3,3 0,1 1,6 0v18.7a3,3 0,1 1,-6 0z"/>
+    <path android:fillColor="#C70D1327" android:pathData="M54,54m-10,0a10,10 0,1 1,20 0a10,10 0,1 1,-20 0"/>
+    <path android:fillColor="#FFE879F9" android:pathData="M54,54m-3.6,0a3.6,3.6 0,1 1,7.2 0a3.6,3.6 0,1 1,-7.2 0"/>
+</vector>
