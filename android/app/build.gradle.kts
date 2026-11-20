@@ -7,8 +7,8 @@ android {
         applicationId = "com.frpboy.scrobblix"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.1.0-alpha.2"
+        versionCode = 8
+        versionName = "0.1.0-alpha.3"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         // Optional automatic crash reporting (public ingest DSN, not a secret).
         // Empty default keeps diagnostics local-only, matching the documented baseline.

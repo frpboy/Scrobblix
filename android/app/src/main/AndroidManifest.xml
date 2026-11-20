@@ -2,7 +2,7 @@
     xmlns:tools="http://schemas.android.com/tools">
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
-    <application android:name=".ScrobblixApp" android:label="Scrobblix Preview"
+    <application android:name=".ScrobblixApp" android:label="Scrobblix" android:icon="@mipmap/ic_launcher"
         android:allowBackup="false" android:fullBackupContent="false"
         android:dataExtractionRules="@xml/data_extraction_rules"
         android:usesCleartextTraffic="false" android:theme="@style/AppTheme">
