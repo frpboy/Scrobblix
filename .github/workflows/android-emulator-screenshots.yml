@@ -43,11 +43,7 @@ jobs:
           disable-animations: true
           script: |
             ./android/gradlew -p android :app:connectedDebugAndroidTest --stacktrace
-            mkdir -p shots/synthetic-frames
-            for f in $(adb shell ls /sdcard/Download/scrobblix-*.png 2>/dev/null | tr -d '\r'); do
-              adb pull "$f" shots/synthetic-frames/
-            done
-            adb shell rm -f /sdcard/Download/scrobblix-*.png
+            bash android/qa/pull-synthetic-frames.sh
             bash android/qa/capture-emulator-screenshots.sh
 
       - name: Verify connected tests actually ran
