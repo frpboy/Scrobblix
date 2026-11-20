@@ -35,7 +35,7 @@ jobs:
       - name: Boot emulator, install app, capture screenshots
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 31
+          api-level: 36
           arch: x86_64
           target: default
           force-avd-creation: true
