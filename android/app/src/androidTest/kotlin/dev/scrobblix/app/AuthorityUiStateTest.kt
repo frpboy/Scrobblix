@@ -77,28 +77,44 @@ class AuthorityUiStateTest {
             check(target.isFile && target.length()>0)
             // Instrumentation teardown uninstalls the app; preserve this exact PNG first.
             val destination="/sdcard/Download/scrobblix-$name.png"
-            // The shell reads the app-owned file through this debuggable test app's UID.
-            // Keep stderr and exit status in the assertion/retained test XML on failure.
-            val packageName=instrumentation.targetContext.packageName
-            listOf(packageName,target.absolutePath,destination).forEach {
-                check(it.matches(Regex("[A-Za-z0-9_./-]+"))) {"Unsafe synthetic export argument"}
+            check(destination.matches(Regex("[A-Za-z0-9_./-]+"))) {"Unsafe synthetic export argument"}
+            val srcBytes=target.readBytes()
+            val exported=if (android.os.Build.VERSION.SDK_INT>=29) {
+                // API 29+: shell permission identity gives the test process full storage access,
+                // so the preservation copy is a direct lossless file write: no run-as, no shell pipe.
+                val uiAutomation=instrumentation.uiAutomation
+                uiAutomation.adoptShellPermissionIdentity()
+                try {
+                    java.io.FileOutputStream(destination).use { it.write(srcBytes);it.flush();it.fd.sync() }
+                    java.io.File(destination).readBytes()
+                } finally {uiAutomation.dropShellPermissionIdentity()}
+            } else {
+                // API 26-28 have no shell identity adoption; the shell reads the app-owned file
+                // through this debuggable test app's UID. Keep stderr and exit status in the
+                // assertion/retained test XML on failure.
+                val packageName=instrumentation.targetContext.packageName
+                listOf(packageName,target.absolutePath).forEach {
+                    check(it.matches(Regex("[A-Za-z0-9_./-]+"))) {"Unsafe synthetic export argument"}
+                }
+                // UiAutomation uses Runtime.exec(String), not a shell. Keep the sh -c
+                // program one whitespace-free argv token; IFS supplies only fixed separators.
+                val script="(run-as $packageName cat ${target.absolutePath}>$destination;result=\$?;echo FRAME_EXPORT_EXIT=\$result)2>&1"
+                    .replace(" ","\${IFS}")
+                check(script.none{it.isWhitespace()})
+                val result=instrumentation.uiAutomation.executeShellCommand("sh -c $script").use {
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(it).bufferedReader().readText()
+                }
+                check(result.trim()=="FRAME_EXPORT_EXIT=0") {"Synthetic frame export failed: $result"}
+                instrumentation.uiAutomation.executeShellCommand("cat $destination").use {
+                    android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
+                }
             }
-            // UiAutomation uses Runtime.exec(String), not a shell. Keep the sh -c
-            // program one whitespace-free argv token; IFS supplies only fixed separators.
-            val script="(run-as $packageName cat ${target.absolutePath}>$destination;result=\$?;echo FRAME_EXPORT_EXIT=\$result)2>&1"
-                .replace(" ","\${IFS}")
-            check(script.none{it.isWhitespace()})
-            val command="sh -c $script"
-            val result=instrumentation.uiAutomation.executeShellCommand(command).use {
-                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).bufferedReader().readText()
+            val exportDiag=run {
+                val digest=java.security.MessageDigest.getInstance("SHA-256")
+                fun hash(bytes:ByteArray)=digest.digest(bytes).joinToString(""){"%02x".format(it)}
+                "srcBytes=${srcBytes.size} exportedBytes=${exported.size} srcSha256=${hash(srcBytes)} exportedSha256=${hash(exported)}"
             }
-            println("SYNTHETIC_FRAME_EXPORT $name: $result")
-            check(result.trim()=="FRAME_EXPORT_EXIT=0") {"Synthetic frame export failed: $result"}
-            // Verify exported bytes, not just a success status, against the exact saved PNG.
-            val exported=instrumentation.uiAutomation.executeShellCommand("cat $destination").use {
-                android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
-            }
-            check(target.readBytes().contentEquals(exported)) {"Synthetic frame export bytes differ: $name"}
+            check(srcBytes.contentEquals(exported)) {"Synthetic frame export bytes differ: $name $exportDiag"}
         }finally{prior?.recycle()}
     }
     private fun settings()=ui.onNodeWithText("Settings",useUnmergedTree=true).performScrollTo().performClick()
