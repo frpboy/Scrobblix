@@ -41,7 +41,17 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: bash android/qa/capture-emulator-screenshots.sh
+          script: |
+            bash android/qa/capture-emulator-screenshots.sh
+            ./android/gradlew -p android :app:connectedDebugAndroidTest --stacktrace
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: connected-test-reports
+          path: android/app/build/reports/androidTests/
+          retention-days: 14
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
