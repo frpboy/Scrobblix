@@ -42,15 +42,37 @@ jobs:
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
           script: |
-            bash android/qa/capture-emulator-screenshots.sh
             ./android/gradlew -p android :app:connectedDebugAndroidTest --stacktrace
+            bash android/qa/capture-emulator-screenshots.sh
+
+      - name: Verify connected tests actually ran
+        if: always()
+        run: |
+          python3 - <<'PYEOF'
+          import glob, sys, xml.etree.ElementTree as ET
+          files = glob.glob('android/app/build/outputs/androidTest-results/connected/**/*.xml', recursive=True)
+          tests = failures = errors = skipped = 0
+          for f in files:
+              r = ET.parse(f).getroot()
+              tests += int(r.get('tests', 0)); failures += int(r.get('failures', 0))
+              errors += int(r.get('errors', 0)); skipped += int(r.get('skipped', 0))
+          print(f'suites={len(files)} tests={tests} failures={failures} errors={errors} skipped={skipped}')
+          if tests == 0:
+              print('ERROR: connected run executed zero tests')
+              sys.exit(1)
+          if failures or errors:
+              print('ERROR: test failures present')
+              sys.exit(2)
+          PYEOF
 
       - name: Upload test reports
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: connected-test-reports
-          path: android/app/build/reports/androidTests/
+          path: |
+            android/app/build/reports/androidTests/
+            android/app/build/outputs/androidTest-results/connected/
           retention-days: 14
 
       - name: Upload screenshots

@@ -7,7 +7,8 @@ APK=${2:-android/app/build/outputs/apk/debug/app-debug.apk}
 PKG=com.frpboy.scrobblix
 mkdir -p "$OUT"
 
-adb install -r "$APK" || exit 1
+adb uninstall com.frpboy.scrobblix >/dev/null 2>&1 || true
+adb install "$APK" || exit 1
 adb shell input keyevent KEYCODE_WAKEUP
 adb shell input keyevent KEYCODE_HOME
 sleep 2
