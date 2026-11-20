@@ -2,9 +2,11 @@ name: Android emulator screenshots
 
 on:
   workflow_dispatch:
-  push:
-    branches:
-      - ci/android-emulator-screenshots
+    inputs:
+      api-level:
+        description: 'Android API level for the emulator'
+        required: true
+        default: '36'
 
 jobs:
   screenshots:
@@ -35,7 +37,7 @@ jobs:
       - name: Boot emulator, install app, capture screenshots
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 36
+          api-level: ${{ github.event.inputs.api-level || '36' }}
           arch: x86_64
           target: default
           force-avd-creation: true
