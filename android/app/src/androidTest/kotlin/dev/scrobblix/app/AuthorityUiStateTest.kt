@@ -98,7 +98,14 @@ class AuthorityUiStateTest {
             val exported=instrumentation.uiAutomation.executeShellCommand("cat $destination").use {
                 android.os.ParcelFileDescriptor.AutoCloseInputStream(it).readBytes()
             }
-            check(target.readBytes().contentEquals(exported)) {"Synthetic frame export bytes differ: $name"}
+            val srcBytes=target.readBytes()
+            run {
+                val digest=java.security.MessageDigest.getInstance("SHA-256")
+                fun hash(bytes:ByteArray)=digest.digest(bytes).joinToString(""){"%02x".format(it)}
+                val firstDiff=srcBytes.zip(exported).indexOfFirst { it.first!=it.second }
+                println("FRAME_EXPORT_DIAG $name srcBytes=${srcBytes.size} exportedBytes=${exported.size} srcSha256=${hash(srcBytes)} exportedSha256=${hash(exported)} firstDiffOffset=$firstDiff")
+            }
+            check(srcBytes.contentEquals(exported)) {"Synthetic frame export bytes differ: $name"}
         }finally{prior?.recycle()}
     }
     private fun settings()=ui.onNodeWithText("Settings",useUnmergedTree=true).performScrollTo().performClick()
