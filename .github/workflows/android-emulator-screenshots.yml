@@ -41,26 +41,7 @@ jobs:
           force-avd-creation: true
           emulator-options: -no-window -gpu swiftshader_indirect -noaudio -no-boot-anim -camera-back none
           disable-animations: true
-          script: |
-            mkdir -p shots
-            adb install -r android/app/build/outputs/apk/debug/app-debug.apk
-            adb shell input keyevent KEYCODE_WAKEUP
-            adb shell input keyevent KEYCODE_HOME
-            sleep 2
-            adb exec-out screencap -p > shots/01-home.png
-            # App drawer (swipe up from bottom of home screen)
-            adb shell input swipe 540 1900 540 600 400
-            sleep 2
-            adb exec-out screencap -p > shots/02-app-drawer.png
-            adb shell input keyevent KEYCODE_HOME
-            sleep 1
-            # Launch the app
-            adb shell monkey -p com.frpboy.scrobblix -c android.intent.category.LAUNCHER 1
-            sleep 12
-            adb exec-out screencap -p > shots/03-app-main.png
-            sleep 8
-            adb exec-out screencap -p > shots/04-app-main-settled.png
-            ls -la shots
+          script: bash android/qa/capture-emulator-screenshots.sh
 
       - name: Upload screenshots
         uses: actions/upload-artifact@v4
