@@ -61,4 +61,16 @@ for TAB in History Queue Settings; do
   adb exec-out screencap -p > "$OUT/04-tab-${TAB}.png"
 done
 
+# System app-info page: launcher-level proof of installed label/icon/version
+adb shell am start -a android.settings.APPLICATION_DETAILS_SETTINGS -d package:com.frpboy.scrobblix >/dev/null
+sleep 4
+adb exec-out screencap -p > "$OUT/05-app-info.png"
+
+# App drawer via dock icon tap (AOSP launcher: center dock icon)
+adb shell input keyevent KEYCODE_HOME
+sleep 1
+adb shell input tap 360 1210
+sleep 2
+adb exec-out screencap -p > "$OUT/06-app-drawer2.png"
+
 ls -la "$OUT"
