@@ -377,6 +377,10 @@
             <TextBlock x:Name="AboutSourceText" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
             <TextBlock Text="Unsigned development preview. Updates are downloaded manually from GitHub Releases; no automatic updater is enabled." TextWrapping="Wrap" />
             <HyperlinkButton Content="Releases and updates" NavigateUri="https://github.com/frpboy/Scrobblix/releases" HorizontalAlignment="Left" />
+            <TextBlock Text="App updates" Style="{StaticResource SubtitleTextBlockStyle}" />
+            <TextBlock Text="Check the official GitHub Releases channel, read the notes, then decide. Downloads are verified against the published SHA-256 checksum and the installer only opens when you confirm. Nothing checks, downloads or installs by itself." TextWrapping="Wrap" />
+            <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdatesButton_Click" HorizontalAlignment="Left" />
+            <TextBlock x:Name="UpdateCheckStatusText" Text="No update check has been run this session." TextWrapping="Wrap" Style="{StaticResource CaptionTextBlockStyle}" />
             </StackPanel>
             </Border>
             <Border Padding="16" CornerRadius="8" BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}" BorderThickness="1" Background="{ThemeResource CardBackgroundFillColorDefaultBrush}">

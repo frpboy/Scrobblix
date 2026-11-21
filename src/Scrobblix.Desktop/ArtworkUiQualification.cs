@@ -44,6 +44,7 @@ public sealed partial class MainWindow
         }
         await Task.Delay(500);
         await QualifyHistoryRefreshAsync(output, Capture);
+        await QualifyUpdateCheckAsync(output, Capture);
         var valid = Path.Combine(fixtures, "valid-1x1.png");
         var invalid = Path.Combine(fixtures, "oversize-dimensions.png");
         SetArtwork(CurrentTrackArtwork, CurrentTrackArtworkFallback, valid);
@@ -131,6 +132,31 @@ public sealed partial class MainWindow
         // Persist completed assertions/captures first; process exit is checked by the runner.
         File.WriteAllText(Path.Combine(output, "result.txt"), "PASS synthetic artwork UI states and captures; close requested during pending load");
         Close();
+    }
+    private async Task QualifyUpdateCheckAsync(string output, Func<string, Task> capture)
+    {
+        ShowDestination("about");
+        await Task.Delay(400);
+        if (CheckUpdatesButton is null || UpdateCheckStatusText is null)
+            throw new InvalidOperationException("Update check UI missing from About");
+        if (UpdateCheckStatusText.Text != "No update check has been run this session.")
+            throw new InvalidOperationException("Unexpected initial update status");
+        if (!CheckUpdatesButton.IsEnabled) throw new InvalidOperationException("Update check button not actionable");
+        await capture("update-check-about");
+        var synthetic = new Scrobblix.Domain.Updates.WindowsRelease("windows-v0.1.0-beta.99", "beta 99", true, false,
+            "### Fixed\n- Synthetic changelog entry for layout qualification only.\n\n### Added\n- A second synthetic entry so the notes list wraps across lines.",
+            new[] { new Scrobblix.Domain.Updates.WindowsReleaseAsset(Scrobblix.Domain.Updates.WindowsUpdateCatalog.InstallerName, "https://github.com/frpboy/Scrobblix/releases/download/x/setup.exe", 100) });
+        var changelog = BuildUpdateChangelogOverlay(synthetic, "A newer preview is available. Review the notes, then download and verify it. Nothing installs by itself.");
+        RootLayout.Children.Add(changelog);
+        await Task.Delay(400);
+        await capture("update-check-dialog-changelog");
+        RootLayout.Children.Remove(changelog);
+        var verified = BuildInstallerVerifiedOverlay(Scrobblix.Domain.Updates.WindowsUpdateCatalog.InstallerName);
+        RootLayout.Children.Add(verified);
+        await Task.Delay(400);
+        await capture("update-check-dialog-verified");
+        RootLayout.Children.Remove(verified);
+        ShowDestination("home");
     }
     private async Task QualifyHistoryRefreshAsync(string output, Func<string, Task> capture)
     {
