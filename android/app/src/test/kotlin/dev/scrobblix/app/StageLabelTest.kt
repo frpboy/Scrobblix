@@ -22,5 +22,16 @@ class StageLabelTest {
     @Test fun stableReleaseShowsNoBanner() {
         assertNull(StageLabel.forBuild(false, "1.0.0"))
         assertNull(StageLabel.forBuild(false, "2.3.1"))
+        assertNull(StageLabel.forBuild(false, "1.0.0+8"))
+    }
+    @Test fun unrecognizedPrereleaseTagsShowGenericBanner() {
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, "1.0.0-nightly"))
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, "2.0.0-SNAPSHOT"))
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, "0.1.0-canary.2"))
+    }
+    @Test fun nonStableShapesShowGenericBanner() {
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, "1.0"))
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, ""))
+        assertEquals("Prerelease build · not a stable release", StageLabel.forBuild(false, "experimental"))
     }
 }
