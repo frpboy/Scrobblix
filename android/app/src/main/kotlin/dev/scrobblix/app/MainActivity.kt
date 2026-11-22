@@ -114,7 +114,7 @@ fun AppScreen(store:AppStore,api:LastFmApi?=null,
         Spacer(Modifier.height(8.dp))
         Text("Scrobblix",style=MaterialTheme.typography.headlineLarge)
         Text("Your listening, kept local.",style=MaterialTheme.typography.bodyLarge)
-        Text("Development preview · not a release",style=MaterialTheme.typography.labelMedium)
+        StageLabel.forBuild(BuildConfig.DEBUG,BuildConfig.VERSION_NAME)?.let { Text(it,style=MaterialTheme.typography.labelMedium) }
         FlowRow(horizontalArrangement=Arrangement.spacedBy(8.dp)) {
             listOf("Listen","History","Queue","Settings").forEach { name -> FilterChip(selected=tab==name,onClick={tab=name},label={Text(name)}) }
         }
