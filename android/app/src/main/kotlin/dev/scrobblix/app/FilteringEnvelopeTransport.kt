@@ -66,11 +66,19 @@ object SendBudget {
     // every successful reset so cases stay isolated.
     internal var resetDrainTimeoutMs=DEFAULT_RESET_DRAIN_TIMEOUT_MS
     internal val attemptsSoFar:Int get()=attempts.get()
+    /**
+     * Minimum-interval gate, pure and test-visible. lastAttemptAtMs==0 means no
+     * attempt has ever been recorded (elapsedRealtime counts from boot), so it
+     * must NOT read as "attempted 0ms ago": without this guard a first send
+     * within minIntervalMs of device boot would be silently dropped (#193).
+     */
+    internal fun intervalBlocks(lastAttemptAtMs:Long,nowMs:Long,minIntervalMs:Long):Boolean =
+        lastAttemptAtMs!=0L && nowMs-lastAttemptAtMs<minIntervalMs
     fun tryAcquire():Boolean {
         // Single in-flight exchange; busy drops instead of queueing.
         if (!inFlight.compareAndSet(false,true)) return false
         val now=android.os.SystemClock.elapsedRealtime()
-        if (attempts.get()>=maxAttemptsPerProcess || now-lastAttemptAtMs.get()<minIntervalMs || now<cooldownUntilMs.get()) {
+        if (attempts.get()>=maxAttemptsPerProcess || intervalBlocks(lastAttemptAtMs.get(),now,minIntervalMs) || now<cooldownUntilMs.get()) {
             inFlight.set(false)
             return false
         }
