@@ -30,6 +30,10 @@ adb exec-out screencap -p > "$OUT/03-app-listen.png"
 adb shell input swipe 540 1500 540 700 400
 sleep 2
 adb exec-out screencap -p > "$OUT/03-app-listen-scrolled.png"
+# Scroll back to the top: the tab chips live inside the scrollable content, so the
+# tab taps below need the top of the page restored.
+adb shell input swipe 540 700 540 1500 400
+sleep 2
 
 tap_on_text() {
   local label="$1" coords
@@ -63,6 +67,9 @@ PYEOF
 }
 
 for TAB in History Queue Settings; do
+  # ensure the tab chips are in view before tapping
+  adb shell input swipe 540 700 540 1500 400
+  sleep 1
   tap_on_text "$TAB" || true
   adb exec-out screencap -p > "$OUT/04-tab-${TAB}.png"
   if [ "$TAB" = "Settings" ]; then
