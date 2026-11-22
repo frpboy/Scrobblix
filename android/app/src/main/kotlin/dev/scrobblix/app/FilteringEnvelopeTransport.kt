@@ -61,6 +61,10 @@ object SendBudget {
     private val cooldownUntilMs=AtomicLong(0)
     private val inFlight=AtomicBoolean(false)
     private val idleLock=Object()
+    private const val DEFAULT_RESET_DRAIN_TIMEOUT_MS=15_000L
+    // Test-tunable drain bound for resetForTesting; restored to the default on
+    // every successful reset so cases stay isolated.
+    internal var resetDrainTimeoutMs=DEFAULT_RESET_DRAIN_TIMEOUT_MS
     internal val attemptsSoFar:Int get()=attempts.get()
     fun tryAcquire():Boolean {
         // Single in-flight exchange; busy drops instead of queueing.
@@ -96,6 +100,19 @@ object SendBudget {
     }
     /** Test-only: reset shared state and bounds so cases stay isolated. */
     fun resetForTesting() {
+        // Drain BEFORE resetting: a previous case's exchange may still hold the
+        // in-flight slot (its worker task can even be queued-but-unstarted).
+        // Resetting under it would clear the flag beneath that exchange, and
+        // its later release() would then clear a NEWER exchange's slot early,
+        // so waitForIdle could return while that exchange is still running.
+        waitForIdle(resetDrainTimeoutMs)
+        // Fail closed on drain expiry: never reset beneath a live exchange -
+        // that would reintroduce the very race the drain prevents. Throwing
+        // fails the calling test loudly and leaves all state untouched.
+        check(!inFlight.get()) {
+            "SendBudget.resetForTesting: exchange still in flight after ${resetDrainTimeoutMs}ms drain; refusing to reset shared state beneath it"
+        }
+        resetDrainTimeoutMs=DEFAULT_RESET_DRAIN_TIMEOUT_MS
         attempts.set(0)
         lastAttemptAtMs.set(0)
         cooldownUntilMs.set(0)

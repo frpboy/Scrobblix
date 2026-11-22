@@ -169,6 +169,64 @@ class CrashReportingBoundaryTest {
         assertNoHostileStrings(recorded[0])
     }
 
+    @Test fun resetForTestingDrainsInFlightExchangeBeforeResetting() {
+        // Regression for the CI nondeterminism tracked in #191: a previous
+        // case's exchange can outlive its own test method. resetForTesting must
+        // wait it out; resetting beneath it would let the old worker's
+        // release() clear a NEWER exchange's slot early, so waitForIdle could
+        // return before that exchange ran (observed as assertEquals(1,
+        // recorded.size) seeing 0 in transportGateRebuildsHostileCustomEnvelopes).
+        SendBudget.resetForTesting()
+        val exchangeStarted=java.util.concurrent.CountDownLatch(1)
+        val finishExchange=java.util.concurrent.CountDownLatch(1)
+        val gate=FilteringEnvelopeTransport(
+            SentryOptions().apply { dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1" },
+            "scrobblix-android@test","android",
+            poster={ exchangeStarted.countDown(); finishExchange.await(30,java.util.concurrent.TimeUnit.SECONDS); true }
+        )
+        val serializer=JsonSerializer(SentryOptions())
+        val header=SentryEnvelopeHeader.Deserializer().deserialize(JsonObjectReader(StringReader("""{"event_id":"4bf92f3577b34da6a3ce929d0e0e4736"}""")),io.sentry.NoOpLogger.getInstance())
+        gate.send(SentryEnvelope(header,listOf(SentryEnvelopeItem.fromEvent(serializer,hostileEvent()))),Hint())
+        assertTrue("exchange in flight",exchangeStarted.await(5,java.util.concurrent.TimeUnit.SECONDS))
+        val resetDone=java.util.concurrent.CountDownLatch(1)
+        val resetThread=kotlin.concurrent.thread { SendBudget.resetForTesting(); resetDone.countDown() }
+        assertFalse("reset waits while an exchange is in flight",resetDone.await(1,java.util.concurrent.TimeUnit.SECONDS))
+        finishExchange.countDown()
+        assertTrue("reset completes once the exchange finishes",resetDone.await(10,java.util.concurrent.TimeUnit.SECONDS))
+        resetThread.join(10_000)
+        assertTrue("slot is free and counted fresh after reset",SendBudget.tryAcquire())
+        SendBudget.release()
+    }
+
+    @Test fun resetForTestingFailsClosedWhenExchangeOutlivesDrainTimeout() {
+        // Drain-expiry path (bounded small so no real 15s wait): a stuck
+        // exchange must NOT be reset beneath - resetForTesting throws and
+        // leaves all state untouched, so the old worker's release() can never
+        // clear a newer exchange's slot early (#191 review caveat).
+        SendBudget.resetForTesting()
+        SendBudget.resetDrainTimeoutMs=200
+        val exchangeStarted=java.util.concurrent.CountDownLatch(1)
+        val finishExchange=java.util.concurrent.CountDownLatch(1)
+        val gate=FilteringEnvelopeTransport(
+            SentryOptions().apply { dsn="https://00000000000000000000000000000000@o1.ingest.us.sentry.io/1" },
+            "scrobblix-android@test","android",
+            poster={ exchangeStarted.countDown(); finishExchange.await(30,java.util.concurrent.TimeUnit.SECONDS); true }
+        )
+        val serializer=JsonSerializer(SentryOptions())
+        val header=SentryEnvelopeHeader.Deserializer().deserialize(JsonObjectReader(StringReader("""{"event_id":"4bf92f3577b34da6a3ce929d0e0e4736"}""")),io.sentry.NoOpLogger.getInstance())
+        gate.send(SentryEnvelope(header,listOf(SentryEnvelopeItem.fromEvent(serializer,hostileEvent()))),Hint())
+        assertTrue("exchange in flight",exchangeStarted.await(5,java.util.concurrent.TimeUnit.SECONDS))
+        val threw=try { SendBudget.resetForTesting(); false } catch (expected:IllegalStateException) { true }
+        assertTrue("reset refuses to clear state beneath a live exchange",threw)
+        assertFalse("the live exchange still owns the slot",SendBudget.tryAcquire())
+        finishExchange.countDown()
+        // Once the exchange finishes, reset succeeds and restores defaults.
+        SendBudget.resetForTesting()
+        assertTrue("slot free after drain and reset",SendBudget.tryAcquire())
+        SendBudget.release()
+        assertTrue("drain timeout restored to default",SendBudget.resetDrainTimeoutMs==15_000L)
+    }
+
     private fun startLoopbackServer(receivedBody:java.util.concurrent.atomic.AtomicReference<ByteArray?>):Pair<java.net.ServerSocket,Thread> {
         // One-connection loopback: reads the full HTTP request (headers plus
         // chunked or fixed body), records the body and answers 200.
