@@ -36,11 +36,13 @@ jobs:
         run: |
           export JAVA_HOME="$JAVA_HOME_17_X64"
           export PATH="$JAVA_HOME/bin:$PATH"
-          android/gradlew -p android :core:test :platform:assembleDebug :app:assembleDebug :app:assembleRelease --no-daemon
-      - name: Require core test XML evidence
+          android/gradlew -p android :core:test :app:testDebugUnitTest :platform:assembleDebug :app:assembleDebug :app:assembleRelease --no-daemon
+      - name: Require unit test XML evidence
         if: always()
         shell: bash
-        run: find android/core/build/test-results/test -type f -name 'TEST-*.xml' -print -quit | grep -q .
+        run: |
+          find android/core/build/test-results/test -type f -name 'TEST-*.xml' -print -quit | grep -q .
+          find android/app/build/test-results/testDebugUnitTest -type f -name 'TEST-*.xml' -print -quit | grep -q .
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
@@ -49,6 +51,7 @@ jobs:
           path: |
             android/app/build/outputs/apk/release/*.apk
             android/core/build/test-results/test
+            android/app/build/test-results/testDebugUnitTest
   android-sqlite-runtime:
     strategy:
       fail-fast: false
