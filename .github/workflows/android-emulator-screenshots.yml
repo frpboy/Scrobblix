@@ -1,8 +1,6 @@
 name: Android emulator screenshots
 
 on:
-  push:
-    branches: [ci/android-emulator-screenshots]
   workflow_dispatch:
     inputs:
       api-level:
