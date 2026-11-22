@@ -61,6 +61,7 @@ object SendBudget {
     private val cooldownUntilMs=AtomicLong(0)
     private val inFlight=AtomicBoolean(false)
     private val idleLock=Object()
+    private const val RESET_DRAIN_TIMEOUT_MS=15_000L
     internal val attemptsSoFar:Int get()=attempts.get()
     fun tryAcquire():Boolean {
         // Single in-flight exchange; busy drops instead of queueing.
@@ -96,6 +97,12 @@ object SendBudget {
     }
     /** Test-only: reset shared state and bounds so cases stay isolated. */
     fun resetForTesting() {
+        // Drain BEFORE resetting: a previous case's exchange may still hold the
+        // in-flight slot (its worker task can even be queued-but-unstarted).
+        // Resetting under it would clear the flag beneath that exchange, and
+        // its later release() would then clear a NEWER exchange's slot early,
+        // so waitForIdle could return while that exchange is still running.
+        waitForIdle(RESET_DRAIN_TIMEOUT_MS)
         attempts.set(0)
         lastAttemptAtMs.set(0)
         cooldownUntilMs.set(0)
