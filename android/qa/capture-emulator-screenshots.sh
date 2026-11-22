@@ -26,6 +26,11 @@ adb shell monkey -p "$PKG" -c android.intent.category.LAUNCHER 1 >/dev/null
 sleep 15
 adb exec-out screencap -p > "$OUT/03-app-listen.png"
 
+# Listen tab: genuine scrolled state so the tracking controls below the fold are visible
+adb shell input swipe 540 1500 540 700 400
+sleep 2
+adb exec-out screencap -p > "$OUT/03-app-listen-scrolled.png"
+
 tap_on_text() {
   local label="$1" coords
   adb shell uiautomator dump /sdcard/ui.xml >/dev/null 2>&1
@@ -60,6 +65,12 @@ PYEOF
 for TAB in History Queue Settings; do
   tap_on_text "$TAB" || true
   adb exec-out screencap -p > "$OUT/04-tab-${TAB}.png"
+  if [ "$TAB" = "Settings" ]; then
+    # Settings tab: genuine scrolled state so the Last.fm connection controls are visible
+    adb shell input swipe 540 1500 540 700 400
+    sleep 2
+    adb exec-out screencap -p > "$OUT/04-tab-Settings-scrolled.png"
+  fi
 done
 
 # System app-info page: launcher-level proof of installed label/icon/version
