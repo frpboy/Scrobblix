@@ -6,7 +6,7 @@
     <ProjectReference Include="../Scrobblix.Application/Scrobblix.Application.csproj" />
   </ItemGroup>
   <ItemGroup>
-    <PackageReference Include="Sentry" Version="7.0.0" />
+    <PackageReference Include="Sentry" Version="7.0.1" />
   </ItemGroup>
   <!-- Optional automatic crash reporting (public ingest DSN, not a secret): the
        SCROBBLIX_SENTRY_DSN environment variable is baked into generated source.
